@@ -24,11 +24,13 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAIZ))
 
-# Evita errores de codificación al imprimir tildes en consolas de Windows.
-try:
-    sys.stdout.reconfigure(errors="replace")
-except Exception:
-    pass
+# Fuerza UTF-8 en la salida: si la salida va a un archivo o a otro programa,
+# Windows usaría cp1252 y las tildes llegarían rotas ("cach�").
+for _flujo in (sys.stdout, sys.stderr):
+    try:
+        _flujo.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 resultados: list[tuple[str, bool, bool]] = []  # (nombre, ok, obligatorio)
 

@@ -6,6 +6,9 @@
 #   powershell -ExecutionPolicy Bypass -File .\setup_entorno.ps1 -Recrear      # borra y recrea .venv
 #   powershell -ExecutionPolicy Bypass -File .\setup_entorno.ps1 -SinConector  # no descarga el conector Kafka
 #
+# Alternativa equivalente sin PowerShell (si no se permite 'powershell -File'):
+#   py -3.12 setup_entorno.py [--sin-conector] [--recrear]
+#
 # (Archivo sin tildes a proposito: PowerShell 5.1 lee los .ps1 sin BOM como ANSI.)
 
 param(

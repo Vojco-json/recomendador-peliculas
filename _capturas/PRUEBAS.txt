@@ -6,8 +6,19 @@ Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
   LLM_THINK = False
   TMDB_API_KEY = no definida
 
-Resumen: faltan 5 elemento(s) obligatorio(s): Python 3.12, pyspark importable (3.5.x), Dependencias de requirements.txt, Conector Kafka en cach� (.ivy2), Kafka (broker)
+Resumen: faltan 5 elemento(s) obligatorio(s): Python 3.12, pyspark importable (3.5.x), Dependencias de requirements.txt, Conector Kafka en caché (.ivy2), Kafka (broker)
 Opcionales pendientes: Datos ml-25m
 - FALLA: [aceptación] La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
 - FALLA: Instala el entorno (requisito previo de las demás pruebas; sin conector para no depender de internet) — comando no permitido: powershell -ExecutionPolicy Bypass -File setup_entorno.ps1 -SinConector
 - FALLA: Config, muestra mini (conteos, Toy Story, orientación de usuarios), SparkSession, kafka_disponible y check_entorno — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
+- FALLA: Instala el entorno sin PowerShell anidado: crea o reutiliza .venv con Python 3.12 e instala requirements.txt fijado (sin conector, para no depender de internet) — se paso de 3 minutos
+- FALLA: Suite del paquete 1 con el .venv del proyecto: config, muestra mini, SparkSession, kafka_disponible y check_entorno — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
+- PASA: check_entorno corre con el .venv del proyecto sin traceback — codigo 0: bot\proyectos\recomendador-peliculas\artefactos\estado.db
+  LLM_PROVIDER = ollama
+  LLM_MODEL = qwen3.5:9b
+  OLLAMA_HOST = http://localhost:11434
+  LLM_THINK = False
+  TMDB_API_KEY = no definida
+
+Resumen: faltan 5 elemento(s) obligatorio(s): Python 3.12, pyspark importable (3.5.x), Dependencias de requirements.txt, Conector Kafka en caché (.ivy2), Kafka (broker)
+Opcionales pendientes: Datos ml-25m
