@@ -37,6 +37,29 @@ def conector_en_cache(version: str | None = None) -> Path | None:
     return candidato if candidato.exists() else None
 
 
+def jars_conector_en_cache(version: str | None = None) -> list[Path] | None:
+    """Jars del conector Kafka y sus dependencias ya descargados en ``.ivy2/jars``.
+
+    Devuelve None si falta el conector o su ``spark-token-provider`` de la misma
+    versión. Se excluyen los jars de otras versiones del conector (si alguna vez
+    se cambió la versión de PySpark) para no mezclar clases.
+    """
+    version = version or version_pyspark()
+    carpeta = config.IVY_DIR / "jars"
+    propios = (f"org.apache.spark_spark-sql-kafka-0-10_2.12-{version}.jar",
+               f"org.apache.spark_spark-token-provider-kafka-0-10_2.12-{version}.jar")
+    if not carpeta.is_dir() or not all((carpeta / n).exists() for n in propios):
+        return None
+    jars = []
+    for jar in sorted(carpeta.glob("*.jar")):
+        es_conector = jar.name.startswith(("org.apache.spark_spark-sql-kafka-0-10",
+                                           "org.apache.spark_spark-token-provider-kafka-0-10"))
+        if es_conector and jar.name not in propios:
+            continue
+        jars.append(jar)
+    return jars
+
+
 def _preparar_entorno_windows() -> None:
     """Ajustes del proceso para que Spark funcione bien en Windows.
 
@@ -53,8 +76,17 @@ def _preparar_entorno_windows() -> None:
 
 
 def opciones_spark(nucleos: int | None = None, kafka: bool = False,
-                   memoria: str | None = None) -> dict[str, str]:
-    """Configuración que usa crear_spark (separada para poder probarla sin JVM)."""
+                   memoria: str | None = None, usar_cache: bool = True) -> dict[str, str]:
+    """Configuración que usa crear_spark (separada para poder probarla sin JVM).
+
+    Con ``kafka=True``:
+    - si el conector y sus dependencias ya están en ``.ivy2/jars`` (y ``usar_cache``),
+      se pasan como ``spark.jars`` (rutas locales). Así el arranque NO ejecuta la
+      resolución Ivy, que consulta Maven Central y podía quedarse esperando la red
+      varios minutos de forma intermitente (causa de las pruebas colgadas);
+    - si no están, se usa ``spark.jars.packages`` con la coordenada Maven de la misma
+      versión que PySpark, que los descarga a ``.ivy2`` (solo la primera vez).
+    """
     n = int(nucleos or config.NUCLEOS)
     if n < 1:
         raise ValueError("nucleos debe ser 1 o más")
@@ -75,7 +107,11 @@ def opciones_spark(nucleos: int | None = None, kafka: bool = False,
         "spark.sql.adaptive.enabled": "true",
     }
     if kafka:
-        opciones["spark.jars.packages"] = conector_kafka()
+        locales = jars_conector_en_cache() if usar_cache else None
+        if locales:
+            opciones["spark.jars"] = ",".join(j.resolve().as_uri() for j in locales)
+        else:
+            opciones["spark.jars.packages"] = conector_kafka()
     return opciones
 
 

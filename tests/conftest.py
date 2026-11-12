@@ -22,6 +22,25 @@ if str(RAIZ) not in sys.path:
 
 from recomendador import config, kafka_utils, spark_utils  # noqa: E402
 
+import faulthandler  # noqa: E402
+import os  # noqa: E402
+
+# Límite por prueba (incluye crear sus fixtures, p. ej. la SparkSession). Si una
+# prueba se cuelga (red, JVM, broker), se vuelcan las pilas de todos los hilos y el
+# proceso termina con error, en vez de quedar bloqueado indefinidamente.
+LIMITE_POR_PRUEBA_S = float(os.environ.get("PRUEBAS_LIMITE_S", "100"))
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Arma un temporizador de seguridad alrededor de cada prueba."""
+    if LIMITE_POR_PRUEBA_S > 0:
+        faulthandler.dump_traceback_later(LIMITE_POR_PRUEBA_S, exit=True)
+    try:
+        yield
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+
 
 @pytest.fixture(scope="session")
 def spark():

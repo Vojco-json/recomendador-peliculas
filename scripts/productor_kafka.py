@@ -398,4 +398,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Salida en UTF-8 aunque la capture otro proceso (si no, Windows usa cp1252: 'envi�').
+    for _flujo in (sys.stdout, sys.stderr):
+        try:
+            _flujo.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     sys.exit(main())

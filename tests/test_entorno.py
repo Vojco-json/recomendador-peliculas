@@ -75,8 +75,19 @@ def test_opciones_spark_sin_jvm():
     assert op["spark.jars.ivy"].endswith(".ivy2")
     version = spark_utils.version_pyspark()
     assert version.startswith("3.5.")
-    assert op["spark.jars.packages"] == f"org.apache.spark:spark-sql-kafka-0-10_2.12:{version}"
+    conector = f"spark-sql-kafka-0-10_2.12-{version}.jar"
+    if spark_utils.jars_conector_en_cache():
+        # Con caché: jars locales (sin resolución Ivy ni red), misma versión que PySpark.
+        assert "spark.jars.packages" not in op
+        assert conector in op["spark.jars"]
+        assert "kafka-clients" in op["spark.jars"]
+    else:
+        assert op["spark.jars.packages"] == f"org.apache.spark:spark-sql-kafka-0-10_2.12:{version}"
+    # Sin caché (o forzando la descarga) se usa la coordenada Maven de la misma versión.
+    sin_cache = spark_utils.opciones_spark(nucleos=4, kafka=True, usar_cache=False)
+    assert sin_cache["spark.jars.packages"] == f"org.apache.spark:spark-sql-kafka-0-10_2.12:{version}"
     assert "spark.jars.packages" not in spark_utils.opciones_spark(nucleos=1)
+    assert "spark.jars" not in spark_utils.opciones_spark(nucleos=1)
     with pytest.raises(ValueError):
         spark_utils.opciones_spark(nucleos=2, memoria="8g")
 
@@ -171,6 +182,15 @@ def test_spark_configuracion(spark):
     assert conf.get("spark.driver.memory") == "6g"
     assert conf.get("spark.jars.ivy").endswith(".ivy2")
     assert spark.conf.get("spark.sql.shuffle.partitions") == "4"
+    if spark.conector_kafka_ok:
+        # El conector quedó en el classpath (como jar local o como paquete Maven).
+        cargado = conf.get("spark.jars", "") + conf.get("spark.jars.packages", "")
+        assert "spark-sql-kafka-0-10_2.12" in cargado
+        assert spark_utils.version_pyspark() in cargado
+        # La fuente 'kafka' de Structured Streaming es cargable desde la JVM.
+        clase = spark._jvm.org.apache.spark.util.Utils.classForName(
+            "org.apache.spark.sql.kafka010.KafkaSourceProvider", True, False)
+        assert clase.getName().endswith("KafkaSourceProvider")
 
 
 # --------------------------------------------------------------------------- #
