@@ -1,17 +1,25 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
-- PASA: [aceptación] check_entorno corre sin traceback y reporta cada chequeo — codigo 0: bot\proyectos\recomendador-peliculas\artefactos\estado.db
+- PASA: [aceptación] Dry-run sobre la muestra emite 5 eventos ordenados por timestamp — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
+{"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
+{"userId":2,"movieId":1,"rating":3.0,"timestamp":1262504000}
+{"userId":2,"movieId":318,"rating":5.0,"timestamp":1262507600}
+{"userId":3,"movieId":1,"rating":3.0,"timestamp":1262604000}
+
+[dry-run] 5 evento(s) ordenados por timestamp; no se envi� nada a Kafka.
+- FALLA: [aceptación] Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
+- FALLA: Instala el entorno (requisito previo de las demás pruebas; sin conector para no depender de internet) — comando no permitido: powershell -ExecutionPolicy Bypass -File setup_entorno.ps1 -SinConector
+- FALLA: Config, muestra mini (conteos, Toy Story, orientación de usuarios), SparkSession, kafka_disponible y check_entorno — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
+- PASA: Instala el entorno sin PowerShell anidado: crea o reutiliza .venv con Python 3.12 e instala requirements.txt fijado (sin conector, para no depender de internet) — codigo 0: tos\estado.db
   LLM_PROVIDER = ollama
   LLM_MODEL = qwen3.5:9b
   OLLAMA_HOST = http://localhost:11434
   LLM_THINK = False
   TMDB_API_KEY = no definida
 
-Resumen: faltan 5 elemento(s) obligatorio(s): Python 3.12, pyspark importable (3.5.x), Dependencias de requirements.txt, Conector Kafka en caché (.ivy2), Kafka (broker)
-Opcionales pendientes: Datos ml-25m
-- FALLA: [aceptación] La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
-- FALLA: Instala el entorno (requisito previo de las demás pruebas; sin conector para no depender de internet) — comando no permitido: powershell -ExecutionPolicy Bypass -File setup_entorno.ps1 -SinConector
-- FALLA: Config, muestra mini (conteos, Toy Story, orientación de usuarios), SparkSession, kafka_disponible y check_entorno — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
-- FALLA: Instala el entorno sin PowerShell anidado: crea o reutiliza .venv con Python 3.12 e instala requirements.txt fijado (sin conector, para no depender de internet) — se paso de 3 minutos
+Resumen: faltan 1 elemento(s) obligatorio(s): Conector Kafka en caché (.ivy2)
+Opcionales pendientes: Topic 'ratings', Datos ml-25m
+
+Listo. Registro completo en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\instalacion.log
 - FALLA: Suite del paquete 1 con el .venv del proyecto: config, muestra mini, SparkSession, kafka_disponible y check_entorno — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
 - PASA: check_entorno corre con el .venv del proyecto sin traceback — codigo 0: bot\proyectos\recomendador-peliculas\artefactos\estado.db
   LLM_PROVIDER = ollama
@@ -22,3 +30,16 @@ Opcionales pendientes: Datos ml-25m
 
 Resumen: faltan 5 elemento(s) obligatorio(s): Python 3.12, pyspark importable (3.5.x), Dependencias de requirements.txt, Conector Kafka en caché (.ivy2), Kafka (broker)
 Opcionales pendientes: Datos ml-25m
+- PASA: Aceptación: el dry-run sobre la muestra emite 5 eventos ordenados (solo usa la biblioteca estándar) — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
+{"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
+{"userId":2,"movieId":1,"rating":3.0,"timestamp":1262504000}
+{"userId":2,"movieId":318,"rating":5.0,"timestamp":1262507600}
+{"userId":3,"movieId":1,"rating":3.0,"timestamp":1262604000}
+
+[dry-run] 5 evento(s) ordenados por timestamp; no se envi� nada a Kafka.
+- FALLA: Aceptación: suite de ingesta (orden, JSON, --desde, CLI sin traceback, md5, Spark y Kafka con salto si no hay broker) — codigo 1: C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe: No module named pytest
+- PASA: El --dry-run de la descarga no toca la red y termina con 0 — codigo 0: n] Plan:
+  1. Descargar https://files.grouplens.org/datasets/movielens/ml-25m.zip (~250 MB) a C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\data\ml-25m.zip
+  2. Verificar el md5 contra https://files.grouplens.org/datasets/movielens/ml-25m.zip.md5
+  3. Descomprimir en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\data\ml-25m
+[dry-run] No se descarg� ni escribi� nada.
