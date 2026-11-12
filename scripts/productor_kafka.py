@@ -124,6 +124,19 @@ def _eventos_parquet(ruta: Path, ini: int | None, fin: int | None) -> Iterator[d
                 yield _evento(u, m, r, ts)
 
 
+def _es_parquet(ruta: Path) -> bool:
+    """True si la ruta es un parquet (no una carpeta de MovieLens con CSV).
+
+    Spark escribe el parquet como CARPETA con nombre *.parquet y archivos part-*;
+    sin esta detección se buscaría <carpeta>/ratings_ordenados.parquet dentro de él.
+    """
+    if ruta.suffix.lower() == ".parquet":
+        return True
+    return ruta.is_dir() and not (ruta / "ratings.csv").exists() \
+        and not (ruta / PARQUET_ORDENADO).exists() \
+        and any(ruta.glob("part-*.parquet"))
+
+
 def _parquet_usable(ruta: Path) -> bool:
     if not ruta.exists() or not _archivos_parquet(ruta):
         return False
@@ -147,7 +160,11 @@ def leer_eventos(datos, desde: str | None = None, hasta: str | None = None,
     if not ruta.exists() and not ruta.is_absolute() and (RAIZ / ruta).exists():
         ruta = RAIZ / ruta  # rutas relativas a la raíz del proyecto
     ini, fin = _rango_epoch(desde, hasta)
-    if ruta.is_dir():
+    if _es_parquet(ruta):
+        # La ruta ES el parquet: archivo suelto o carpeta escrita por Spark
+        # (p. ej. .../ratings_ordenados.parquet/part-00000-....parquet).
+        parquet, csv_ = ruta, None
+    elif ruta.is_dir():
         parquet, csv_ = ruta / PARQUET_ORDENADO, ruta / "ratings.csv"
     elif ruta.suffix.lower() == ".csv":
         parquet, csv_ = None, ruta
