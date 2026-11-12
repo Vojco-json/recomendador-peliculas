@@ -1,0 +1,17 @@
+# Versiones fijadas (Python 3.12, Windows 11). No cambiar antes de la expo.
+# El conector Kafka de Spark NO es un paquete pip: spark_utils lo resuelve con
+# spark.jars.packages = org.apache.spark:spark-sql-kafka-0-10_2.12:<pyspark.__version__>
+# (misma versión que pyspark, 3.5.5) y lo guarda en .ivy2 del proyecto.
+pyspark==3.5.5
+py4j==0.10.9.7
+setuptools==75.6.0
+confluent-kafka==2.6.1
+pandas==2.2.3
+pyarrow==18.1.0
+numpy==1.26.4
+matplotlib==3.9.2
+scikit-learn==1.5.2
+streamlit==1.40.1
+ollama==0.5.1
+requests==2.32.3
+pytest==8.3.4
