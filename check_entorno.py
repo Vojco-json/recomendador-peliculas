@@ -125,11 +125,16 @@ def ch_dependencias() -> None:
     modulos = ["pandas", "pyarrow", "numpy", "matplotlib", "sklearn", "streamlit",
                "confluent_kafka", "ollama", "requests", "pytest"]
     faltan = []
+    # Algunos paquetes (p. ej. streamlit) limpian sys.path al importarse y
+    # quitan la raíz del proyecto: se guarda y se restaura para que los
+    # chequeos siguientes puedan seguir importando 'recomendador'.
+    ruta_original = list(sys.path)
     for m in modulos:
         try:
             importlib.import_module(m)
         except Exception:
             faltan.append(m)
+    sys.path[:] = ruta_original
     reportar("Dependencias de requirements.txt", not faltan,
              "todas importables" if not faltan else "faltan: " + ", ".join(faltan),
              ".venv\\Scripts\\pip install -r requirements.txt")
