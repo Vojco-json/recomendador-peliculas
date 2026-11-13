@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
-- 2026-11-12T21:04 ronda - [delegado]:
+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
+- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
+- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
 …(recortado)

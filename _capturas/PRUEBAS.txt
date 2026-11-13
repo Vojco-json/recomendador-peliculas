@@ -10,12 +10,12 @@ Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 Resumen: entorno listo.
 Opcionales pendientes: Topic 'ratings', Datos ml-25m
 - PASA: [aceptación] La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones — codigo 0: ...........                                                              [100%]
-11 passed in 22.03s
-CORRECTO: el proceso con PID 16500 (proceso secundario de PID 13804)
+11 passed in 22.46s
+CORRECTO: el proceso con PID 14924 (proceso secundario de PID 21992)
 ha sido terminado.
-CORRECTO: el proceso con PID 13804 (proceso secundario de PID 7996)
+CORRECTO: el proceso con PID 21992 (proceso secundario de PID 21040)
 ha sido terminado.
-CORRECTO: el proceso con PID 7996 (proceso secundario de PID 4792)
+CORRECTO: el proceso con PID 21040 (proceso secundario de PID 22072)
 ha sido terminado.
 - PASA: [aceptación] Dry-run sobre la muestra emite 5 eventos ordenados por timestamp — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
 {"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
@@ -25,48 +25,39 @@ ha sido terminado.
 
 [dry-run] 5 evento(s) ordenados por timestamp; no se envió nada a Kafka.
 - PASA: [aceptación] Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único — codigo 0: ..................                                                       [100%]
-18 passed in 23.33s
-CORRECTO: el proceso con PID 21464 (proceso secundario de PID 14452)
+18 passed in 23.27s
+CORRECTO: el proceso con PID 22512 (proceso secundario de PID 12148)
 ha sido terminado.
-CORRECTO: el proceso con PID 14452 (proceso secundario de PID 12008)
+CORRECTO: el proceso con PID 12148 (proceso secundario de PID 15304)
 ha sido terminado.
-CORRECTO: el proceso con PID 12008 (proceso secundario de PID 8320)
+CORRECTO: el proceso con PID 15304 (proceso secundario de PID 20016)
 ha sido terminado.
 - PASA: [aceptación] El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN — codigo 0: vel use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
-26/11/12 21:12:49 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/12 21:12:49 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-26/11/12 21:12:49 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
-- PASA: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 0: eVersion(minimum_pyarrow_version):
+26/11/12 21:21:50 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/12 21:21:50 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/11/12 21:21:51 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
+- PASA: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 0: sion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 30.34s
-CORRECTO: el proceso con PID 1376 (proceso secundario de PID 13248)
+12 passed, 30 warnings in 32.30s
+CORRECTO: el proceso con PID 14940 (proceso secundario de PID 18172)
 ha sido terminado.
-CORRECTO: el proceso con PID 13248 (proceso secundario de PID 2368)
+CORRECTO: el proceso con PID 18172 (proceso secundario de PID 14076)
 ha sido terminado.
-CORRECTO: el proceso con PID 2368 (proceso secundario de PID 6608)
+CORRECTO: el proceso con PID 14076 (proceso secundario de PID 22748)
 ha sido terminado.
-- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: /12 21:13:44 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/12 21:13:50 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/12 21:13:50 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 0: rsion(minimum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-14 passed, 8 warnings in 25.78s
-CORRECTO: el proceso con PID 19260 (proceso secundario de PID 24012)
-ha sido terminado.
-CORRECTO: el proceso con PID 24012 (proceso secundario de PID 18860)
-ha sido terminado.
-CORRECTO: el proceso con PID 18860 (proceso secundario de PID 12620)
-ha sido terminado.
+- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: /12 21:22:48 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/12 21:22:55 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/12 21:22:55 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- FALLA: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
 - OMITIDA: Instala el entorno (requisito previo de las demás pruebas; sin conector para no depender de internet) — omitida: comando no permitido para Delegado (powershell -ExecutionPolicy Bypass -File setup_entorno.ps1 -SinConector). Solo npm, npx, node, python, py, pip o .venv/Scripts/python; esta prueba esta mal definida o es un paso manual del usuario
 - PASA: Config, muestra mini (conteos, Toy Story, orientación de usuarios), SparkSession, kafka_disponible y check_entorno — codigo 0: ...........                                                              [100%]
-11 passed in 22.36s
-CORRECTO: el proceso con PID 4420 (proceso secundario de PID 12268)
+11 passed in 22.88s
+CORRECTO: el proceso con PID 25280 (proceso secundario de PID 24456)
 ha sido terminado.
-CORRECTO: el proceso con PID 12268 (proceso secundario de PID 23068)
+CORRECTO: el proceso con PID 24456 (proceso secundario de PID 10296)
 ha sido terminado.
-CORRECTO: el proceso con PID 23068 (proceso secundario de PID 1276)
+CORRECTO: el proceso con PID 10296 (proceso secundario de PID 14496)
 ha sido terminado.
 - PASA: Instala el entorno sin PowerShell anidado: crea o reutiliza .venv con Python 3.12 e instala requirements.txt fijado (sin conector, para no depender de internet) — codigo 0: Documents\bot\proyectos\recomendador-peliculas\artefactos\estado.db
   LLM_PROVIDER = ollama
@@ -80,12 +71,12 @@ Opcionales pendientes: Topic 'ratings', Datos ml-25m
 
 Listo. Registro completo en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\instalacion.log
 - PASA: Suite del paquete 1 con el .venv del proyecto: config, muestra mini, SparkSession, kafka_disponible y check_entorno — codigo 0: ...........                                                              [100%]
-11 passed in 21.83s
-CORRECTO: el proceso con PID 15136 (proceso secundario de PID 19808)
+11 passed in 22.83s
+CORRECTO: el proceso con PID 788 (proceso secundario de PID 17160)
 ha sido terminado.
-CORRECTO: el proceso con PID 19808 (proceso secundario de PID 22892)
+CORRECTO: el proceso con PID 17160 (proceso secundario de PID 12848)
 ha sido terminado.
-CORRECTO: el proceso con PID 22892 (proceso secundario de PID 10952)
+CORRECTO: el proceso con PID 12848 (proceso secundario de PID 25428)
 ha sido terminado.
 - PASA: check_entorno corre con el .venv del proyecto sin traceback — codigo 0: TOS_DEMO = C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\demo
   ESTADO_DB = C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\estado.db
@@ -105,12 +96,12 @@ Opcionales pendientes: Topic 'ratings', Datos ml-25m
 
 [dry-run] 5 evento(s) ordenados por timestamp; no se envió nada a Kafka.
 - PASA: Aceptación: suite de ingesta (orden, JSON, --desde, CLI sin traceback, md5, Spark y Kafka con salto si no hay broker) — codigo 0: ..................                                                       [100%]
-18 passed in 23.46s
-CORRECTO: el proceso con PID 18268 (proceso secundario de PID 2816)
+18 passed in 23.74s
+CORRECTO: el proceso con PID 13472 (proceso secundario de PID 1000)
 ha sido terminado.
-CORRECTO: el proceso con PID 2816 (proceso secundario de PID 10072)
+CORRECTO: el proceso con PID 1000 (proceso secundario de PID 18728)
 ha sido terminado.
-CORRECTO: el proceso con PID 10072 (proceso secundario de PID 15248)
+CORRECTO: el proceso con PID 18728 (proceso secundario de PID 21036)
 ha sido terminado.
 - PASA: El --dry-run de la descarga no toca la red y termina con 0 — codigo 0: n] Plan:
   1. Descargar https://files.grouplens.org/datasets/movielens/ml-25m.zip (~250 MB) a C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\data\ml-25m.zip
@@ -119,12 +110,12 @@ ha sido terminado.
 [dry-run] No se descargó ni escribió nada.
 - PASA: El reenvío encuentra el pytest real del .venv del proyecto (muestra su versión) — codigo 0: pytest 8.3.4
 - PASA: [aceptación] Suite de ingesta: orden temporal, JSON, --desde/--hasta, límite, CLI sin traceback; Kafka se salta con 'Kafka no disponible' si no hay broker — codigo 0: ..................                                                       [100%]
-18 passed in 23.41s
-CORRECTO: el proceso con PID 8320 (proceso secundario de PID 4700)
+18 passed in 24.45s
+CORRECTO: el proceso con PID 7348 (proceso secundario de PID 3892)
 ha sido terminado.
-CORRECTO: el proceso con PID 4700 (proceso secundario de PID 17888)
+CORRECTO: el proceso con PID 3892 (proceso secundario de PID 20520)
 ha sido terminado.
-CORRECTO: el proceso con PID 17888 (proceso secundario de PID 17464)
+CORRECTO: el proceso con PID 20520 (proceso secundario de PID 18472)
 ha sido terminado.
 - PASA: [aceptación] El dry-run emite 5 eventos ordenados por timestamp — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
 {"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
@@ -134,12 +125,12 @@ ha sido terminado.
 
 [dry-run] 5 evento(s) ordenados por timestamp; no se envió nada a Kafka.
 - PASA: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — codigo 0: ...........                                                              [100%]
-11 passed in 21.89s
-CORRECTO: el proceso con PID 25176 (proceso secundario de PID 25180)
+11 passed in 26.00s
+CORRECTO: el proceso con PID 18620 (proceso secundario de PID 11288)
 ha sido terminado.
-CORRECTO: el proceso con PID 25180 (proceso secundario de PID 11788)
+CORRECTO: el proceso con PID 11288 (proceso secundario de PID 15332)
 ha sido terminado.
-CORRECTO: el proceso con PID 11788 (proceso secundario de PID 17512)
+CORRECTO: el proceso con PID 15332 (proceso secundario de PID 7332)
 ha sido terminado.
 - PASA: [aceptación] Dry-run sobre la muestra emite 5 eventos ordenados por timestamp — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
 {"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
@@ -149,68 +140,68 @@ ha sido terminado.
 
 [dry-run] 5 evento(s) ordenados por timestamp; no se envió nada a Kafka.
 - PASA: [aceptación] Suite de ingesta: orden, JSON, --desde/--hasta, CLI sin traceback, md5, Spark→parquet leído por el productor, y Kafka real (se salta con 'Kafka no disponible' si no hay broker) — codigo 0: ..................                                                       [100%]
-18 passed in 23.35s
-CORRECTO: el proceso con PID 15476 (proceso secundario de PID 14548)
+18 passed in 33.25s
+CORRECTO: el proceso con PID 16376 (proceso secundario de PID 21496)
 ha sido terminado.
-CORRECTO: el proceso con PID 14548 (proceso secundario de PID 16192)
+CORRECTO: el proceso con PID 21496 (proceso secundario de PID 10256)
 ha sido terminado.
-CORRECTO: el proceso con PID 16192 (proceso secundario de PID 4608)
+CORRECTO: el proceso con PID 10256 (proceso secundario de PID 15784)
 ha sido terminado.
 - PASA: Sin regresión en la suite del paquete 1 — codigo 0: ...........                                                              [100%]
-11 passed in 21.96s
-CORRECTO: el proceso con PID 18984 (proceso secundario de PID 13148)
+11 passed in 28.38s
+CORRECTO: el proceso con PID 24612 (proceso secundario de PID 13672)
 ha sido terminado.
-CORRECTO: el proceso con PID 13148 (proceso secundario de PID 4124)
+CORRECTO: el proceso con PID 13672 (proceso secundario de PID 9040)
 ha sido terminado.
-CORRECTO: el proceso con PID 4124 (proceso secundario de PID 15344)
+CORRECTO: el proceso con PID 9040 (proceso secundario de PID 21996)
 ha sido terminado.
 - PASA: Muestra, config por variables de entorno y kafka_disponible — codigo 0: ...........                                                              [100%]
-11 passed in 22.44s
-CORRECTO: el proceso con PID 14736 (proceso secundario de PID 11852)
+11 passed in 23.28s
+CORRECTO: el proceso con PID 18956 (proceso secundario de PID 9320)
 ha sido terminado.
-CORRECTO: el proceso con PID 11852 (proceso secundario de PID 21260)
+CORRECTO: el proceso con PID 9320 (proceso secundario de PID 2568)
 ha sido terminado.
-CORRECTO: el proceso con PID 21260 (proceso secundario de PID 13572)
+CORRECTO: el proceso con PID 2568 (proceso secundario de PID 9676)
 ha sido terminado.
 - PASA: Suite del paquete 1 sin regresión y en menos de 2 minutos (el conector se carga desde la caché local, sin Ivy ni red) — codigo 0: ...........                                                              [100%]
-11 passed in 22.56s
-CORRECTO: el proceso con PID 11752 (proceso secundario de PID 17036)
+11 passed in 22.53s
+CORRECTO: el proceso con PID 14200 (proceso secundario de PID 3884)
 ha sido terminado.
-CORRECTO: el proceso con PID 17036 (proceso secundario de PID 19464)
+CORRECTO: el proceso con PID 3884 (proceso secundario de PID 7996)
 ha sido terminado.
-CORRECTO: el proceso con PID 19464 (proceso secundario de PID 6856)
+CORRECTO: el proceso con PID 7996 (proceso secundario de PID 20336)
 ha sido terminado.
 - PASA: Suites del paquete 1 y del paquete 2 juntas, sin regresión — codigo 0: .............................                                            [100%]
-29 passed in 32.65s
-CORRECTO: el proceso con PID 3400 (proceso secundario de PID 21104)
+29 passed in 32.71s
+CORRECTO: el proceso con PID 9740 (proceso secundario de PID 23168)
 ha sido terminado.
-CORRECTO: el proceso con PID 21104 (proceso secundario de PID 3668)
+CORRECTO: el proceso con PID 23168 (proceso secundario de PID 3600)
 ha sido terminado.
-CORRECTO: el proceso con PID 3668 (proceso secundario de PID 22136)
+CORRECTO: el proceso con PID 3600 (proceso secundario de PID 3504)
 ha sido terminado.
 - PASA: [aceptación] El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN — codigo 0: vel use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
-26/11/12 21:18:54 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/12 21:18:54 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-26/11/12 21:18:54 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
-- PASA: [aceptación] Partición temporal, Toy Story primera en popularidad, métricas en [0,1], artefactos, recs sin vistas, fold-in sin vistas y --desde reduce el entrenamiento — codigo 0: eVersion(minimum_pyarrow_version):
+26/11/12 21:29:39 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/12 21:29:39 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/11/12 21:29:39 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
+- PASA: [aceptación] Partición temporal, Toy Story primera en popularidad, métricas en [0,1], artefactos, recs sin vistas, fold-in sin vistas y --desde reduce el entrenamiento — codigo 0: ersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 31.02s
-CORRECTO: el proceso con PID 6556 (proceso secundario de PID 24452)
+12 passed, 30 warnings in 31.21s
+CORRECTO: el proceso con PID 19332 (proceso secundario de PID 22944)
 ha sido terminado.
-CORRECTO: el proceso con PID 24452 (proceso secundario de PID 4608)
+CORRECTO: el proceso con PID 22944 (proceso secundario de PID 6328)
 ha sido terminado.
-CORRECTO: el proceso con PID 4608 (proceso secundario de PID 3616)
+CORRECTO: el proceso con PID 6328 (proceso secundario de PID 15628)
 ha sido terminado.
 - PASA: Con umbral de relevancia 3 y --desde 2015 la tabla muestra métricas de ranking distintas de cero, sin NaN — codigo 0: vel use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
-26/11/12 21:19:51 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/12 21:19:51 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-26/11/12 21:19:51 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
+26/11/12 21:30:36 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/12 21:30:36 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/11/12 21:30:36 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
 - PASA: Regresión: las suites de los paquetes 1 y 2 siguen pasando — codigo 0: .............................                                            [100%]
-29 passed in 32.21s
-CORRECTO: el proceso con PID 25184 (proceso secundario de PID 24288)
+29 passed in 32.78s
+CORRECTO: el proceso con PID 10968 (proceso secundario de PID 16968)
 ha sido terminado.
-CORRECTO: el proceso con PID 24288 (proceso secundario de PID 19104)
+CORRECTO: el proceso con PID 16968 (proceso secundario de PID 4184)
 ha sido terminado.
-CORRECTO: el proceso con PID 19104 (proceso secundario de PID 21824)
+CORRECTO: el proceso con PID 4184 (proceso secundario de PID 15996)
 ha sido terminado.
