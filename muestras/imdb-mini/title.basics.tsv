@@ -1,0 +1,28 @@
+tconst	titleType	primaryTitle	originalTitle	isAdult	startYear	endYear	runtimeMinutes	genres
+tt0000001	short	Carmencita	Carmencita	0	1894	\N	1	Documentary,Short
+tt0114709	movie	Toy Story	Toy Story	0	1995	\N	81	Adventure,Animation,Comedy
+tt0113277	movie	Heat	Heat	0	1995	\N	170	Action,Crime,Drama
+tt0114746	movie	Twelve Monkeys	Twelve Monkeys	0	1995	\N	129	Mystery,Sci-Fi,Thriller
+tt0114369	movie	Se7en	Se7en	0	1995	\N	127	Crime,Drama,Mystery
+tt0114814	movie	The Usual Suspects	The Usual Suspects	0	1995	\N	106	Crime,Drama,Mystery
+tt0112573	movie	Braveheart	Braveheart	0	1995	\N	178	Biography,Drama,History
+tt0076759	movie	Star Wars: Episode IV - A New Hope	Star Wars	0	1977	\N	121	Action,Adventure,Fantasy
+tt0110912	movie	Pulp Fiction	Pulp Fiction	0	1994	\N	154	Crime,Drama
+tt0111161	movie	The Shawshank Redemption	The Shawshank Redemption	0	1994	\N	142	Drama
+tt0109830	movie	Forrest Gump	Forrest Gump	0	1994	\N	142	Drama,Romance
+tt0110357	movie	The Lion King	The Lion King	0	1994	\N	88	Adventure,Animation,Drama
+tt0107290	movie	Jurassic Park	Jurassic Park	0	1993	\N	127	Action,Adventure,Sci-Fi
+tt0108052	movie	Schindler's List	Schindler's List	0	1993	\N	195	Biography,Drama,History
+tt0108160	movie	Sleepless in Seattle	Sleepless in Seattle	0	1993	\N	105	Comedy,Drama,Romance
+tt0103064	movie	Terminator 2: Judgment Day	Terminator 2: Judgment Day	0	1991	\N	137	Action,Sci-Fi
+tt0102926	movie	The Silence of the Lambs	The Silence of the Lambs	0	1991	\N	118	Crime,Drama,Thriller
+tt0100405	movie	Pretty Woman	Pretty Woman	0	1990	\N	119	Comedy,Romance
+tt0095016	movie	Die Hard	Die Hard	0	1988	\N	132	Action,Thriller
+tt0107048	movie	Groundhog Day	Groundhog Day	0	1993	\N	101	Comedy,Drama,Fantasy
+tt0098635	movie	When Harry Met Sally...	When Harry Met Sally...	0	1989	\N	95	Comedy,Drama,Romance
+tt0120338	movie	Titanic	Titanic	0	1997	\N	194	Drama,Romance
+tt0133093	movie	The Matrix	The Matrix	0	1999	\N	136	Action,Sci-Fi
+tt0126029	movie	Shrek	Shrek	0	2001	\N	90	Adventure,Animation,Comedy
+tt0266543	movie	Finding Nemo	Finding Nemo	0	2003	\N	100	Adventure,Animation,Comedy
+tt0903747	tvSeries	Breaking Bad	Breaking Bad	0	2008	2013	49	Crime,Drama,Thriller
+tt9999999	movie	Sin duracion	Sin duracion	0	\N	\N	\N	\N

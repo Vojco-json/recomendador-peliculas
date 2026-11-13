@@ -67,7 +67,7 @@ Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin
 - Criterio: Imprime una tabla con 'RMSE', 'Precision@10' y 'NDCG@10' para ALS y Popularidad, sin NaN.
 - Prueba de aceptacion: El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN: el comando «.venv/Scripts/python scripts/entrenar_batch.py --datos muestras/ml-mini --corte 2016-01-01 --salida artefactos/mini --nucleos 2» debe terminar sin error
 - Prueba de aceptacion: Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento: el comando «.venv/Scripts/python -m pytest -q tests/test_batch.py» debe terminar sin error
-### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [observado]
+### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [verificado]
 Objetivo: Construir vectores de gusto por usuario (géneros y tag genome ponderados por sus calificaciones) y agruparlos con KMeans en tipos de espectador con nombres interpretables.
 Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usuarios.py, tests/test_perfiles.py · Depende de: 1
 - Criterio: Peso = rating - media del usuario. El vector de géneros es la suma ponderada normalizada (20 géneros). El vector genome usa unos 40 tags interpretables, ponderados por relevancia.
@@ -77,7 +77,7 @@ Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usu
 - Criterio: perfil_usuario(userId, artefactos) devuelve un dict legible. actualizar_perfil_generos(perfil, nuevos_ratings) permite la actualización incremental desde el streaming.
 - Prueba de aceptacion: El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño: el comando «.venv/Scripts/python scripts/perfilar_usuarios.py --datos muestras/ml-mini --salida artefactos/mini --k 3» debe terminar sin error
 - Prueba de aceptacion: El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del género calificado: el comando «.venv/Scripts/python -m pytest -q tests/test_perfiles.py» debe terminar sin error
-### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [observado]
+### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [verificado]
 Objetivo: Leer Kafka con Structured Streaming, actualizar en SQLite los perfiles y las recomendaciones (fold-in) de los usuarios activos, reentrenar ALS periódicamente y preparar el modo demo (artefactos de 25M + subconjunto en vivo desde DEMO_DESDE).
 Requisitos: 9, 13, 22, 23, 25 · Archivos: recomendador/estado.py, recomendador/streaming.py, recomendador/demo.py, scripts/streaming.py, scripts/preparar_demo.py, tests/test_streaming.py, tests/test_demo.py · Depende de: 2, 3, 4
 - Criterio: estado.py: SQLite en modo WAL con tablas eventos, perfiles, recomendaciones (userId, movieId, rank, score, actualizado_en) y meta (ultimo_reentrenamiento, version_modelo, modo).
@@ -90,7 +90,7 @@ Requisitos: 9, 13, 22, 23, 25 · Archivos: recomendador/estado.py, recomendador/
 - Criterio: También hay una prueba con fuente archivo (sin Kafka) para procesar_lote.
 - Prueba de aceptacion: Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_streaming.py» debe terminar sin error
 - Prueba de aceptacion: preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta: el comando «.venv/Scripts/python -m pytest -q tests/test_demo.py» debe terminar sin error
-### 6. 6. Experimento de escalabilidad y figuras del póster [pendiente]
+### 6. 6. Experimento de escalabilidad y figuras del póster [verificado]
 Objetivo: Medir tiempos de ALS con 1, 2, 4 y 6 núcleos, calcular el speedup y generar todas las figuras del póster.
 Requisitos: 10, 20 · Archivos: scripts/escalabilidad.py, scripts/figuras_poster.py, poster/figuras/, tests/test_poster.py · Depende de: 3, 4
 - Criterio: escalabilidad.py --datos --nucleos 1,2,4,6 --repeticiones R --fraccion f --salida: usa un subproceso por N con su propia SparkSession (6g), descarta una corrida de calentamiento y guarda escalabilidad
@@ -102,23 +102,33 @@ Requisitos: 10, 20 · Archivos: scripts/escalabilidad.py, scripts/figuras_poster
 ### 7. 7. Enriquecimiento legal: IMDb, TMDb y Letterboxd [pendiente]
 Objetivo: Unir IMDb no comercial por links.csv, agregar pósters y sinopsis de TMDb con caché, e importar CSV de Letterboxd como usuario nuevo con fold-in.
 Requisitos: 15, 16, 17 · Archivos: recomendador/enriquecimiento.py, scripts/descargar_imdb.py, scripts/importar_letterboxd.py, muestras/imdb-mini/title.basics.tsv, muestras/imdb-mini/title.ratings.tsv, muestras/letterboxd_ratings.csv, tests/test_enriquecimiento.py · Depende de: 1, 3
-- Criterio: descargar_imdb.py baja title.basics y title.ratings de https://datasets.imdbws.com/ a data/imdb.
-- Criterio: Cruce imdbId -> 'tt'+7 dígitos con tconst, que genera peliculas_enriquecidas.parquet (movieId, titulo, anio, generos, duracion_min, imdb_rating, imdb_votos, tmdbId).
-- Criterio: Cliente TMDb: TMDB_API_KEY del entorno, GET /3/movie/{tmdbId} con language=es-ES y fallback a en-US, caché en artefactos/tmdb_cache.json. Sin clave devuelve None sin errores ni llamadas de red.
-- Criterio: importar_letterboxd.py valida las columnas Date, Name, Year, Letterboxd URI y Rating, empareja por título normalizado y año (±1), crea un userId >= 1000000, guarda sus ratings en estado.db y recomiend
-- Criterio: muestras/letterboxd_ratings.csv tiene 4 películas de ml-mini y 1 inexistente.
-- Prueba de aceptacion: Importar el CSV de muestra empareja 4 de 5 y crea un usuario con recomendaciones: el comando «.venv/Scripts/python scripts/importar_letterboxd.py --csv muestras/letterboxd_ratings.csv --datos muestras/ml-mini --artefactos artefactos/mini» debe terminar sin error
-- Prueba de aceptacion: Cruce IMDb (Toy Story, 81 min), TMDb sin clave degrada sin error y normalización de títulos: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_enriquecimiento.py» debe terminar sin error
+- Criterio: descargar_imdb.py descarga title.basics.tsv.gz y title.ratings.tsv.gz de https://datasets.imdbws.com/ a data/imdb (no comercial, sin scraping).
+- Criterio: Cruce de imdbId a 'tt' + 7 dígitos con tconst. Genera peliculas_enriquecidas.parquet (movieId, titulo, anio, generos, duracion_min, imdb_rating, imdb_votos, tmdbId). Con muestras/imdb-mini, Toy Story 
+- Criterio: Cliente TMDb: lee TMDB_API_KEY del entorno y llama GET /3/movie/{tmdbId} con language=es-ES y respaldo en en-US. Guarda la caché en artefactos/tmdb_cache.json. Sin clave devuelve None, sin errores ni 
+- Criterio: importar_letterboxd.py valida las columnas Date, Name, Year, Letterboxd URI y Rating. Empareja por título normalizado y año (±1), imprime 'Emparejadas: X de Y', crea un userId >= 1000000, guarda sus r
+- Criterio: muestras/letterboxd_ratings.csv contiene 4 películas de ml-mini y 1 inexistente. tests/test_enriquecimiento.py ejecuta el importador sobre un directorio temporal y comprueba 'Emparejadas: 4 de 5', use
+- Criterio: No modifica módulos verificados, salvo para importar sus funciones. No crea archivos .py en la raíz del proyecto.
+- Prueba de aceptacion: Cruce IMDb (Toy Story, 81 min), TMDb sin clave degrada sin error, normalización de títulos e importación de Letterboxd con 'Emparejadas: 4 de 5' en un directorio temporal: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_enriquecimiento.py» debe terminar sin error
+- Prueba de aceptacion: El importador funciona de punta a punta sobre la muestra creando sus artefactos si faltan: el comando «.venv/Scripts/python scripts/importar_letterboxd.py --csv muestras/letterboxd_ratings.csv --datos muestras/ml-mini --artefactos artefactos/mini_letterboxd» debe terminar sin error
 ### 8. 8. App Streamlit con chat LLM por herramientas y README de la demo [pendiente]
-Objetivo: Interfaz con userId, tipo de espectador, tarjetas de recomendación y chat con Ollama (qwen3.5:9b, think=False por defecto) que solo usa datos de herramientas. Lee el estado en vivo de SQLite y muestra el modo demo. Incluye el README con la corrida de 25M y la guía de la demo.
+Objetivo: Herramientas de datos, LLM configurable (Ollama qwen3.5:9b con think=False por defecto y proveedor 'reglas' de respaldo) y app Streamlit con userId, tipo de espectador, tarjetas y chat que solo usa datos de herramientas, leyendo el estado en vivo de SQLite. El README queda para el paquete 9.
 Requisitos: 18, 19, 20, 21, 24 · Archivos: recomendador/herramientas.py, recomendador/llm.py, app/app.py, README.md, tests/test_app.py · Depende de: 3, 4, 5, 7
-- Criterio: herramientas.py: peliculas_calificadas, tags_usuario, perfil_gustos, recomendar(userId, n, max_duracion_min, generos, excluir_vistas=True) e info_pelicula. Prioriza estado.db (en vivo) sobre los artef
-- Criterio: llm.py: proveedor 'ollama' que llama ollama.chat(model, messages, tools, think=config.LLM_THINK) con LLM_THINK=False por defecto, configurable con la variable de entorno LLM_THINK=true. Bucle de herra
-- Criterio: El proveedor 'reglas' es determinista: interpreta 'corto' (≤100 min) y 'liviano' (Comedy/Animation/Family) y se activa con el aviso visible 'Ollama no responde: usando modo reglas' si Ollama falla.
-- Criterio: app.py: barra lateral con userId, badge del tipo, barras de géneros, modo (completo/demo), 'Actualizado hace X s' leído de estado.db, y LLM_PROVIDER/LLM_MODEL/think. Columna principal con tarjetas y c
-- Criterio: README.md: instalación, check_entorno, corrida completa de 25M paso a paso (descargar → ordenar → entrenar → perfilar → escalabilidad → figuras), preparación y guía de la demo de 5 minutos (preparar_d
-- Prueba de aceptacion: AppTest con proveedor 'reglas' sobre la muestra: el usuario 1 ve su tipo de espectador y, al pedir 'algo corto y liviano para hoy', recibe recomendaciones explicadas sin películas vistas. Además se verifica que llm.py pasa think=False por defecto (con un cliente ollama simulado): el comando «.venv/Scripts/python -m pytest -q tests/test_app.py» debe terminar sin error
-- Prueba de aceptacion: Las herramientas devuelven datos reales del usuario 1 y un userId inexistente no rompe: el comando «.venv/Scripts/python -c "from recomendador import herramientas as h; print(h.perfil_gustos(1)); print(h.recomendar(1, n=3, max_duracion_min=100)); print(h.perfil_gustos(999999))"» debe terminar sin error
+- Criterio: herramientas.py ofrece peliculas_calificadas, tags_usuario, perfil_gustos, recomendar(userId, n, max_duracion_min, generos, excluir_vistas=True) e info_pelicula. Prioriza estado.db (en vivo) sobre los
+- Criterio: llm.py: el proveedor 'ollama' llama a ollama.chat(model, messages, tools, think=config.LLM_THINK), con LLM_THINK=False por defecto y LLM_THINK=true por entorno. El bucle de herramientas es limitado. L
+- Criterio: El proveedor 'reglas' es determinista: interpreta 'corto' (≤ 100 min) y 'liviano' (Comedy/Animation/Family). Se activa con el aviso visible 'Ollama no responde: usando modo reglas' cuando Ollama falla
+- Criterio: app/app.py: barra lateral con userId, badge del tipo, barras de géneros, modo (completo/demo), 'Actualizado hace X s' leído de estado.db, y LLM_PROVIDER/LLM_MODEL/think. Columna principal con tarjetas
+- Criterio: Las pruebas construyen sus artefactos mini en un directorio temporal (reutilizando tests/base_mini.py) y no dependen de artefactos de 25M.
+- Prueba de aceptacion: AppTest con el proveedor 'reglas' sobre la muestra: el usuario 1 ve su tipo de espectador y, al pedir 'algo corto y liviano para hoy', recibe recomendaciones explicadas sin películas vistas. Con un cliente ollama simulado se verifica think=False por defecto y que se descartan las películas inventadas.: el comando «.venv/Scripts/python -m pytest -q tests/test_app.py» debe terminar sin error
+- Prueba de aceptacion: Las herramientas devuelven datos reales del usuario 1 de ml-mini (Action/Thriller) y un userId inexistente no rompe: el comando «.venv/Scripts/python -m pytest -q tests/test_herramientas.py» debe terminar sin error
+### 9. 9. README de la demo, aviso en figuras y cierre de integración [pendiente]
+Objetivo: Entregar el README completo (instalación, corrida de 25M, guía de la demo de 5 minutos, licencias y solución de problemas en Windows), hacer que la figura de métricas avise cuando no hay usuarios evaluados y comprobar que todas las suites siguen pasando juntas.
+Requisitos: 20, 21 · Archivos: README.md, recomendador/poster.py, tests/test_readme.py, tests/test_poster.py · Depende de: -
+- Criterio: README.md contiene estas secciones: Instalación (setup_entorno, cuál script usar y el .venv con py -3.12), check_entorno.py, Corrida completa de 25M paso a paso (descargar → ordenar → crear_topic → en
+- Criterio: La figura de métricas muestra el texto 'Sin usuarios evaluados: no usar en el póster' cuando la evaluación tiene 0 usuarios. Se prueba en tests/test_poster.py.
+- Criterio: tests/test_readme.py verifica que existan los títulos de sección y que cada script citado en el README exista en el repositorio.
+- Criterio: No cambia el comportamiento de los paquetes verificados más allá del aviso de la figura.
+- Prueba de aceptacion: El README tiene todas las secciones y solo cita scripts que existen: el comando «.venv/Scripts/python -m pytest -q tests/test_readme.py» debe terminar sin error
+- Prueba de aceptacion: Las figuras siguen generándose y la de métricas avisa cuando hay 0 usuarios evaluados: el comando «.venv/Scripts/python -m pytest -q tests/test_poster.py» debe terminar sin error
 
 ## Riesgos
 - Windows y Spark: si faltan winutils.exe o hadoop.dll, fallan los checkpoints del streaming y la escritura de parquet. check_entorno lo detecta.
