@@ -30,6 +30,13 @@ import os  # noqa: E402
 # proceso termina con error, en vez de quedar bloqueado indefinidamente.
 LIMITE_POR_PRUEBA_S = float(os.environ.get("PRUEBAS_LIMITE_S", "100"))
 
+# faulthandler termina con os._exit, que descarta lo que haya en el buffer de stdout.
+# Con buffer por línea, la salida parcial de pytest sobrevive y la falla queda diagnosticable.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except (AttributeError, ValueError):
+    pass
+
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_protocol(item, nextitem):
