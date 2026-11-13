@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
 - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
 - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
-- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
-- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
+- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
+- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
 - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
 - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
 - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
-- 2026-11-12T20:44 ronda - [delegado]: p
+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
+- 2026-11-12T21:04 ronda - [delegado]:
 …(recortado)
