@@ -10,12 +10,12 @@ Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 Resumen: entorno listo.
 Opcionales pendientes: Topic 'ratings', Datos ml-25m
 - PASA: [aceptación] La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones — codigo 0: ............                                                             [100%]
-12 passed in 22.39s
-CORRECTO: el proceso con PID 200 (proceso secundario de PID 6140)
+12 passed in 23.79s
+CORRECTO: el proceso con PID 18932 (proceso secundario de PID 10844)
 ha sido terminado.
-CORRECTO: el proceso con PID 6140 (proceso secundario de PID 9112)
+CORRECTO: el proceso con PID 10844 (proceso secundario de PID 18976)
 ha sido terminado.
-CORRECTO: el proceso con PID 9112 (proceso secundario de PID 10532)
+CORRECTO: el proceso con PID 18976 (proceso secundario de PID 19668)
 ha sido terminado.
 - PASA: [aceptación] Dry-run sobre la muestra emite 5 eventos ordenados por timestamp — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
 {"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
@@ -25,236 +25,240 @@ ha sido terminado.
 
 [dry-run] 5 evento(s) ordenados por timestamp; no se envió nada a Kafka.
 - PASA: [aceptación] Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único — codigo 0: ..................                                                       [100%]
-18 passed in 23.41s
+18 passed in 23.15s
 - PASA: [aceptación] El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN — codigo 0:  use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
-26/11/13 16:45:32 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:45:32 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-26/11/13 16:45:32 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
-- PASA: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 0: nimum_pyarrow_version):
+26/11/13 17:12:04 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:12:04 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/11/13 17:12:05 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
+- PASA: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 0: imum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 29.28s
-CORRECTO: el proceso con PID 2596 (proceso secundario de PID 21260)
+12 passed, 30 warnings in 29.21s
+CORRECTO: el proceso con PID 4880 (proceso secundario de PID 17236)
 ha sido terminado.
-CORRECTO: el proceso con PID 21260 (proceso secundario de PID 16848)
+CORRECTO: el proceso con PID 17236 (proceso secundario de PID 12196)
 ha sido terminado.
-CORRECTO: el proceso con PID 16848 (proceso secundario de PID 8428)
+CORRECTO: el proceso con PID 12196 (proceso secundario de PID 13236)
 ha sido terminado.
-- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: 3 16:46:25 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:46:31 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:46:31 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 0: (minimum_pyarrow_version):
+- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: 3 17:12:57 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 17:13:04 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:13:04 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 0: minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.57s
-CORRECTO: el proceso con PID 19688 (proceso secundario de PID 1556)
+15 passed, 8 warnings in 26.03s
+CORRECTO: el proceso con PID 21264 (proceso secundario de PID 13012)
 ha sido terminado.
-CORRECTO: el proceso con PID 1556 (proceso secundario de PID 2504)
+CORRECTO: el proceso con PID 13012 (proceso secundario de PID 2000)
 ha sido terminado.
-CORRECTO: el proceso con PID 2504 (proceso secundario de PID 14928)
+CORRECTO: el proceso con PID 2000 (proceso secundario de PID 7188)
 ha sido terminado.
 - PASA: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 0: ...                                                                      [100%]
-3 passed in 33.25s
-CORRECTO: el proceso con PID 9248 (proceso secundario de PID 2392)
+3 passed in 31.23s
+CORRECTO: el proceso con PID 2352 (proceso secundario de PID 17036)
 ha sido terminado.
-CORRECTO: el proceso con PID 2392 (proceso secundario de PID 15840)
+CORRECTO: el proceso con PID 17036 (proceso secundario de PID 12904)
 ha sido terminado.
-CORRECTO: el proceso con PID 15840 (proceso secundario de PID 5456)
+CORRECTO: el proceso con PID 12904 (proceso secundario de PID 11968)
 ha sido terminado.
 - PASA: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 0: minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-3 passed, 4 warnings in 33.26s
-CORRECTO: el proceso con PID 20680 (proceso secundario de PID 13092)
+3 passed, 4 warnings in 32.69s
+CORRECTO: el proceso con PID 6468 (proceso secundario de PID 21500)
 ha sido terminado.
-CORRECTO: el proceso con PID 13092 (proceso secundario de PID 2216)
+CORRECTO: el proceso con PID 21500 (proceso secundario de PID 15160)
 ha sido terminado.
-CORRECTO: el proceso con PID 2216 (proceso secundario de PID 20288)
+CORRECTO: el proceso con PID 15160 (proceso secundario de PID 5228)
 ha sido terminado.
-- PASA: [aceptación] Perfilado sobre la muestra lista tipos con nombre y tamaño — codigo 0: 3 16:48:22 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:48:28 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:48:28 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: [aceptación] Suite de perfiles: top géneros de usuarios 1 y 2, clusters distintos, nombres únicos, actualización incremental — codigo 0: nimum_pyarrow_version):
+- PASA: [aceptación] La escalabilidad rápida sobre la muestra con 1 y 2 núcleos imprime los speedups — codigo 0: os en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\escalabilidad.json
+Gráfico: C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.png, C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.svg
+Nota: con datos pequeños el speedup no es representativo (domina el costo fijo de Spark).
+- PASA: [aceptación] Se generan las figuras del póster como PNG y SVG no vacíos — codigo 0: he()
+
+tests/test_poster.py::test_genera_png_y_svg_no_vacios
+  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 26.06s
-CORRECTO: el proceso con PID 20264 (proceso secundario de PID 19324)
+13 passed, 14 warnings in 8.73s
+- PASA: Perfilado sobre la muestra mini termina sin error — codigo 0: 3 17:15:54 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 17:16:00 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:16:00 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: Pruebas de perfiles: top géneros de los usuarios 1 y 2, clusters distintos, nombres únicos y actualización incremental — codigo 0: //docs.pytest.org/en/stable/how-to/capture-warnings.html
+15 passed, 8 warnings in 45.61s
+CORRECTO: el proceso con PID 12608 (proceso secundario de PID 5488)
 ha sido terminado.
-CORRECTO: el proceso con PID 19324 (proceso secundario de PID 15176)
+CORRECTO: el proceso con PID 5488 (proceso secundario de PID 16040)
 ha sido terminado.
-CORRECTO: el proceso con PID 15176 (proceso secundario de PID 2392)
-ha sido terminado.
-- PASA: Regresión: suites de entorno y batch siguen pasando — codigo 0: inimum_pyarrow_version):
+CORRECTO: el proceso con PID 16040 (proceso secundario de PID 14296)
+ha sido terminado.
+
+ERROR: no se encontr� el proceso "8260".
+- PASA: Perfilado de la muestra mini con k=3 — codigo 0: 3 17:17:02 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 17:17:09 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:17:09 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: Suite de perfiles (top 2 de los usuarios 1 y 2, clusters distintos, nombres únicos, actualización incremental) — codigo 0: imum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-24 passed, 30 warnings in 36.93s
-CORRECTO: el proceso con PID 7480 (proceso secundario de PID 7056)
+15 passed, 8 warnings in 26.32s
+CORRECTO: el proceso con PID 18980 (proceso secundario de PID 19688)
 ha sido terminado.
-CORRECTO: el proceso con PID 7056 (proceso secundario de PID 19760)
+CORRECTO: el proceso con PID 19688 (proceso secundario de PID 21216)
 ha sido terminado.
-CORRECTO: el proceso con PID 19760 (proceso secundario de PID 10252)
+CORRECTO: el proceso con PID 21216 (proceso secundario de PID 17528)
 ha sido terminado.
-- PASA: Perfilado sobre la muestra mini termina sin error — codigo 0: 3 16:49:48 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:49:55 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:49:55 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: Pruebas de perfiles: top géneros de los usuarios 1 y 2, clusters distintos, nombres únicos y actualización incremental — codigo 0: (minimum_pyarrow_version):
+- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: 3 17:17:51 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 17:17:58 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:17:58 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: [aceptación] El usuario 1 tiene Action en su top 2 y el usuario 2 tiene Romance o Drama; quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el género calificado — codigo 0: nimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.72s
-CORRECTO: el proceso con PID 20920 (proceso secundario de PID 7632)
+15 passed, 8 warnings in 26.32s
+CORRECTO: el proceso con PID 7644 (proceso secundario de PID 16112)
 ha sido terminado.
-CORRECTO: el proceso con PID 7632 (proceso secundario de PID 9052)
+CORRECTO: el proceso con PID 16112 (proceso secundario de PID 10948)
 ha sido terminado.
-CORRECTO: el proceso con PID 9052 (proceso secundario de PID 20552)
+CORRECTO: el proceso con PID 10948 (proceso secundario de PID 18156)
 ha sido terminado.
-- PASA: Perfilado de la muestra mini con k=3 — codigo 0: 3 16:50:37 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:50:43 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:50:43 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: Suite de perfiles (top 2 de los usuarios 1 y 2, clusters distintos, nombres únicos, actualización incremental) — codigo 0: nimum_pyarrow_version):
+- PASA: [aceptación] Usuario 1 con Action en su top 2, usuario 2 con Romance o Drama, clusters distintos, nombres únicos y actualización incremental — codigo 0: (minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.80s
-CORRECTO: el proceso con PID 2404 (proceso secundario de PID 21324)
+15 passed, 8 warnings in 25.63s
+CORRECTO: el proceso con PID 3688 (proceso secundario de PID 21168)
 ha sido terminado.
-CORRECTO: el proceso con PID 21324 (proceso secundario de PID 19552)
+CORRECTO: el proceso con PID 21168 (proceso secundario de PID 6012)
 ha sido terminado.
-CORRECTO: el proceso con PID 19552 (proceso secundario de PID 21280)
-ha sido terminado.
-- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: 3 16:51:25 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:51:32 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:51:32 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: [aceptación] El usuario 1 tiene Action en su top 2 y el usuario 2 tiene Romance o Drama; quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el género calificado — codigo 0: imum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.58s
-CORRECTO: el proceso con PID 20576 (proceso secundario de PID 12512)
-ha sido terminado.
-CORRECTO: el proceso con PID 12512 (proceso secundario de PID 20484)
-ha sido terminado.
-CORRECTO: el proceso con PID 20484 (proceso secundario de PID 16044)
-ha sido terminado.
-- PASA: [aceptación] Usuario 1 con Action en su top 2, usuario 2 con Romance o Drama, clusters distintos, nombres únicos y actualización incremental — codigo 0: minimum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 26.12s
-CORRECTO: el proceso con PID 12560 (proceso secundario de PID 15000)
-ha sido terminado.
-CORRECTO: el proceso con PID 15000 (proceso secundario de PID 8752)
-ha sido terminado.
-CORRECTO: el proceso con PID 8752 (proceso secundario de PID 2028)
+CORRECTO: el proceso con PID 6012 (proceso secundario de PID 9300)
 ha sido terminado.
 - PASA: Regresión: suite del paquete 1 (muestra, config y kafka_disponible) — codigo 0: ............                                                             [100%]
-12 passed in 22.36s
-CORRECTO: el proceso con PID 10540 (proceso secundario de PID 15816)
+12 passed in 22.30s
+CORRECTO: el proceso con PID 6124 (proceso secundario de PID 1876)
 ha sido terminado.
-CORRECTO: el proceso con PID 15816 (proceso secundario de PID 21172)
+CORRECTO: el proceso con PID 1876 (proceso secundario de PID 20536)
 ha sido terminado.
-CORRECTO: el proceso con PID 21172 (proceso secundario de PID 12952)
+CORRECTO: el proceso con PID 20536 (proceso secundario de PID 18500)
 ha sido terminado.
 - PASA: Regresión: suite del paquete 2 (ingesta) — codigo 0: ..................                                                       [100%]
-18 passed in 23.18s
-- PASA: Regresión: suite del paquete 3 (batch ALS) — codigo 0: nimum_pyarrow_version):
+18 passed in 23.78s
+- PASA: Regresión: suite del paquete 3 (batch ALS) — codigo 0: mum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 29.72s
-CORRECTO: el proceso con PID 11184 (proceso secundario de PID 16600)
+12 passed, 30 warnings in 29.18s
+CORRECTO: el proceso con PID 10320 (proceso secundario de PID 21324)
 ha sido terminado.
-CORRECTO: el proceso con PID 16600 (proceso secundario de PID 9500)
+CORRECTO: el proceso con PID 21324 (proceso secundario de PID 14708)
 ha sido terminado.
-CORRECTO: el proceso con PID 9500 (proceso secundario de PID 20724)
+CORRECTO: el proceso con PID 14708 (proceso secundario de PID 18952)
 ha sido terminado.
 - PASA: Suites del paquete 1 y del paquete 2 juntas, sin regresión (incluye la prueba del Popen vigilado) — codigo 0: ..............................                                           [100%]
-30 passed in 32.04s
-CORRECTO: el proceso con PID 9052 (proceso secundario de PID 20852)
+30 passed in 31.93s
+CORRECTO: el proceso con PID 8560 (proceso secundario de PID 6644)
 ha sido terminado.
-CORRECTO: el proceso con PID 20852 (proceso secundario de PID 19568)
+CORRECTO: el proceso con PID 6644 (proceso secundario de PID 11844)
 ha sido terminado.
-CORRECTO: el proceso con PID 19568 (proceso secundario de PID 6360)
+CORRECTO: el proceso con PID 11844 (proceso secundario de PID 16420)
 ha sido terminado.
-- PASA: Regresión: suite batch del paquete 3 — codigo 0: on(minimum_pyarrow_version):
+- PASA: Regresión: suite batch del paquete 3 — codigo 0: nimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 29.73s
-CORRECTO: el proceso con PID 4528 (proceso secundario de PID 724)
+12 passed, 30 warnings in 30.17s
+CORRECTO: el proceso con PID 21484 (proceso secundario de PID 3744)
 ha sido terminado.
-CORRECTO: el proceso con PID 724 (proceso secundario de PID 6452)
+CORRECTO: el proceso con PID 3744 (proceso secundario de PID 17056)
 ha sido terminado.
-CORRECTO: el proceso con PID 6452 (proceso secundario de PID 17088)
+CORRECTO: el proceso con PID 17056 (proceso secundario de PID 20708)
 ha sido terminado.
-- PASA: Perfilado sobre la muestra mini con k=3 — codigo 0: 3 16:55:02 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:55:08 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:55:08 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: Suite de perfiles — codigo 0: inimum_pyarrow_version):
+- PASA: Perfilado sobre la muestra mini con k=3 — codigo 0: 3 17:21:28 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 17:21:34 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:21:34 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: Suite de perfiles — codigo 0: imum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.62s
-CORRECTO: el proceso con PID 20976 (proceso secundario de PID 2416)
+15 passed, 8 warnings in 25.04s
+CORRECTO: el proceso con PID 14472 (proceso secundario de PID 13144)
 ha sido terminado.
-CORRECTO: el proceso con PID 2416 (proceso secundario de PID 13596)
+CORRECTO: el proceso con PID 13144 (proceso secundario de PID 21352)
 ha sido terminado.
-CORRECTO: el proceso con PID 13596 (proceso secundario de PID 15204)
+CORRECTO: el proceso con PID 21352 (proceso secundario de PID 19844)
 ha sido terminado.
-- PASA: Estrés: entorno, batch y perfiles 2 veces cada una, sin ninguna corrida con error — codigo 0:  warnings in 36.67s
-vuelta 1 tests/test_perfiles.py: código 0 (34s) 15 passed, 8 warnings in 32.52s
-vuelta 2 tests/test_entorno.py: código 0 (27s) 12 passed in 26.27s
-vuelta 2 tests/test_batch.py: código 0 (31s) 12 passed, 30 warnings in 30.12s
-vuelta 2 tests/test_perfiles.py: código 0 (26s) 15 passed, 8 warnings in 25.70s
+- PASA: Estrés: entorno, batch y perfiles 2 veces cada una, sin ninguna corrida con error — codigo 0:  warnings in 29.76s
+vuelta 1 tests/test_perfiles.py: código 0 (27s) 15 passed, 8 warnings in 26.19s
+vuelta 2 tests/test_entorno.py: código 0 (23s) 12 passed in 22.26s
+vuelta 2 tests/test_batch.py: código 0 (30s) 12 passed, 30 warnings in 29.62s
+vuelta 2 tests/test_perfiles.py: código 0 (26s) 15 passed, 8 warnings in 25.05s
 
 Corridas con error: 0. Intentos de arranque de Spark reintentados: 0
-- PASA: Aceptación: el perfilado de la muestra lista los tipos con nombre y tamaño — codigo 0: 3 16:58:49 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 16:58:55 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 16:58:55 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: Aceptación: el perfilado de la muestra lista los tipos con nombre y tamaño — codigo 0: 3 17:25:15 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 17:25:22 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 17:25:22 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
 - PASA: Aceptación: suite de perfiles (top géneros, clusters distintos, nombres únicos, actualización incremental, diccionario de tags) — codigo 0: minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.53s
-CORRECTO: el proceso con PID 4584 (proceso secundario de PID 6496)
+15 passed, 8 warnings in 25.54s
+CORRECTO: el proceso con PID 13196 (proceso secundario de PID 6276)
 ha sido terminado.
-CORRECTO: el proceso con PID 6496 (proceso secundario de PID 20620)
+CORRECTO: el proceso con PID 6276 (proceso secundario de PID 15512)
 ha sido terminado.
-CORRECTO: el proceso con PID 20620 (proceso secundario de PID 15324)
+CORRECTO: el proceso con PID 15512 (proceso secundario de PID 2516)
 ha sido terminado.
-- PASA: Estrés: perfiles y entorno 2 veces cada una sin ninguna corrida con error (unos 100 s; deja margen para un reintento de arranque) — codigo 0: vuelta 1 tests/test_perfiles.py: código 0 (26s) 15 passed, 8 warnings in 25.02s
-vuelta 1 tests/test_entorno.py: código 0 (43s) 12 passed in 41.94s
-vuelta 2 tests/test_perfiles.py: código 0 (26s) 15 passed, 8 warnings in 25.57s
-vuelta 2 tests/test_entorno.py: código 0 (23s) 12 passed in 22.23s
+- PASA: Estrés: perfiles y entorno 2 veces cada una sin ninguna corrida con error (unos 100 s; deja margen para un reintento de arranque) — codigo 0: vuelta 1 tests/test_perfiles.py: código 0 (27s) 15 passed, 8 warnings in 26.12s
+vuelta 1 tests/test_entorno.py: código 0 (23s) 12 passed in 21.87s
+vuelta 2 tests/test_perfiles.py: código 0 (26s) 15 passed, 8 warnings in 25.64s
+vuelta 2 tests/test_entorno.py: código 0 (23s) 12 passed in 22.26s
 
 Corridas con error: 0. Intentos de arranque de Spark reintentados: 0
-- PASA: Regresión del paquete 3 (batch) con la SparkSession compartida — codigo 0: minimum_pyarrow_version):
+- PASA: Regresión del paquete 3 (batch) con la SparkSession compartida — codigo 0: nimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 29.69s
-CORRECTO: el proceso con PID 8068 (proceso secundario de PID 12424)
+12 passed, 30 warnings in 29.76s
+CORRECTO: el proceso con PID 20200 (proceso secundario de PID 3592)
 ha sido terminado.
-CORRECTO: el proceso con PID 12424 (proceso secundario de PID 1876)
+CORRECTO: el proceso con PID 3592 (proceso secundario de PID 20188)
 ha sido terminado.
-CORRECTO: el proceso con PID 1876 (proceso secundario de PID 1940)
+CORRECTO: el proceso con PID 20188 (proceso secundario de PID 16796)
 ha sido terminado.
 - PASA: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite y prueba con fuente archivo — codigo 0: ...                                                                      [100%]
-3 passed in 31.87s
-CORRECTO: el proceso con PID 18808 (proceso secundario de PID 21240)
+3 passed in 31.62s
+CORRECTO: el proceso con PID 3128 (proceso secundario de PID 10348)
 ha sido terminado.
-CORRECTO: el proceso con PID 21240 (proceso secundario de PID 5480)
+CORRECTO: el proceso con PID 10348 (proceso secundario de PID 19300)
 ha sido terminado.
-CORRECTO: el proceso con PID 5480 (proceso secundario de PID 21104)
+CORRECTO: el proceso con PID 19300 (proceso secundario de PID 2012)
 ha sido terminado.
-- PASA: [aceptación] preparar_demo crea un subconjunto de 90 ratings (LEEME.md) y el reentrenamiento demo cambia version_modelo — codigo 0: inimum_pyarrow_version):
+- PASA: [aceptación] preparar_demo crea un subconjunto de 90 ratings (LEEME.md) y el reentrenamiento demo cambia version_modelo — codigo 0: nimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-3 passed, 4 warnings in 33.12s
-CORRECTO: el proceso con PID 2900 (proceso secundario de PID 20624)
+3 passed, 4 warnings in 33.30s
+CORRECTO: el proceso con PID 21116 (proceso secundario de PID 14736)
 ha sido terminado.
-CORRECTO: el proceso con PID 20624 (proceso secundario de PID 20532)
+CORRECTO: el proceso con PID 14736 (proceso secundario de PID 11344)
 ha sido terminado.
-CORRECTO: el proceso con PID 20532 (proceso secundario de PID 17364)
+CORRECTO: el proceso con PID 11344 (proceso secundario de PID 12352)
 ha sido terminado.
-- PASA: Regresión de los paquetes 3 y 4 (batch y perfiles) — codigo 0: n(minimum_pyarrow_version):
+- PASA: Regresión de los paquetes 3 y 4 (batch y perfiles) — codigo 0: imum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-27 passed, 46 warnings in 36.71s
-CORRECTO: el proceso con PID 6440 (proceso secundario de PID 4280)
+27 passed, 46 warnings in 38.20s
+CORRECTO: el proceso con PID 6460 (proceso secundario de PID 11216)
 ha sido terminado.
-CORRECTO: el proceso con PID 4280 (proceso secundario de PID 7124)
+CORRECTO: el proceso con PID 11216 (proceso secundario de PID 20988)
 ha sido terminado.
-CORRECTO: el proceso con PID 7124 (proceso secundario de PID 8072)
+CORRECTO: el proceso con PID 20988 (proceso secundario de PID 12464)
 ha sido terminado.
+- PASA: [aceptación] Escalabilidad rápida sobre la muestra con 1 y 2 núcleos (subproceso por N, calentamiento descartado, imprime speedups) — codigo 0: os en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\escalabilidad.json
+Gráfico: C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.png, C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.svg
+Nota: con datos pequeños el speedup no es representativo (domina el costo fijo de Spark).
+- PASA: [aceptación] Figuras del póster en PNG (300 dpi) y SVG no vacíos, títulos en español, fuentes >= 14 pt, paleta, componentes de la arquitectura, anotación Ryzen 5 3600, aviso si falta un artefacto y cá — codigo 0: he()
+
+tests/test_poster.py::test_genera_png_y_svg_no_vacios
+  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+13 passed, 14 warnings in 8.70s
+- PASA: figuras_poster.py sobre los artefactos reales de la muestra genera las 4 figuras — codigo 0: Figuras generadas en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras:
+  arquitectura      arquitectura.png, arquitectura.svg
+  metricas          metricas.png, metricas.svg
+  tipos_espectador  tipos_espectador.png, tipos_espectador.svg
+  speedup           speedup.png, speedup.svg

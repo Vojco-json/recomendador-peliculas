@@ -1,0 +1,5 @@
+Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
+- verif_1: Diagrama de arquitectura del póster (Kafka, Spark batch y streaming, SQLite, Streamlit, Ollama) | pagina poster/figuras/arquitectura.png | ancho 1400 px
+- verif_2: Speedup medido vs ideal y tiempos (muestra mini, 1 y 2 núcleos) con anotación de dataset, fracción y Ryzen 5 3600 | pagina artefactos/mini/figuras/speedup.png | ancho 1400 px
+- verif_3: Métricas ALS vs popularidad con los artefactos de la muestra | pagina artefactos/mini/figuras/metricas.png | ancho 1400 px
+- verif_4: Tipos de espectador en PCA 2D con nombres y tamaños (muestra mini, k=3) | pagina artefactos/mini/figuras/tipos_espectador.png | ancho 1400 px

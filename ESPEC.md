@@ -14,7 +14,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
 - [verificado] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
 - [verificado] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
-- [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
+- [verificado] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
 - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
 - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
 - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
@@ -27,12 +27,12 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [pendiente] 19. LLM configurable (LLM_PROVIDER, LLM_MODEL=qwen3.5:9b por defecto, OLLAMA_HOST) con un proveedor de respaldo 'reglas' determinista que se activa con aviso visible si Ollama no responde
 - [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
 - [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
-- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
+- [verificado] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
 - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
 - [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-13T16:34 ronda 3 [revisor paquete 4]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Persiste un cuelgue intermitente al arrancar la JVM de Spark. crear_spark_vigilado lo mitiga con reintentos (PRUEBAS.txt: 'intento 1: sin terminar tras 20s'). Conviene vigilarlo de cara a la expo. | General: La objeción del constructor sobre la prueba de estrés es válida: no era una prueba de aceptación del arquitecto, y la versión nueva (unos 100 s) pasó. | General: ejecutar() hace toPandas() de todos los usuarios. En 25M son unos 162k usuarios, aceptable, pero hay que tenerlo en cuent
-- 2026-11-13T16:34 ronda - [delegado
+- 2026-11-13T17:04 ronda 4 [revisor paquete 5]: aprobado (pruebas que fallan 0, requisitos verificados 5): General: Riesgo de lotes perdidos en silencio. La idempotencia por la tabla 'lotes' usa la clave (consulta=topic, batch_id), pero el checkpoint depende de la carpeta de artefactos. Hay tres casos que lo disparan: preparar_demo borra <salida>/checkpoints, se cambia entre --modo completo y demo con el mismo estado.db y topic, o se borra el checkpoint a mano. En cualquiera de ellos Spark reinicia batch_id en 0 y procesar_lote descarta como 'ya aplicado' lotes que en realidad son nuevos. Hay dos sol
+- 2026-11-13T17:03 ronda - [delega
 …(recortado)
