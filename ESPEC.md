@@ -33,8 +33,10 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
-- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
-- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
+- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
+
+ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
+
+ERR
+- 2026-11-12T21:39 ronda - [delegado]:
 …(recortado)
