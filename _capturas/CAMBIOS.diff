@@ -1,483 +1,552 @@
-70c5f63 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: Reproduje las dos pruebas de aceptación del paquete 4 en el orden en que las corre Delegado. Primero corrí scripts/perfilar_usuarios.py, que terminó s
+dee0132 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: Reproduje las dos pruebas de aceptación en el orden de Delegado. El script de perfilado terminó sin error y listó 3 tipos con nombres únicos («Violenc
 
- ARQUITECTURA.md        |   8 +-
- ESPEC.md               |  14 +-
- _capturas/CAMBIOS.diff | 766 +++++++++++++++++++++++++------------------------
- _capturas/PRUEBAS.txt  | 404 +++++++++++++-------------
- 4 files changed, 604 insertions(+), 588 deletions(-)
+ ESPEC.md               |  10 +-
+ _capturas/CAMBIOS.diff | 829 ++++++++++++++++++++++++++-----------------------
+ _capturas/PRUEBAS.txt  | 190 ++++++------
+ tests/conftest.py      |   7 +
+ 4 files changed, 543 insertions(+), 493 deletions(-)
 
-diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
-index 64d3615..228f71a 100644
---- a/ARQUITECTURA.md
-+++ b/ARQUITECTURA.md
-@@ -31,7 +31,7 @@ Diseno: Identidad común para el póster y la app: fondo oscuro de cine (#141414
- Supuestos: La carpeta solo tiene ESPEC.md y ARQUITECTURA.md (plan v1): no hay código verificado, así que el plan v2 parte de cero y conserva la estructura del v1.; Las métricas, perfiles y speedup de 25M los corre el usuario. Las pruebas automáticas usan ml-mini.; En el modo demo, el productor reproduce ratings desde la fecha de corte (2018-01-01) en adelante y acelerados. El reentrenamiento en vivo usa ratings desde 2015-01-01 anteriores al corte, más los eventos recibidos.; Las pruebas usan un topic único 'ratings_test_<uuid>' (que se borra al final) para no contaminar el topic 'ratings' de la demo. Se asume que el broker permite crear y borrar topics.; El conector Kafka de Spark se descarga de Maven la primera vez (requiere internet) y queda en .ivy2 del proyecto para usarse sin conexión.; Fecha de corte de 25M: 2018-01-01. Relevante = rating >= 4. 'Corto' = 100 min o menos según IMDb.; Los ítems que no están en el subconjunto demo después de reentrenar no se recomiendan hasta el siguiente reentrenamiento completo.
- 
- ## Paquetes de trabajo
--### 1. 1. Entorno, configuración, check_entorno y muestra mini [observado]
-+### 1. 1. Entorno, configuración, check_entorno y muestra mini [verificado]
- Objetivo: Dejar el .venv, la configuración central (incluido el modo demo y LLM_THINK), la fábrica de SparkSession con conector Kafka cacheado, la detección de Kafka, check_entorno.py y la muestra mini con valores conocidos.
- Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, requirements.txt, check_entorno.py, .gitignore, recomendador/__init__.py, recomendador/config.py, recomendador/spark_utils.py, recomendador/datos.py, recomendador/kafka_utils.py, muestras/ml-mini/movies.csv, muestras/ml-mini/ratings.csv, muestras/ml-mini/tags.csv, muestras/ml-mini/links.csv, muestras/ml-mini/genome-tags.csv, muestras/ml-mini/genome-scores.csv, muestras/ml-mini/LEEME.md, tests/conftest.py, tests/test_entorno.py · Depende de: -
- - Criterio: setup_entorno.ps1 ejecuta 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark==3.5.x, confluent-kafka, pandas, pyarrow, numpy, matplotlib, scikit-learn, streamlit, ollam
-@@ -54,7 +54,7 @@ Requisitos: 3, 4, 13 · Archivos: scripts/descargar_movielens.py, scripts/ordena
- - Criterio: Si Kafka no responde, termina con un mensaje claro y código distinto de 0, sin traceback.
- - Prueba de aceptacion: Dry-run sobre la muestra emite 5 eventos ordenados por timestamp: el comando «.venv/Scripts/python scripts/productor_kafka.py --datos muestras/ml-mini --dry-run --limite 5» debe terminar sin error
- - Prueba de aceptacion: Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_ingesta.py» debe terminar sin error
--### 3. 3. Recomendador batch ALS con partición temporal y métricas [pendiente]
-+### 3. 3. Recomendador batch ALS con partición temporal y métricas [verificado]
- Objetivo: Entrenar ALS con los datos anteriores al corte y evaluar con los posteriores (RMSE, Precision@10, NDCG@10) frente a la popularidad, y ofrecer fold-in para usuarios nuevos o activos.
- Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin.py, scripts/entrenar_batch.py, tests/test_batch.py · Depende de: 1
- - Criterio: entrenar_batch.py --datos --corte --salida [--nucleos] [--fraccion] [--desde]. Por defecto usa ml-25m con corte 2018-01-01. --desde filtra los ratings anteriores a esa fecha, lo que usa el modo demo.
-@@ -67,7 +67,7 @@ Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin
- - Criterio: Imprime una tabla con 'RMSE', 'Precision@10' y 'NDCG@10' para ALS y Popularidad, sin NaN.
- - Prueba de aceptacion: El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN: el comando «.venv/Scripts/python scripts/entrenar_batch.py --datos muestras/ml-mini --corte 2016-01-01 --salida artefactos/mini --nucleos 2» debe terminar sin error
- - Prueba de aceptacion: Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento: el comando «.venv/Scripts/python -m pytest -q tests/test_batch.py» debe terminar sin error
--### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [pendiente]
-+### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [observado]
- Objetivo: Construir vectores de gusto por usuario (géneros y tag genome ponderados por sus calificaciones) y agruparlos con KMeans en tipos de espectador con nombres interpretables.
- Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usuarios.py, tests/test_perfiles.py · Depende de: 1
- - Criterio: Peso = rating - media del usuario. El vector de géneros es la suma ponderada normalizada (20 géneros). El vector genome usa unos 40 tags interpretables, ponderados por relevancia.
-@@ -77,7 +77,7 @@ Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usu
- - Criterio: perfil_usuario(userId, artefactos) devuelve un dict legible. actualizar_perfil_generos(perfil, nuevos_ratings) permite la actualización incremental desde el streaming.
- - Prueba de aceptacion: El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño: el comando «.venv/Scripts/python scripts/perfilar_usuarios.py --datos muestras/ml-mini --salida artefactos/mini --k 3» debe terminar sin error
- - Prueba de aceptacion: El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del género calificado: el comando «.venv/Scripts/python -m pytest -q tests/test_perfiles.py» debe terminar sin error
--### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [pendiente]
-+### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [observado]
- Objetivo: Leer Kafka con Structured Streaming, actualizar en SQLite los perfiles y las recomendaciones (fold-in) de los usuarios activos, reentrenar ALS periódicamente y preparar el modo demo (artefactos de 25M + subconjunto en vivo desde DEMO_DESDE).
- Requisitos: 9, 13, 22, 23, 25 · Archivos: recomendador/estado.py, recomendador/streaming.py, recomendador/demo.py, scripts/streaming.py, scripts/preparar_demo.py, tests/test_streaming.py, tests/test_demo.py · Depende de: 2, 3, 4
- - Criterio: estado.py: SQLite en modo WAL con tablas eventos, perfiles, recomendaciones (userId, movieId, rank, score, actualizado_en) y meta (ultimo_reentrenamiento, version_modelo, modo).
 diff --git a/ESPEC.md b/ESPEC.md
-index d47fbf1..eafb173 100644
+index eafb173..9220e2c 100644
 --- a/ESPEC.md
 +++ b/ESPEC.md
 @@ -12,8 +12,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
  - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
  - [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
  - [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
--- [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
--- [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
-+- [hecho] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario — recomendador/perfiles.py: peso = rating - media del usuario; vector de 20 géneros como suma ponderada normalizada; vector genome con 44 tags interpretables (en la muestra hay 10) ponderados por relevancia. Las pruebas comprueban los pesos del LEEME (usuario 1: Thriller 6.625 y Action 6.5), que el usuario 1 tenga Action/Thriller como top 2 y que el usuario 2 tenga Romance primero.
-+- [hecho] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción') — StandardScaler + KMeans de MLlib sobre géneros, tags y log1p(n_ratings), con k configurable (3 en mini) y seed 42. Nombres en español sacados de los 2 rasgos con mayor desviación positiva, sin repetidos aunque dos centroides coincidan. Salidas: perfiles.parquet y tipos.json. perfil_usuario y actualizar_perfil_generos (incremental, no modifica el perfil original) están probadas.
+-- [hecho] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario — recomendador/perfiles.py: peso = rating - media del usuario; vector de 20 géneros como suma ponderada normalizada; vector genome con 44 tags interpretables (en la muestra hay 10) ponderados por relevancia. Las pruebas comprueban los pesos del LEEME (usuario 1: Thriller 6.625 y Action 6.5), que el usuario 1 tenga Action/Thriller como top 2 y que el usuario 2 tenga Romance primero.
+-- [hecho] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción') — StandardScaler + KMeans de MLlib sobre géneros, tags y log1p(n_ratings), con k configurable (3 en mini) y seed 42. Nombres en español sacados de los 2 rasgos con mayor desviación positiva, sin repetidos aunque dos centroides coincidan. Salidas: perfiles.parquet y tipos.json. perfil_usuario y actualizar_perfil_generos (incremental, no modifica el perfil original) están probadas.
++- [hecho] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario — Peso = rating − media del usuario. El vector de géneros (20 géneros) es una suma ponderada normalizada, y el vector genome se pondera por relevancia. Las pruebas verifican los pesos del LEEME y los top 2 de los usuarios 1 y 2. Pasan (14/14).
++- [hecho] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción') — KMeans de MLlib con features estandarizadas más log1p(n_ratings), k configurable y seed 42. Pone nombres en español sin repetir. Genera perfiles.parquet y tipos.json, más perfil_usuario y actualizar_perfil_generos. Corrí el script sobre la muestra mini y salieron 3 tipos con nombres únicos.
  - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
  - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
  - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
-@@ -30,13 +30,5 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+@@ -30,5 +30,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
  - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
  - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
  - [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
--- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
--
--## Bitacora (lo mas reciente primero)
--- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
--
--ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
--
--ERR
--- 2026-11-12T21:39 ronda - [delegado]:
-+- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actua
+-- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actua
++- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
++
++## Bitacora (lo mas reciente primero)
++- 2026-11-13T01:30 ronda - [delegado]: pruebas automáticas 33/33 ✅; 2 prueba(s) nueva(s); version 70c5f63
++- 2026-11-
  …(recortado)
 \ No newline at end of file
 diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
-index 13574d5..2de324a 100644
+index 2de324a..39959dd 100644
 --- a/_capturas/CAMBIOS.diff
 +++ b/_capturas/CAMBIOS.diff
-@@ -1,422 +1,430 @@
--82a0fb6 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+e17e297 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+@@ -1,430 +1,483 @@
+-e17e297 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++70c5f63 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: Reproduje las dos pruebas de aceptación del paquete 4 en el orden en que las corre Delegado. Primero corrí scripts/perfilar_usuarios.py, que terminó s
  
-- ESPEC.md               |   8 +-
-- _capturas/CAMBIOS.diff | 736 +++++++++++++++++++++++++------------------------
-- _capturas/PRUEBAS.txt  | 146 +++++-----
-- 3 files changed, 450 insertions(+), 440 deletions(-)
-+ ESPEC.md               |  10 +-
-+ _capturas/CAMBIOS.diff | 752 +++++++++++++++++++++++++------------------------
-+ _capturas/PRUEBAS.txt  | 138 ++++-----
-+ 3 files changed, 455 insertions(+), 445 deletions(-)
+- ESPEC.md               |  10 +-
+- _capturas/CAMBIOS.diff | 752 +++++++++++++++++++++++++------------------------
+- _capturas/PRUEBAS.txt  | 138 ++++-----
+- 3 files changed, 455 insertions(+), 445 deletions(-)
++ ARQUITECTURA.md        |   8 +-
++ ESPEC.md               |  14 +-
++ _capturas/CAMBIOS.diff | 766 +++++++++++++++++++++++++------------------------
++ _capturas/PRUEBAS.txt  | 404 +++++++++++++-------------
++ 4 files changed, 604 insertions(+), 588 deletions(-)
  
++diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
++index 64d3615..228f71a 100644
++--- a/ARQUITECTURA.md
+++++ b/ARQUITECTURA.md
++@@ -31,7 +31,7 @@ Diseno: Identidad común para el póster y la app: fondo oscuro de cine (#141414
++ Supuestos: La carpeta solo tiene ESPEC.md y ARQUITECTURA.md (plan v1): no hay código verificado, así que el plan v2 parte de cero y conserva la estructura del v1.; Las métricas, perfiles y speedup de 25M los corre el usuario. Las pruebas automáticas usan ml-mini.; En el modo demo, el productor reproduce ratings desde la fecha de corte (2018-01-01) en adelante y acelerados. El reentrenamiento en vivo usa ratings desde 2015-01-01 anteriores al corte, más los eventos recibidos.; Las pruebas usan un topic único 'ratings_test_<uuid>' (que se borra al final) para no contaminar el topic 'ratings' de la demo. Se asume que el broker permite crear y borrar topics.; El conector Kafka de Spark se descarga de Maven la primera vez (requiere internet) y queda en .ivy2 del proyecto para usarse sin conexión.; Fecha de corte de 25M: 2018-01-01. Relevante = rating >= 4. 'Corto' = 100 min o menos según IMDb.; Los ítems que no están en el subconjunto demo después de reentrenar no se recomiendan hasta el siguiente reentrenamiento completo.
++ 
++ ## Paquetes de trabajo
++-### 1. 1. Entorno, configuración, check_entorno y muestra mini [observado]
+++### 1. 1. Entorno, configuración, check_entorno y muestra mini [verificado]
++ Objetivo: Dejar el .venv, la configuración central (incluido el modo demo y LLM_THINK), la fábrica de SparkSession con conector Kafka cacheado, la detección de Kafka, check_entorno.py y la muestra mini con valores conocidos.
++ Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, requirements.txt, check_entorno.py, .gitignore, recomendador/__init__.py, recomendador/config.py, recomendador/spark_utils.py, recomendador/datos.py, recomendador/kafka_utils.py, muestras/ml-mini/movies.csv, muestras/ml-mini/ratings.csv, muestras/ml-mini/tags.csv, muestras/ml-mini/links.csv, muestras/ml-mini/genome-tags.csv, muestras/ml-mini/genome-scores.csv, muestras/ml-mini/LEEME.md, tests/conftest.py, tests/test_entorno.py · Depende de: -
++ - Criterio: setup_entorno.ps1 ejecuta 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark==3.5.x, confluent-kafka, pandas, pyarrow, numpy, matplotlib, scikit-learn, streamlit, ollam
++@@ -54,7 +54,7 @@ Requisitos: 3, 4, 13 · Archivos: scripts/descargar_movielens.py, scripts/ordena
++ - Criterio: Si Kafka no responde, termina con un mensaje claro y código distinto de 0, sin traceback.
++ - Prueba de aceptacion: Dry-run sobre la muestra emite 5 eventos ordenados por timestamp: el comando «.venv/Scripts/python scripts/productor_kafka.py --datos muestras/ml-mini --dry-run --limite 5» debe terminar sin error
++ - Prueba de aceptacion: Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_ingesta.py» debe terminar sin error
++-### 3. 3. Recomendador batch ALS con partición temporal y métricas [pendiente]
+++### 3. 3. Recomendador batch ALS con partición temporal y métricas [verificado]
++ Objetivo: Entrenar ALS con los datos anteriores al corte y evaluar con los posteriores (RMSE, Precision@10, NDCG@10) frente a la popularidad, y ofrecer fold-in para usuarios nuevos o activos.
++ Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin.py, scripts/entrenar_batch.py, tests/test_batch.py · Depende de: 1
++ - Criterio: entrenar_batch.py --datos --corte --salida [--nucleos] [--fraccion] [--desde]. Por defecto usa ml-25m con corte 2018-01-01. --desde filtra los ratings anteriores a esa fecha, lo que usa el modo demo.
++@@ -67,7 +67,7 @@ Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin
++ - Criterio: Imprime una tabla con 'RMSE', 'Precision@10' y 'NDCG@10' para ALS y Popularidad, sin NaN.
++ - Prueba de aceptacion: El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN: el comando «.venv/Scripts/python scripts/entrenar_batch.py --datos muestras/ml-mini --corte 2016-01-01 --salida artefactos/mini --nucleos 2» debe terminar sin error
++ - Prueba de aceptacion: Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento: el comando «.venv/Scripts/python -m pytest -q tests/test_batch.py» debe terminar sin error
++-### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [pendiente]
+++### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [observado]
++ Objetivo: Construir vectores de gusto por usuario (géneros y tag genome ponderados por sus calificaciones) y agruparlos con KMeans en tipos de espectador con nombres interpretables.
++ Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usuarios.py, tests/test_perfiles.py · Depende de: 1
++ - Criterio: Peso = rating - media del usuario. El vector de géneros es la suma ponderada normalizada (20 géneros). El vector genome usa unos 40 tags interpretables, ponderados por relevancia.
++@@ -77,7 +77,7 @@ Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usu
++ - Criterio: perfil_usuario(userId, artefactos) devuelve un dict legible. actualizar_perfil_generos(perfil, nuevos_ratings) permite la actualización incremental desde el streaming.
++ - Prueba de aceptacion: El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño: el comando «.venv/Scripts/python scripts/perfilar_usuarios.py --datos muestras/ml-mini --salida artefactos/mini --k 3» debe terminar sin error
++ - Prueba de aceptacion: El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del género calificado: el comando «.venv/Scripts/python -m pytest -q tests/test_perfiles.py» debe terminar sin error
++-### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [pendiente]
+++### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [observado]
++ Objetivo: Leer Kafka con Structured Streaming, actualizar en SQLite los perfiles y las recomendaciones (fold-in) de los usuarios activos, reentrenar ALS periódicamente y preparar el modo demo (artefactos de 25M + subconjunto en vivo desde DEMO_DESDE).
++ Requisitos: 9, 13, 22, 23, 25 · Archivos: recomendador/estado.py, recomendador/streaming.py, recomendador/demo.py, scripts/streaming.py, scripts/preparar_demo.py, tests/test_streaming.py, tests/test_demo.py · Depende de: 2, 3, 4
++ - Criterio: estado.py: SQLite en modo WAL con tablas eventos, perfiles, recomendaciones (userId, movieId, rank, score, actualizado_en) y meta (ultimo_reentrenamiento, version_modelo, modo).
  diff --git a/ESPEC.md b/ESPEC.md
--index 724f640..a9f4b03 100644
-+index a9f4b03..d47fbf1 100644
+-index a9f4b03..d47fbf1 100644
++index d47fbf1..eafb173 100644
  --- a/ESPEC.md
  +++ b/ESPEC.md
--@@ -33,8 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+@@ -33,8 +33,10 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-  - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
-  
-  ## Bitacora (lo mas reciente primero)
---- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
---- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
---- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
---- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
--+- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
--+- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
--+- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
--+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
-+-- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
-+-- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
-+-- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
-++- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
-++
-++ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
-++
-++ERR
-++- 2026-11-12T21:39 ronda - [delegado]:
+-@@ -33,8 +33,10 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+- - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
+- 
+- ## Bitacora (lo mas reciente primero)
+--- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
+--- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
+--- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+--- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
+-+- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
+-+
+-+ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
+-+
+-+ERR
+-+- 2026-11-12T21:39 ronda - [delegado]:
++@@ -12,8 +12,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++ - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
++ - [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
++ - [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
++-- [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
++-- [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
+++- [hecho] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario — recomendador/perfiles.py: peso = rating - media del usuario; vector de 20 géneros como suma ponderada normalizada; vector genome con 44 tags interpretables (en la muestra hay 10) ponderados por relevancia. Las pruebas comprueban los pesos del LEEME (usuario 1: Thriller 6.625 y Action 6.5), que el usuario 1 tenga Action/Thriller como top 2 y que el usuario 2 tenga Romance primero.
+++- [hecho] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción') — StandardScaler + KMeans de MLlib sobre géneros, tags y log1p(n_ratings), con k configurable (3 en mini) y seed 42. Nombres en español sacados de los 2 rasgos con mayor desviación positiva, sin repetidos aunque dos centroides coincidan. Salidas: perfiles.parquet y tipos.json. perfil_usuario y actualizar_perfil_generos (incremental, no modifica el perfil original) están probadas.
++ - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
++ - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
++ - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
++@@ -30,13 +30,5 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++ - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
++ - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
++ - [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
++-- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
++-
++-## Bitacora (lo mas reciente primero)
++-- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
++-
++-ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
++-
++-ERR
++-- 2026-11-12T21:39 ronda - [delegado]:
+++- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actua
   …(recortado)
  \ No newline at end of file
  diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
--index dc9ef7f..1bbf64a 100644
-+index 1bbf64a..13574d5 100644
+-index 1bbf64a..13574d5 100644
++index 13574d5..2de324a 100644
  --- a/_capturas/CAMBIOS.diff
  +++ b/_capturas/CAMBIOS.diff
--@@ -1,406 +1,414 @@
---66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
--+bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+@@ -1,414 +1,422 @@
-+-bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-++82a0fb6 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-@@ -1,414 +1,422 @@
+--bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-+82a0fb6 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++@@ -1,422 +1,430 @@
++-82a0fb6 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++e17e297 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
   
--- ESPEC.md                     |   8 +-
--- _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
--- _capturas/PRUEBAS.txt        | 155 +++++-----
--- recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
--- scripts/perfilar_usuarios.py | 114 +++++++
--- tests/test_perfiles.py       | 179 +++++++++++
--- 6 files changed, 1328 insertions(+), 430 deletions(-)
--+ ESPEC.md               |   6 +-
--+ _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
--+ _capturas/PRUEBAS.txt  | 159 ++++++-----
--+ 3 files changed, 438 insertions(+), 430 deletions(-)
-+- ESPEC.md               |   6 +-
-+- _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
-+- _capturas/PRUEBAS.txt  | 159 ++++++-----
-+- 3 files changed, 438 insertions(+), 430 deletions(-)
-++ ESPEC.md               |   8 +-
-++ _capturas/CAMBIOS.diff | 736 +++++++++++++++++++++++++------------------------
-++ _capturas/PRUEBAS.txt  | 146 +++++-----
-++ 3 files changed, 450 insertions(+), 440 deletions(-)
+-- ESPEC.md               |   6 +-
+-- _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
+-- _capturas/PRUEBAS.txt  | 159 ++++++-----
+-- 3 files changed, 438 insertions(+), 430 deletions(-)
+-+ ESPEC.md               |   8 +-
+-+ _capturas/CAMBIOS.diff | 736 +++++++++++++++++++++++++------------------------
+-+ _capturas/PRUEBAS.txt  | 146 +++++-----
+-+ 3 files changed, 450 insertions(+), 440 deletions(-)
++- ESPEC.md               |   8 +-
++- _capturas/CAMBIOS.diff | 736 +++++++++++++++++++++++++------------------------
++- _capturas/PRUEBAS.txt  | 146 +++++-----
++- 3 files changed, 450 insertions(+), 440 deletions(-)
+++ ESPEC.md               |  10 +-
+++ _capturas/CAMBIOS.diff | 752 +++++++++++++++++++++++++------------------------
+++ _capturas/PRUEBAS.txt  | 138 ++++-----
+++ 3 files changed, 455 insertions(+), 445 deletions(-)
   
   diff --git a/ESPEC.md b/ESPEC.md
---index cd2ba33..66de530 100644
--+index 66de530..724f640 100644
-+-index 66de530..724f640 100644
-++index 724f640..a9f4b03 100644
+--index 66de530..724f640 100644
+-+index 724f640..a9f4b03 100644
++-index 724f640..a9f4b03 100644
+++index a9f4b03..d47fbf1 100644
   --- a/ESPEC.md
   +++ b/ESPEC.md
---@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--- - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
--- - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
--- - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
----- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
----- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
---+- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
---+- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
--- - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
--- - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
--- - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
---@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--+@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+-@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-++@@ -33,8 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+--@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-+@@ -33,8 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++-@@ -33,8 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+++@@ -33,8 +33,10 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
    - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
    
    ## Bitacora (lo mas reciente primero)
----- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
----- 2026-11-12T20:44 ronda - [delegado]: p
---+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
---+- 2026-11-12T21:04 ronda - [delegado]:
--+-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
--+-- 2026-11-12T21:04 ronda - [delegado]:
--++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
--++- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
--++- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
--++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
-+--- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
-+--- 2026-11-12T21:04 ronda - [delegado]:
-+-+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
-+-+- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
-+-+- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+-+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
-++-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
-++-- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
-++-- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-++-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
-+++- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
-+++- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
-+++- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
+---- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
+---- 2026-11-12T21:04 ronda - [delegado]:
+--+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
+--+- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
+--+- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+--+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
+-+-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
+-+-- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
+-+-- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-+-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
+-++- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
+-++- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
+-++- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
++--- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
++--- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
++--- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++--- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
++-+- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
++-+- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
++-+- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++-+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
+++-- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
+++-- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
+++-- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
++++- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
++++
++++ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
++++
++++ERR
++++- 2026-11-12T21:39 ronda - [delegado]:
    …(recortado)
   \ No newline at end of file
   diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
---index d29b869..f8297f6 100644
--+index f8297f6..dc9ef7f 100644
-+-index f8297f6..dc9ef7f 100644
-++index dc9ef7f..1bbf64a 100644
+--index f8297f6..dc9ef7f 100644
+-+index dc9ef7f..1bbf64a 100644
++-index dc9ef7f..1bbf64a 100644
+++index 1bbf64a..13574d5 100644
   --- a/_capturas/CAMBIOS.diff
   +++ b/_capturas/CAMBIOS.diff
---@@ -1,402 +1,391 @@
----d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
---+656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
--+@@ -1,391 +1,406 @@
--+-656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
--++66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+-@@ -1,391 +1,406 @@
-+--656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
-+-+66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-++@@ -1,406 +1,414 @@
-++-66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-+++bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+--@@ -1,391 +1,406 @@
+---656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
+--+66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-+@@ -1,406 +1,414 @@
+-+-66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-++bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++-@@ -1,406 +1,414 @@
++--66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++-+bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++@@ -1,414 +1,422 @@
+++-bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++++82a0fb6 Paquete 5 (5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
    
---- ESPEC.md                       |  10 +-
---- _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
---- _capturas/PRUEBAS.txt          | 108 ++++---
---- recomendador/spark_utils.py    |  42 ++-
---- scripts/crear_topic.py         |   6 +
---- scripts/descargar_movielens.py |   6 +
---- scripts/ordenar_ratings.py     |   6 +
---- scripts/productor_kafka.py     |   6 +
---- tests/conftest.py              |  19 ++
---- tests/test_entorno.py          |  22 +-
---- 10 files changed, 494 insertions(+), 376 deletions(-)
---+ ESPEC.md                  |   4 +-
---+ _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
---+ _capturas/PRUEBAS.txt     | 136 ++++++----
---+ recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
---+ recomendador/foldin.py    |  86 ++++++
---+ scripts/entrenar_batch.py | 136 ++++++++++
---+ tests/test_batch.py       | 169 ++++++++++++
---+ 7 files changed, 1222 insertions(+), 360 deletions(-)
--+- ESPEC.md                  |   4 +-
--+- _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
--+- _capturas/PRUEBAS.txt     | 136 ++++++----
--+- recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
--+- recomendador/foldin.py    |  86 ++++++
--+- scripts/entrenar_batch.py | 136 ++++++++++
--+- tests/test_batch.py       | 169 ++++++++++++
--+- 7 files changed, 1222 insertions(+), 360 deletions(-)
--++ ESPEC.md                     |   8 +-
--++ _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
--++ _capturas/PRUEBAS.txt        | 155 +++++-----
--++ recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
--++ scripts/perfilar_usuarios.py | 114 +++++++
--++ tests/test_perfiles.py       | 179 +++++++++++
--++ 6 files changed, 1328 insertions(+), 430 deletions(-)
-+-- ESPEC.md                  |   4 +-
-+-- _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
-+-- _capturas/PRUEBAS.txt     | 136 ++++++----
-+-- recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
-+-- recomendador/foldin.py    |  86 ++++++
-+-- scripts/entrenar_batch.py | 136 ++++++++++
-+-- tests/test_batch.py       | 169 ++++++++++++
-+-- 7 files changed, 1222 insertions(+), 360 deletions(-)
-+-+ ESPEC.md                     |   8 +-
-+-+ _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
-+-+ _capturas/PRUEBAS.txt        | 155 +++++-----
-+-+ recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
-+-+ scripts/perfilar_usuarios.py | 114 +++++++
-+-+ tests/test_perfiles.py       | 179 +++++++++++
-+-+ 6 files changed, 1328 insertions(+), 430 deletions(-)
-++- ESPEC.md                     |   8 +-
-++- _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
-++- _capturas/PRUEBAS.txt        | 155 +++++-----
-++- recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
-++- scripts/perfilar_usuarios.py | 114 +++++++
-++- tests/test_perfiles.py       | 179 +++++++++++
-++- 6 files changed, 1328 insertions(+), 430 deletions(-)
-+++ ESPEC.md               |   6 +-
-+++ _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
-+++ _capturas/PRUEBAS.txt  | 159 ++++++-----
-+++ 3 files changed, 438 insertions(+), 430 deletions(-)
+--- ESPEC.md                  |   4 +-
+--- _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
+--- _capturas/PRUEBAS.txt     | 136 ++++++----
+--- recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
+--- recomendador/foldin.py    |  86 ++++++
+--- scripts/entrenar_batch.py | 136 ++++++++++
+--- tests/test_batch.py       | 169 ++++++++++++
+--- 7 files changed, 1222 insertions(+), 360 deletions(-)
+--+ ESPEC.md                     |   8 +-
+--+ _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
+--+ _capturas/PRUEBAS.txt        | 155 +++++-----
+--+ recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
+--+ scripts/perfilar_usuarios.py | 114 +++++++
+--+ tests/test_perfiles.py       | 179 +++++++++++
+--+ 6 files changed, 1328 insertions(+), 430 deletions(-)
+-+- ESPEC.md                     |   8 +-
+-+- _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
+-+- _capturas/PRUEBAS.txt        | 155 +++++-----
+-+- recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
+-+- scripts/perfilar_usuarios.py | 114 +++++++
+-+- tests/test_perfiles.py       | 179 +++++++++++
+-+- 6 files changed, 1328 insertions(+), 430 deletions(-)
+-++ ESPEC.md               |   6 +-
+-++ _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
+-++ _capturas/PRUEBAS.txt  | 159 ++++++-----
+-++ 3 files changed, 438 insertions(+), 430 deletions(-)
++-- ESPEC.md                     |   8 +-
++-- _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
++-- _capturas/PRUEBAS.txt        | 155 +++++-----
++-- recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
++-- scripts/perfilar_usuarios.py | 114 +++++++
++-- tests/test_perfiles.py       | 179 +++++++++++
++-- 6 files changed, 1328 insertions(+), 430 deletions(-)
++-+ ESPEC.md               |   6 +-
++-+ _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
++-+ _capturas/PRUEBAS.txt  | 159 ++++++-----
++-+ 3 files changed, 438 insertions(+), 430 deletions(-)
+++- ESPEC.md               |   6 +-
+++- _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
+++- _capturas/PRUEBAS.txt  | 159 ++++++-----
+++- 3 files changed, 438 insertions(+), 430 deletions(-)
++++ ESPEC.md               |   8 +-
++++ _capturas/CAMBIOS.diff | 736 +++++++++++++++++++++++++------------------------
++++ _capturas/PRUEBAS.txt  | 146 +++++-----
++++ 3 files changed, 450 insertions(+), 440 deletions(-)
    
    diff --git a/ESPEC.md b/ESPEC.md
----index a93ab7c..49fe368 100644
---+index 49fe368..cd2ba33 100644
--+-index 49fe368..cd2ba33 100644
--++index cd2ba33..66de530 100644
-+--index 49fe368..cd2ba33 100644
-+-+index cd2ba33..66de530 100644
-++-index cd2ba33..66de530 100644
-+++index 66de530..724f640 100644
+---index 49fe368..cd2ba33 100644
+--+index cd2ba33..66de530 100644
+-+-index cd2ba33..66de530 100644
+-++index 66de530..724f640 100644
++--index cd2ba33..66de530 100644
++-+index 66de530..724f640 100644
+++-index 66de530..724f640 100644
++++index 724f640..a9f4b03 100644
    --- a/ESPEC.md
    +++ b/ESPEC.md
----@@ -6,7 +6,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
---- 2. Ajuste al plan: Respuestas: 1) Las métricas, los perfiles y el speedup se calculan con los 25M completos (lo corro yo). Para la demo en vivo agrega un "modo demo": ALS y perfiles precalculados sobre 25M, y el streaming con reentrenamiento en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015). 2) Thinking desactivado por defecto, configurable. 3) Sin Dask por ahora; si sobra tiempo lo agrego después. Además: Kafka va a estar corriendo en localhost:9092 durante la construcción, así que la prueba de streaming debe ejecutar la integración real (productor → Kafka → Structured Streaming → SQLite) y solo saltarse si el broker no responde.
---+@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
---+ - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
--++@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--++ - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
--++ - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
--++ - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
--++-- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
--++-- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
--+++- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
--+++- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
--++ - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
--++ - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
--++ - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
--+ @@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--+  - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
-+-+@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+-+ - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
-+-+ - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
-+-+ - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
-+-+-- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
-+-+-- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-+-++- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
-+-++- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-+-+ - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
-+-+ - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
-+-+ - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
-+- @@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-++-@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-++- - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
-++- - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
-++- - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
-++--- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
-++--- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-++-+- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
-++-+- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-++- - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
-++- - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
-++- - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
-++-@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+++@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+   - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
+--+@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+--+ - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
+--+ - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
+--+ - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
+--+-- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
+--+-- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
+--++- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
+--++- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
+--+ - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
+--+ - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
+--+ - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
+-- @@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-+-@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-+- - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
+-+- - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
+-+- - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
+-+--- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
+-+--- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
+-+-+- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
+-+-+- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
+-+- - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
+-+- - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
+-+- - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
+-+-@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-++@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++--@@ -10,8 +10,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++-- - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
++-- - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
++-- - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
++---- [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
++---- [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
++--+- [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
++--+- [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
++-- - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
++-- - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
++-- - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
++--@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++-+@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+++-@@ -33,6 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++++@@ -33,8 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+    - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
     
---- ## Requisitos (estado actual)
------ [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
----+- [verificado] 1. Entorno virtual en Python 3.12 aislado del sistema global
---- - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
---- - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
---- - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
----@@ -19,7 +19,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
---- - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
---- - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
---- - [verificado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde
------ [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
----+- [verificado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión)
---- - [pendiente] 15. Enriquecimiento IMDb: unir title.basics y title.ratings (datasets no comerciales oficiales) por links.csv (imdbId → tt+7 dígitos) para obtener duración, año y nota IMDb, sin scraping
---- - [pendiente] 16. Integración TMDb: póster y sinopsis vía API v3 con TMDB_API_KEY desde el entorno, caché local en JSON y degradación sin errores si no hay clave
---- - [pendiente] 17. Importador del CSV de Letterboxd (Date, Name, Year, Letterboxd URI, Rating) que empareja con movies.csv por título normalizado y año, crea un userId nuevo (≥ 1.000.000) e informa 'Emparejadas: X de Y', con perfil y recomendaciones por fold-in
----@@ -30,5 +30,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
---- - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
---- - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
---- - [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
------ [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualiza
----+- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
----+
----+## Bitacora (lo mas reciente primero)
----+- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
----+- 2026-11-12T20:34 ronda - [delegado]: p
---+ ## Bitacora (lo mas reciente primero)
---+-- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
---+-- 2026-11-12T20:34 ronda - [delegado]: p
---++- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
---++- 2026-11-12T20:44 ronda - [delegado]: p
--+  ## Bitacora (lo mas reciente primero)
--+--- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
--+--- 2026-11-12T20:34 ronda - [delegado]: p
--+-+- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
--+-+- 2026-11-12T20:44 ronda - [delegado]: p
--++-- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
--++-- 2026-11-12T20:44 ronda - [delegado]: p
--+++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
--+++- 2026-11-12T21:04 ronda - [delegado]:
-+   ## Bitacora (lo mas reciente primero)
-+---- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
-+---- 2026-11-12T20:34 ronda - [delegado]: p
-+--+- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
-+--+- 2026-11-12T20:44 ronda - [delegado]: p
-+-+-- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
-+-+-- 2026-11-12T20:44 ronda - [delegado]: p
-+-++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
-+-++- 2026-11-12T21:04 ronda - [delegado]:
-++--- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
-++--- 2026-11-12T20:44 ronda - [delegado]: p
-++-+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
-++-+- 2026-11-12T21:04 ronda - [delegado]:
-+++-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
-+++-- 2026-11-12T21:04 ronda - [delegado]:
-++++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
-++++- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
-++++- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-++++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
+    ## Bitacora (lo mas reciente primero)
+----- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
+----- 2026-11-12T20:34 ronda - [delegado]: p
+---+- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
+---+- 2026-11-12T20:44 ronda - [delegado]: p
+--+-- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
+--+-- 2026-11-12T20:44 ronda - [delegado]: p
+--++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
+--++- 2026-11-12T21:04 ronda - [delegado]:
+-+--- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
+-+--- 2026-11-12T20:44 ronda - [delegado]: p
+-+-+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
+-+-+- 2026-11-12T21:04 ronda - [delegado]:
+-++-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
+-++-- 2026-11-12T21:04 ronda - [delegado]:
+-+++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
+-+++- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
+-+++- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+-+++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
++---- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
++---- 2026-11-12T20:44 ronda - [delegado]: p
++--+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
++--+- 2026-11-12T21:04 ronda - [delegado]:
++-+-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
++-+-- 2026-11-12T21:04 ronda - [delegado]:
++-++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
++-++- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
++-++- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++-++- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
+++--- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa sobre la muestra. Se recomienda que en un paquete futuro se añadan a ml-mini algunos ratings >= 4 posteriores al corte (y se actualice LEEME.md). | General: El ranking top-N se calcula con numpy en el driver, por bloques, porque los workers de Python fallan en este 
+++--- 2026-11-12T21:04 ronda - [delegado]:
+++-+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
+++-+- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
+++-+- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++-+- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
++++-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
++++-- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
++++-- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++++-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
+++++- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
+++++- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
+++++- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++++- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
     …(recortado)
    \ No newline at end of file
    diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
----index e9e27cb..8f4b99c 100644
---+index 8f4b99c..d29b869 100644
--+-index 8f4b99c..d29b869 100644
--++index d29b869..f8297f6 100644
-+--index 8f4b99c..d29b869 100644
-+-+index d29b869..f8297f6 100644
-++-index d29b869..f8297f6 100644
-+++index f8297f6..dc9ef7f 100644
+---index 8f4b99c..d29b869 100644
+--+index d29b869..f8297f6 100644
+-+-index d29b869..f8297f6 100644
+-++index f8297f6..dc9ef7f 100644
++--index d29b869..f8297f6 100644
++-+index f8297f6..dc9ef7f 100644
+++-index f8297f6..dc9ef7f 100644
++++index dc9ef7f..1bbf64a 100644
    --- a/_capturas/CAMBIOS.diff
    +++ b/_capturas/CAMBIOS.diff
----@@ -1,381 +1,366 @@
-----7e45d03 Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 3: No pude ejecutar comandos: el permiso fue denegado automáticamente. Por eso busqué la causa raíz leyendo el código. Como no hubo pruebas saltadas, cor
----+7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
---+@@ -1,366 +1,402 @@
---+-7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
---++d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
--+-@@ -1,366 +1,402 @@
--+--7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
--+-+d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
--++@@ -1,402 +1,391 @@
--++-d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
--+++656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
-+--@@ -1,366 +1,402 @@
-+---7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
-+--+d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
-+-+@@ -1,402 +1,391 @@
-+-+-d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
-+-++656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
-++-@@ -1,402 +1,391 @@
-++--d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
-++-+656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
-+++@@ -1,391 +1,406 @@
-+++-656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
-++++66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+---@@ -1,366 +1,402 @@
+----7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
+---+d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
+--+@@ -1,402 +1,391 @@
+--+-d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
+--++656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
+-+-@@ -1,402 +1,391 @@
+-+--d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
+-+-+656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
+-++@@ -1,391 +1,406 @@
+-++-656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
+-+++66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++--@@ -1,402 +1,391 @@
++---d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
++--+656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
++-+@@ -1,391 +1,406 @@
++-+-656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
++-++66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++-@@ -1,391 +1,406 @@
+++--656cde8 Paquete 3 (3. Recomendador batch ALS con partición temporal y métricas), intento 1: Implementé el paquete 3. recomendador/batch_als.py hace la partición temporal (descarta y cuenta los ratings de usuarios o películas sin entrenamiento
+++-+66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
++++@@ -1,406 +1,414 @@
++++-66dbf92 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 1: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+++++bb364a5 Paquete 4 (4. Perfiles de gusto y tipos de espectador (KMeans)), intento 2: You've hit your 5-hour limit · resets 10pm (America/Santiago)
     
----- ESPEC.md                   |   9 +-
----- _capturas/CAMBIOS.diff     | 774 ++++++++++++++++++++-------------------------
----- _capturas/PRUEBAS.txt      |  83 +++--
----- scripts/productor_kafka.py |  19 +-
----- 4 files changed, 415 insertions(+), 470 deletions(-)
----+ ARQUITECTURA.md        |   4 +-
----+ ESPEC.md               |  12 +-
----+ _capturas/CAMBIOS.diff | 667 +++++++++++++++++++++++++------------------------
----+ _capturas/PRUEBAS.txt  | 117 +++++----
----+ check_entorno.py       |   5 +
----+ 5 files changed, 422 insertions(+), 383 deletions(-)
---+- ARQUITECTURA.md        |   4 +-
---+- ESPEC.md               |  12 +-
---+- _capturas/CAMBIOS.diff | 667 +++++++++++++++++++++++++------------------------
---+- _capturas/PRUEBAS.txt  | 117 +++++----
---+- check_entorno.py       |   5 +
---+- 5 files changed, 422 insertions(+), 383 deletions(-)
---++ ESPEC.md                       |  10 +-
---++ _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
---++ _capturas/PRUEBAS.txt          | 108 ++++---
---++ recomendador/spark_utils.py    |  42 ++-
---++ scripts/crear_topic.py         |   6 +
---++ scripts/descargar_movielens.py |   6 +
---++ scripts/ordenar_ratings.py     |   6 +
---++ scripts/productor_kafka.py     |   6 +
---++ tests/conftest.py              |  19 ++
---++ tests/test_entorno.py          |  22 +-
---++ 10 files changed, 494 insertions(+), 376 deletions(-)
--+-- ARQUITECTURA.md        |   4 +-
--+-- ESPEC.md               |  12 +-
--+-- _capturas/CAMBIOS.diff | 667 +++++++++++++++++++++++++------------------------
--+-- _capturas/PRUEBAS.txt  | 117 +++++----
--+-- check_entorno.py       |   5 +
--+-- 5 files changed, 422 insertions(+), 383 deletions(-)
--+-+ ESPEC.md                       |  10 +-
--+-+ _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
--+-+ _capturas/PRUEBAS.txt          | 108 ++++---
--+-+ recomendador/spark_utils.py    |  42 ++-
--+-+ scripts/crear_topic.py         |   6 +
--+-+ scripts/descargar_movielens.py |   6 +
--+-+ scripts/orden
+---- ARQUITECTURA.md        |   4 +-
+---- ESPEC.md               |  12 +-
+---- _capturas/CAMBIOS.diff | 667 +++++++++++++++++++++++++------------------------
+---- _capturas/PRUEBAS.txt  | 117 +++++----
+---- check_entorno.py       |   5 +
+---- 5 files changed, 422 insertions(+), 383 deletions(-)
+---+ ESPEC.md                       |  10 +-
+---+ _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
+---+ _capturas/PRUEBAS.txt          | 108 ++++---
+---+ recomendador/spark_utils.py    |  42 ++-
+---+ scripts/crear_topic.py         |   6 +
+---+ scripts/descargar_movielens.py |   6 +
+---+ scripts/ordenar_ratings.py     |   6 +
+---+ scripts/productor_kafka.py     |   6 +
+---+ tests/conftest.py              |  19 ++
+---+ tests/test_entorno.py          |  22 +-
+---+ 10 files changed, 494 insertions(+), 376 deletions(-)
+--+- ESPEC.md                       |  10 +-
+--+- _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
+--+- _capturas/PRUEBAS.txt          | 108 ++++---
+--+- recomendador/spark_utils.py    |  42 ++-
+--+- scripts/crear_topic.py         |   6 +
+--+- scripts/descargar_movielens.py |   6 +
+--+- scripts/ordenar_ratings.py     |   6 +
+--+- scripts/productor_kafka.py     |   6 +
+--+- tests/conftest.py              |  19 ++
+--+- tests/test_entorno.py          |  22 +-
+--+- 10 files changed, 494 insertions(+), 376 deletions(-)
+--++ ESPEC.md                  |   4 +-
+--++ _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
+--++ _capturas/PRUEBAS.txt     | 136 ++++++----
+--++ recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
+--++ recomendador/foldin.py    |  86 ++++++
+--++ scripts/entrenar_batch.py | 136 ++++++++++
+--++ tests/test_batch.py       | 169 ++++++++++++
+--++ 7 files changed, 1222 insertions(+), 360 deletions(-)
+-+-- ESPEC.md                       |  10 +-
+-+-- _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
+-+-- _capturas/PRUEBAS.txt          | 108 ++++---
+-+-- recomendador/spark_utils.py    |  42 ++-
+-+-- scripts/crear_topic.py         |   6 +
+-+-- scripts/descargar_movielens.py |   6 +
+-+-- scripts/ordenar_ratings.py     |   6 +
+-+-- scripts/productor_kafka.py     |   6 +
+-+-- tests/conftest.py              |  19 ++
+-+-- tests/test_entorno.py          |  22 +-
+-+-- 10 files changed, 494 insertions(+), 376 deletions(-)
+-+-+ ESPEC.md                  |   4 +-
+-+-+ _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
+-+-+ _capturas/PRUEBAS.txt     | 136 ++++++----
+-+-+ recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
+-+-+ recomendador/foldin.py    |  86 ++++++
+-+-+ scripts/entrenar_batch.py | 136 ++++++++++
+-+-+ tests/test_batch.py       | 169 ++++++++++++
+-+-+ 7 files changed, 1222 insertions(+), 360 deletions(-)
+-++- ESPEC.md                  |   4 +-
+-++- _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
+-++- _capturas/PRUEBAS.txt     | 136 ++++++----
+-++- recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
+-++- recomendador/foldin.py    |  86 ++++++
+-++- scripts/entrenar_batch.py | 136 ++++++++++
+-++- tests/test_batch.py       | 169 ++++++++++++
+-++- 7 files changed, 1222 insertions(+), 360 deletions(-)
+-+++ ESPEC.md                     |   8 +-
+-+++ _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
+-+++ _capturas/PRUEBAS.txt        | 155 +++++-----
+-+++ recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
+-+++ scripts/perfilar_usuarios.py | 114 +++++++
+-+++ tests/test_perfiles.py       | 179 +++++++++++
+-+++ 6 files changed, 1328 insertions(+), 430 deletions(-)
++--- ESPEC.md                       |  10 +-
++--- _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
++--- _capturas/PRUEBAS.txt          | 108 ++++---
++--- recomendador/spark_utils.py    |  42 ++-
++--- scripts/crear_topic.py         |   6 +
++--- scripts/descargar_movielens.py |   6 +
++--- scripts/ordenar_ratings.py     |   6 +
++--- scripts/productor_kafka.py     |   6 +
++--- tests/conftest.py              |  19 ++
++--- tests/test_entorno.py          |  22 +-
++--- 10 files changed, 494 insertions(+), 376 deletions(-)
++--+ ESPEC.md                  |   4 +-
++--+ _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
++--+ _capturas/PRUEBAS.txt     | 136 ++++++----
++--+ recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
++--+ recomendador/foldin.py    |  86 ++++++
++--+ scripts/entrenar_batch.py | 136 ++++++++++
++--+ tests/test_batch.py       | 169 ++++++++++++
++--+ 7 files changed, 1222 insertions(+), 360 deletions(-)
++-+- ESPEC.md                  |   4 +-
++-+- _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
++-+- _capturas/PRUEBAS.txt     | 136 ++++++----
++-+- recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
++-+- recomendador/foldin.py    |  86 ++++++
++-+- scripts/entrenar_batch.py | 136 ++++++++++
++-+- tests/test_batch.py       | 169 ++++++++++++
++-+- 7 files changed, 1222 insertions(+), 360 deletions(-)
++-++ ESPEC.md                     |   8 +-
++-++ _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
++-++ _capturas/PRUEBAS.txt        | 155 +++++-----
++-++ recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
++-++ scripts/perfilar_usuarios.py | 114 +++++++
++-++ tests/test_perfiles.py       | 179 +++++++++++
++-++ 6 files changed, 1328 insertions(+), 430 deletions(-)
+++-- ESPEC.md                  |   4 +-
+++-- _capturas/CAMBIOS.diff    | 656 ++++++++++++++++++++++++----------------------
+++-- _capturas/PRUEBAS.txt     | 136 ++++++----
+++-- recomendador/batch_als.py | 395 ++++++++++++++++++++++++++++
+++-- recomendador/foldin.py    |  86 ++++++
+++-- scripts/entrenar_batch.py | 136 ++++++++++
+++-- tests/test_batch.py       | 169 ++++++++++++
+++-- 7 files changed, 1222 insertions(+), 360 deletions(-)
+++-+ ESPEC.md                     |   8 +-
+++-+ _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
+++-+ _capturas/PRUEBAS.txt        | 155 +++++-----
+++-+ recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
+++-+ scripts/perfilar_usuarios.py | 114 +++++++
+++-+ tests/test_perfiles.py       | 179 +++++++++++
+++-+ 6 files changed, 1328 insertions(+), 430 deletions(-)
++++- ESPEC.md                     |   8 +-
++++- _capturas/CAMBIOS.diff       | 699 +++++++++++++++++++++----------------------
++++- _capturas/PRUEBAS.txt        | 155 +++++-----
++++- recomendador/perfiles.py     | 603 +++++++++++++++++++++++++++++++++++++
++++- scripts/perfilar_usuarios.py | 114 +++++++
++++- tests/test_perfiles.py       | 179 +++++++++++
++++- 6 files changed, 1328 insertions(+), 430 deletions(-)
+++++ ESPEC.md               |   6 +-
+++++ _capturas/CAMBIOS.diff | 703 +++++++++++++++++++++++++------------------------
+++++ _capturas/PRUEBAS.txt  | 159 ++++++-----
+++++ 3 files changed, 438 insertions(+), 430 deletions(-)
+    
+----diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+----index cc4dab5..64d3615 100644
+------- a/ARQUITECTURA.md
+----+++ b/ARQU
 …(diff recortado)
