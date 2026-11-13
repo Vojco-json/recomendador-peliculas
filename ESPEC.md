@@ -33,8 +33,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisitos verificados 1): 
-- 2026-11-12T21:20 ronda - [delegado]: pruebas automáticas 29/29 ✅; version 66dbf92
-- 2026-11-12T21:11 ronda 4 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
-- 2026-11-12T21:05 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: En ml-mini con el umbral oficial (>= 4), Precision@10 y NDCG@10 valen 0.0000 en la prueba de aceptación porque no hay ratings altos posteriores a 2016-01-01. No hay NaN y el script lo avisa, pero la métrica no es informativa
+- 2026-11-12T21:31 ronda 5 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 1): Prueba automatica fallida: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 1: 
+- 2026-11-12T21:31 ronda - [delegado]: pruebas automáticas 28/29 ❌; version bb364a5
+- 2026-11-12T21:20 ronda 5 [constructor paquete 4]: You've hit your 5-hour limit · resets 10pm (America/Santiago)
+- 2026-11-12T21:20 ronda 4 [revisor paquete 4]: corregir (pruebas que fallan 0, requisi
 …(recortado)
