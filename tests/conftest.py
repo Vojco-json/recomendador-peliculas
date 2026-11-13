@@ -38,28 +38,61 @@ except (AttributeError, ValueError):
     pass
 
 
+# Arrancar la JVM de Spark en frío (primer uso tras reiniciar, antivirus revisando los
+# jars) puede tardar bastante más que una prueba normal. El arranque tiene su propio
+# presupuesto y, al terminar, el temporizador de la prueba se rearma desde cero.
+LIMITE_ARRANQUE_SPARK_S = float(os.environ.get("PRUEBAS_LIMITE_SPARK_S", "100"))
+
+# Si el temporizador vence, las pilas se escriben en este archivo (además de stderr),
+# porque el ejecutor de pruebas muestra solo la cola de stdout y el volcado se perdía.
+_LOG_COLGADAS = RAIZ / "artefactos" / "pruebas_colgadas.log"
+try:
+    _LOG_COLGADAS.parent.mkdir(parents=True, exist_ok=True)
+    _archivo_volcado = open(_LOG_COLGADAS, "w", encoding="utf-8")  # noqa: SIM115
+except OSError:
+    _archivo_volcado = sys.stderr
+
+
+def _armar_temporizador(segundos: float) -> None:
+    """(Re)arma el temporizador de seguridad; reemplaza al anterior si existía."""
+    if segundos > 0:
+        faulthandler.dump_traceback_later(segundos, exit=True, file=_archivo_volcado)
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_protocol(item, nextitem):
     """Arma un temporizador de seguridad alrededor de cada prueba."""
-    if LIMITE_POR_PRUEBA_S > 0:
-        faulthandler.dump_traceback_later(LIMITE_POR_PRUEBA_S, exit=True)
+    if _archivo_volcado is not sys.stderr:
+        _archivo_volcado.write(f"\n>>> {item.nodeid}\n")
+        _archivo_volcado.flush()
+    _armar_temporizador(LIMITE_POR_PRUEBA_S)
     try:
         yield
     finally:
         faulthandler.cancel_dump_traceback_later()
 
 
-@pytest.fixture(scope="session")
-def spark():
-    """SparkSession compartida: local[2], 6g, con conector Kafka cacheado."""
+def _crear_sesion_pruebas():
+    """Crea la SparkSession de pruebas (con conector Kafka si está disponible)."""
     try:
-        sesion = spark_utils.crear_spark(nucleos=2, kafka=True, app="pruebas")
+        sesion = spark_utils.crear_spark(nucleos=2, kafka=True, app="pruebas",
+                                         extra={"spark.ui.enabled": "false"})
         sesion.conector_kafka_ok = True
     except Exception as exc:  # p. ej. sin internet la primera vez
         warnings.warn(f"No se pudo cargar el conector Kafka ({exc}); Spark sin conector")
         spark_utils.detener_spark()
-        sesion = spark_utils.crear_spark(nucleos=2, kafka=False, app="pruebas")
+        sesion = spark_utils.crear_spark(nucleos=2, kafka=False, app="pruebas",
+                                         extra={"spark.ui.enabled": "false"})
         sesion.conector_kafka_ok = False
+    return sesion
+
+
+@pytest.fixture(scope="session")
+def spark():
+    """SparkSession compartida: local[2], 6g, con conector Kafka cacheado, sin UI."""
+    _armar_temporizador(LIMITE_ARRANQUE_SPARK_S)   # presupuesto propio para el arranque
+    sesion = _crear_sesion_pruebas()
+    _armar_temporizador(LIMITE_POR_PRUEBA_S)       # la prueba parte con su límite completo
     yield sesion
     sesion.stop()
 

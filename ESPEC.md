@@ -12,8 +12,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
 - [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
 - [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-- [hecho] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario — Peso = rating − media del usuario. Vector de 20 géneros normalizado y genome ponderado por relevancia. Las pruebas de pesos del LEEME y de los top 2 de los usuarios 1 (Action) y 2 (Romance/Drama) pasan; lo volví a verificar en esta ronda.
-- [hecho] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción') — KMeans de MLlib (k=3 en mini, seed 42) sobre features estandarizadas más log1p(n_ratings). Nombres en español únicos. Genera perfiles.parquet y tipos.json. El script corrió sin error en esta ronda.
+- [verificado] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
+- [verificado] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
 - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
 - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
 - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-13T01:47 ronda - [delegado]: pruebas automáticas 33/33 ✅; 2 prueba(s) nueva(s); version dee0132
-- 2026-11-13T01:35 ronda 1 [constructor paquete 4]: Reproduje las dos pruebas de aceptación en el orden de 
+- 2026-11-13T03:04 ronda - [delegado]: pruebas automáticas 31/33 ❌; 2 prueba(s) nueva(s); version d7aab21
+- 2026-11-13T02:48 ronda 1 [constructor paquete 4]: Repetí las dos pruebas de aceptación en el orden en que las corre Delegado. Ambas terminaron bien. scripts/perfilar_usuarios.py --k 3 dio 3 tipos con nombre único: «Violencia y tono oscuro» (6 usuarios), «Drama y romance» (5) y «Aventura y animación» (4). Corrí tests/test_perfiles.py dos veces y las dos dieron «14 passed», en unos 26-32 s. No pude reproducir la falla (código 1 sin ninguna salida). En _capturas/PRUEBAS.txt las corridas más recientes de esa misma prueba también salen
 …(recortado)
