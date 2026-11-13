@@ -50,4 +50,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # tildes en Windows
+    except (AttributeError, ValueError):
+        pass
     sys.exit(main())

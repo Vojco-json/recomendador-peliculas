@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-13T15:38 ronda 1 [revisor paquete 4]: corregir (pruebas que fallan 3, requisitos verificados 3): Prueba automatica fallida: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 1:  | Prueba automatica fallida: Suites del paquete 1 y del paquete 2 juntas, sin regresión — codigo 1: ........ | Prueba automatica fallida: Regresión: suite del paquete 1 (muestra, config y kafka_disponible) — codigo 1: ........ | General: Regresión intermitente: en PRUEBAS.txt la suite del paquete 1 (t
-- 2026-11-13T15:38 ronda - [delegado
+- 2026-11-13T16:06 ronda 2 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 3): Prueba automatica fallida: Estrés: entorno, batch y perfiles 2 veces cada una, sin ninguna corrida con error — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: La prueba de estrés de Delegado («entorno, batch y perfiles 2 veces cada una») FALLA por pasar de 3 minutos. No es de aceptación y la suma de tiempos explica casi todo el límite, pero conviene registrar en pruebas_colgadas.log si hubo un arranque abortado o reintentado. Si lo hubo, es evidencia del cuelgue intermitent
+- 2026-11-13T16:06 ronda - [delegado
 …(recortado)

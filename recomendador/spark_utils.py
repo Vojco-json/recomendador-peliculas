@@ -208,8 +208,12 @@ def _reiniciar_estado_pyspark() -> None:
 
 
 def crear_spark_vigilado(plazo_s: float = 60, intentos: int = 3, registro=None, **kwargs):
-    """Como ``crear_spark``, pero si el arranque no termina en ``plazo_s`` segundos lo
-    aborta (matando la JVM a medio lanzar) y reintenta, hasta ``intentos`` veces.
+    """Como ``crear_spark``, pero si el arranque no termina a tiempo lo aborta (matando
+    la JVM a medio lanzar) y reintenta, hasta ``intentos`` veces.
+
+    El plazo crece con cada intento (``plazo_s``, ``2*plazo_s``, ...): un cuelgue se
+    detecta pronto (un arranque normal tarda ~10 s) y, si la máquina está fría y lenta,
+    los intentos siguientes tienen más margen.
 
     ``registro`` es un archivo de texto opcional donde se anota cada intento fallido
     (código del proceso lanzado y pilas de los hilos de Python) como evidencia.
@@ -239,7 +243,7 @@ def crear_spark_vigilado(plazo_s: float = 60, intentos: int = 3, registro=None, 
             hilo = threading.Thread(target=_arrancar, name=f"arranque-spark-{intento}",
                                     daemon=True)
             hilo.start()
-            hilo.join(plazo_s)
+            hilo.join(plazo_s * intento)
             colgado = hilo.is_alive()
             if colgado:
                 if registro is not None:
@@ -256,7 +260,7 @@ def crear_spark_vigilado(plazo_s: float = 60, intentos: int = 3, registro=None, 
                 hilo.join(20)
                 if hilo.is_alive():
                     raise RuntimeError("El arranque de Spark quedó colgado y no se pudo abortar")
-                ultimo_error = TimeoutError(f"Spark no arrancó en {plazo_s:.0f}s")
+                ultimo_error = TimeoutError(f"Spark no arrancó en {plazo_s * intento:.0f}s")
         finally:
             java_gateway.Popen = popen_original
             for proc in clase.lanzados:

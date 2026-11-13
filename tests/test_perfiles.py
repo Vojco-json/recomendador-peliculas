@@ -177,3 +177,17 @@ def test_actualizacion_usuario_nuevo(ruta_mini):
     assert p["userId"] == 1000001 and p["n_ratings"] == 2
     assert p["top_generos"][0] in {"Adventure", "Animation", "Children", "Comedy", "Fantasy"}
     assert p["pesos_generos"]["Action"] < 0
+
+
+def test_diccionario_de_tags_bien_escrito(ruta_mini):
+    """TAGS_ES: unos 40 tags en minúsculas y sin espacios sobrantes (así los escribe
+    genome-tags.csv de 25M), cada uno traducido y sin traducciones repetidas; los 10
+    tags de la muestra se encuentran todos."""
+    claves = list(perfiles.TAGS_ES)
+    assert 38 <= len(claves) <= 46
+    assert all(c == c.lower().strip() and "  " not in c for c in claves)
+    traducciones = [perfiles._sin_tildes(v) for v in perfiles.TAGS_ES.values()]
+    assert all(traducciones) and len(set(traducciones)) == len(traducciones)
+    mini = pd.read_csv(ruta_mini / "genome-tags.csv")
+    encontrados = {t for _, t in perfiles.tags_interpretables(mini)}
+    assert encontrados == set(mini["tag"].str.lower())

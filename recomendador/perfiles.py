@@ -336,8 +336,10 @@ def ejecutar(spark, tablas: dict, salida=None, k: int = K_DEFECTO, seed: int = S
     tags = tags_interpretables(tablas["genome_tags"]) if "genome_tags" in tablas else []
     if "genome_tags" in tablas:
         faltan = sorted(set(TAGS_ES) - {t for _, t in tags})
+        # Se listan por nombre: en 25M deberían estar todos (los 44 se escribieron tal
+        # cual aparecen en genome-tags.csv); si falta alguno, es un error de escritura.
         log(f"Tags genome interpretables: {len(tags)} de {len(TAGS_ES)}"
-            + (f" (no están en los datos: {len(faltan)})" if faltan else ""))
+            + (f" (no están en los datos {len(faltan)}: {', '.join(faltan)})" if faltan else ""))
     else:
         log("Sin genome-tags.csv: el perfil usa solo géneros")
     pelis = features_peliculas(tablas["movies"], tablas.get("genome_scores"), tags)

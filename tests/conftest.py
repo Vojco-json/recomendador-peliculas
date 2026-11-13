@@ -45,9 +45,11 @@ except (AttributeError, ValueError):
 # Es la última red de seguridad: debe cubrir los reintentos del arranque vigilado.
 LIMITE_ARRANQUE_SPARK_S = float(os.environ.get("PRUEBAS_LIMITE_SPARK_S", "200"))
 
-# Plazo de cada intento de arranque de Spark: si la JVM no responde a tiempo, el
-# intento se aborta y se reintenta (ver spark_utils.crear_spark_vigilado).
-PLAZO_INTENTO_SPARK_S = float(os.environ.get("PRUEBAS_PLAZO_INTENTO_SPARK_S", "45"))
+# Plazo del primer intento de arranque de Spark (los siguientes tienen 2x y 3x): si la
+# JVM no responde a tiempo, el intento se aborta y se reintenta (ver
+# spark_utils.crear_spark_vigilado). Un arranque normal tarda ~10 s; 20 + 40 + 60 s
+# caben en LIMITE_ARRANQUE_SPARK_S.
+PLAZO_INTENTO_SPARK_S = float(os.environ.get("PRUEBAS_PLAZO_INTENTO_SPARK_S", "20"))
 
 # Si el temporizador vence, las pilas se escriben en este archivo (además de stderr),
 # porque el ejecutor de pruebas muestra solo la cola de stdout y el volcado se perdía.
@@ -83,13 +85,17 @@ def pytest_runtest_protocol(item, nextitem):
         faulthandler.cancel_dump_traceback_later()
 
 
+# Ajustes de la sesión de pruebas: sin UI (arranca más rápido y no ocupa puertos).
+OPCIONES_SPARK_PRUEBAS = {"spark.ui.enabled": "false"}
+
+
 def _crear_sesion_pruebas():
     """Crea la SparkSession de pruebas (con conector Kafka si está disponible).
 
     El arranque es vigilado: si la JVM queda colgada al lanzarse (falla intermitente
     de pyspark en Windows), el intento se aborta, se anota en el log y se reintenta.
     """
-    opciones = dict(nucleos=2, app="pruebas", extra={"spark.ui.enabled": "false"},
+    opciones = dict(nucleos=2, app="pruebas", extra=OPCIONES_SPARK_PRUEBAS,
                     plazo_s=PLAZO_INTENTO_SPARK_S, registro=_archivo_volcado)
     try:
         sesion = spark_utils.crear_spark_vigilado(kafka=True, **opciones)

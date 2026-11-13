@@ -78,9 +78,11 @@ def main(argv: list[str] | None = None) -> int:
 
     from recomendador import perfiles
     from recomendador.datos import cargar_movielens
-    from recomendador.spark_utils import crear_spark
+    from recomendador.spark_utils import crear_spark_vigilado
 
-    spark = crear_spark(nucleos=args.nucleos, app="perfilar-usuarios")
+    # Arranque vigilado: si la JVM queda colgada al lanzarse (falla intermitente de
+    # pyspark en Windows), se aborta y se reintenta en vez de bloquear el script.
+    spark = crear_spark_vigilado(plazo_s=60, nucleos=args.nucleos, app="perfilar-usuarios")
     try:
         nombres = ["ratings", "movies"]
         if (datos / "genome-tags.csv").exists() and (datos / "genome-scores.csv").exists():
