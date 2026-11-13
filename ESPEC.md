@@ -12,8 +12,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
 - [verificado] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
 - [verificado] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-- [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
-- [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
+- [hecho] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario — recomendador/perfiles.py: peso = rating - media del usuario; vector de 20 géneros como suma ponderada normalizada; vector genome con 44 tags interpretables (en la muestra hay 10) ponderados por relevancia. Las pruebas comprueban los pesos del LEEME (usuario 1: Thriller 6.625 y Action 6.5), que el usuario 1 tenga Action/Thriller como top 2 y que el usuario 2 tenga Romance primero.
+- [hecho] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción') — StandardScaler + KMeans de MLlib sobre géneros, tags y log1p(n_ratings), con k configurable (3 en mini) y seed 42. Nombres en español sacados de los 2 rasgos con mayor desviación positiva, sin repetidos aunque dos centroides coincidan. Salidas: perfiles.parquet y tipos.json. perfil_usuario y actualizar_perfil_generos (incremental, no modifica el perfil original) están probadas.
 - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
 - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
 - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
@@ -30,13 +30,5 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
 - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
 - [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
-- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
-
-## Bitacora (lo mas reciente primero)
-- 2026-11-12T21:39 ronda 6 [revisor paquete 5]: corregir (pruebas que fallan 2, requisitos verificados 3): Prueba automatica fallida: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 4: no tests ran in 0.00s
-
-ERROR: file or directory not found: tests/test_streaming.py | Prueba automatica fallida: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 4: no tests ran in 0.00s
-
-ERR
-- 2026-11-12T21:39 ronda - [delegado]:
+- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actua
 …(recortado)

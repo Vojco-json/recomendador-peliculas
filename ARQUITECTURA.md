@@ -31,7 +31,7 @@ Diseno: Identidad común para el póster y la app: fondo oscuro de cine (#141414
 Supuestos: La carpeta solo tiene ESPEC.md y ARQUITECTURA.md (plan v1): no hay código verificado, así que el plan v2 parte de cero y conserva la estructura del v1.; Las métricas, perfiles y speedup de 25M los corre el usuario. Las pruebas automáticas usan ml-mini.; En el modo demo, el productor reproduce ratings desde la fecha de corte (2018-01-01) en adelante y acelerados. El reentrenamiento en vivo usa ratings desde 2015-01-01 anteriores al corte, más los eventos recibidos.; Las pruebas usan un topic único 'ratings_test_<uuid>' (que se borra al final) para no contaminar el topic 'ratings' de la demo. Se asume que el broker permite crear y borrar topics.; El conector Kafka de Spark se descarga de Maven la primera vez (requiere internet) y queda en .ivy2 del proyecto para usarse sin conexión.; Fecha de corte de 25M: 2018-01-01. Relevante = rating >= 4. 'Corto' = 100 min o menos según IMDb.; Los ítems que no están en el subconjunto demo después de reentrenar no se recomiendan hasta el siguiente reentrenamiento completo.
 
 ## Paquetes de trabajo
-### 1. 1. Entorno, configuración, check_entorno y muestra mini [observado]
+### 1. 1. Entorno, configuración, check_entorno y muestra mini [verificado]
 Objetivo: Dejar el .venv, la configuración central (incluido el modo demo y LLM_THINK), la fábrica de SparkSession con conector Kafka cacheado, la detección de Kafka, check_entorno.py y la muestra mini con valores conocidos.
 Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, requirements.txt, check_entorno.py, .gitignore, recomendador/__init__.py, recomendador/config.py, recomendador/spark_utils.py, recomendador/datos.py, recomendador/kafka_utils.py, muestras/ml-mini/movies.csv, muestras/ml-mini/ratings.csv, muestras/ml-mini/tags.csv, muestras/ml-mini/links.csv, muestras/ml-mini/genome-tags.csv, muestras/ml-mini/genome-scores.csv, muestras/ml-mini/LEEME.md, tests/conftest.py, tests/test_entorno.py · Depende de: -
 - Criterio: setup_entorno.ps1 ejecuta 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark==3.5.x, confluent-kafka, pandas, pyarrow, numpy, matplotlib, scikit-learn, streamlit, ollam
@@ -54,7 +54,7 @@ Requisitos: 3, 4, 13 · Archivos: scripts/descargar_movielens.py, scripts/ordena
 - Criterio: Si Kafka no responde, termina con un mensaje claro y código distinto de 0, sin traceback.
 - Prueba de aceptacion: Dry-run sobre la muestra emite 5 eventos ordenados por timestamp: el comando «.venv/Scripts/python scripts/productor_kafka.py --datos muestras/ml-mini --dry-run --limite 5» debe terminar sin error
 - Prueba de aceptacion: Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_ingesta.py» debe terminar sin error
-### 3. 3. Recomendador batch ALS con partición temporal y métricas [pendiente]
+### 3. 3. Recomendador batch ALS con partición temporal y métricas [verificado]
 Objetivo: Entrenar ALS con los datos anteriores al corte y evaluar con los posteriores (RMSE, Precision@10, NDCG@10) frente a la popularidad, y ofrecer fold-in para usuarios nuevos o activos.
 Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin.py, scripts/entrenar_batch.py, tests/test_batch.py · Depende de: 1
 - Criterio: entrenar_batch.py --datos --corte --salida [--nucleos] [--fraccion] [--desde]. Por defecto usa ml-25m con corte 2018-01-01. --desde filtra los ratings anteriores a esa fecha, lo que usa el modo demo.
@@ -67,7 +67,7 @@ Requisitos: 5, 6, 13 · Archivos: recomendador/batch_als.py, recomendador/foldin
 - Criterio: Imprime una tabla con 'RMSE', 'Precision@10' y 'NDCG@10' para ALS y Popularidad, sin NaN.
 - Prueba de aceptacion: El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN: el comando «.venv/Scripts/python scripts/entrenar_batch.py --datos muestras/ml-mini --corte 2016-01-01 --salida artefactos/mini --nucleos 2» debe terminar sin error
 - Prueba de aceptacion: Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento: el comando «.venv/Scripts/python -m pytest -q tests/test_batch.py» debe terminar sin error
-### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [pendiente]
+### 4. 4. Perfiles de gusto y tipos de espectador (KMeans) [observado]
 Objetivo: Construir vectores de gusto por usuario (géneros y tag genome ponderados por sus calificaciones) y agruparlos con KMeans en tipos de espectador con nombres interpretables.
 Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usuarios.py, tests/test_perfiles.py · Depende de: 1
 - Criterio: Peso = rating - media del usuario. El vector de géneros es la suma ponderada normalizada (20 géneros). El vector genome usa unos 40 tags interpretables, ponderados por relevancia.
@@ -77,7 +77,7 @@ Requisitos: 7, 8, 13 · Archivos: recomendador/perfiles.py, scripts/perfilar_usu
 - Criterio: perfil_usuario(userId, artefactos) devuelve un dict legible. actualizar_perfil_generos(perfil, nuevos_ratings) permite la actualización incremental desde el streaming.
 - Prueba de aceptacion: El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño: el comando «.venv/Scripts/python scripts/perfilar_usuarios.py --datos muestras/ml-mini --salida artefactos/mini --k 3» debe terminar sin error
 - Prueba de aceptacion: El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del género calificado: el comando «.venv/Scripts/python -m pytest -q tests/test_perfiles.py» debe terminar sin error
-### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [pendiente]
+### 5. 5. Streaming real Kafka → Structured Streaming → SQLite, reentrenamiento periódico y modo demo [observado]
 Objetivo: Leer Kafka con Structured Streaming, actualizar en SQLite los perfiles y las recomendaciones (fold-in) de los usuarios activos, reentrenar ALS periódicamente y preparar el modo demo (artefactos de 25M + subconjunto en vivo desde DEMO_DESDE).
 Requisitos: 9, 13, 22, 23, 25 · Archivos: recomendador/estado.py, recomendador/streaming.py, recomendador/demo.py, scripts/streaming.py, scripts/preparar_demo.py, tests/test_streaming.py, tests/test_demo.py · Depende de: 2, 3, 4
 - Criterio: estado.py: SQLite en modo WAL con tablas eventos, perfiles, recomendaciones (userId, movieId, rank, score, actualizado_en) y meta (ultimo_reentrenamiento, version_modelo, modo).
