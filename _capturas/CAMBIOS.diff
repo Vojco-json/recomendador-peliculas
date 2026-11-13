@@ -1,366 +1,402 @@
-7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
+d0f8490 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Busqué la causa de las corridas que pasaban de 3 minutos. Con kafka=True, cada SparkSession usaba spark.jars.packages, así que en cada arranque spark-
 
- ARQUITECTURA.md        |   4 +-
- ESPEC.md               |  12 +-
- _capturas/CAMBIOS.diff | 667 +++++++++++++++++++++++++------------------------
- _capturas/PRUEBAS.txt  | 117 +++++----
- check_entorno.py       |   5 +
- 5 files changed, 422 insertions(+), 383 deletions(-)
+ ESPEC.md                       |  10 +-
+ _capturas/CAMBIOS.diff         | 645 ++++++++++++++++++++---------------------
+ _capturas/PRUEBAS.txt          | 108 ++++---
+ recomendador/spark_utils.py    |  42 ++-
+ scripts/crear_topic.py         |   6 +
+ scripts/descargar_movielens.py |   6 +
+ scripts/ordenar_ratings.py     |   6 +
+ scripts/productor_kafka.py     |   6 +
+ tests/conftest.py              |  19 ++
+ tests/test_entorno.py          |  22 +-
+ 10 files changed, 494 insertions(+), 376 deletions(-)
 
-diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
-index cc4dab5..64d3615 100644
---- a/ARQUITECTURA.md
-+++ b/ARQUITECTURA.md
-@@ -31,7 +31,7 @@ Diseno: Identidad común para el póster y la app: fondo oscuro de cine (#141414
- Supuestos: La carpeta solo tiene ESPEC.md y ARQUITECTURA.md (plan v1): no hay código verificado, así que el plan v2 parte de cero y conserva la estructura del v1.; Las métricas, perfiles y speedup de 25M los corre el usuario. Las pruebas automáticas usan ml-mini.; En el modo demo, el productor reproduce ratings desde la fecha de corte (2018-01-01) en adelante y acelerados. El reentrenamiento en vivo usa ratings desde 2015-01-01 anteriores al corte, más los eventos recibidos.; Las pruebas usan un topic único 'ratings_test_<uuid>' (que se borra al final) para no contaminar el topic 'ratings' de la demo. Se asume que el broker permite crear y borrar topics.; El conector Kafka de Spark se descarga de Maven la primera vez (requiere internet) y queda en .ivy2 del proyecto para usarse sin conexión.; Fecha de corte de 25M: 2018-01-01. Relevante = rating >= 4. 'Corto' = 100 min o menos según IMDb.; Los ítems que no están en el subconjunto demo después de reentrenar no se recomiendan hasta el siguiente reentrenamiento completo.
- 
- ## Paquetes de trabajo
--### 1. 1. Entorno, configuración, check_entorno y muestra mini [pendiente]
-+### 1. 1. Entorno, configuración, check_entorno y muestra mini [observado]
- Objetivo: Dejar el .venv, la configuración central (incluido el modo demo y LLM_THINK), la fábrica de SparkSession con conector Kafka cacheado, la detección de Kafka, check_entorno.py y la muestra mini con valores conocidos.
- Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, requirements.txt, check_entorno.py, .gitignore, recomendador/__init__.py, recomendador/config.py, recomendador/spark_utils.py, recomendador/datos.py, recomendador/kafka_utils.py, muestras/ml-mini/movies.csv, muestras/ml-mini/ratings.csv, muestras/ml-mini/tags.csv, muestras/ml-mini/links.csv, muestras/ml-mini/genome-tags.csv, muestras/ml-mini/genome-scores.csv, muestras/ml-mini/LEEME.md, tests/conftest.py, tests/test_entorno.py · Depende de: -
- - Criterio: setup_entorno.ps1 ejecuta 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark==3.5.x, confluent-kafka, pandas, pyarrow, numpy, matplotlib, scikit-learn, streamlit, ollam
-@@ -43,7 +43,7 @@ Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, require
- - Criterio: conftest.py ofrece la fixture spark (session, local[2], kafka=True), ruta_mini y kafka_ok. Las pruebas de Kafka hacen pytest.skip('Kafka no disponible') solo si kafka_disponible() es False.
- - Prueba de aceptacion: check_entorno corre sin traceback y reporta cada chequeo: el comando «.venv/Scripts/python check_entorno.py» debe terminar sin error
- - Prueba de aceptacion: La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_entorno.py» debe terminar sin error
--### 2. 2. Ingesta: descarga, topic 'ratings' y productor Kafka [pendiente]
-+### 2. 2. Ingesta: descarga, topic 'ratings' y productor Kafka [verificado]
- Objetivo: Descargar ml-25m con verificación md5, ordenar los ratings por timestamp y reproducirlos en un topic Kafka a velocidad configurable, con una función de publicación reutilizable por el streaming y las pruebas.
- Requisitos: 3, 4, 13 · Archivos: scripts/descargar_movielens.py, scripts/ordenar_ratings.py, scripts/crear_topic.py, scripts/productor_kafka.py, tests/test_ingesta.py · Depende de: 1
- - Criterio: descargar_movielens.py baja https://files.grouplens.org/datasets/movielens/ml-25m.zip a data/, verifica el .md5, descomprime en data/ml-25m y no repite la descarga si ya existe. Tiene --dry-run.
 diff --git a/ESPEC.md b/ESPEC.md
-index a779a26..a93ab7c 100644
+index a93ab7c..49fe368 100644
 --- a/ESPEC.md
 +++ b/ESPEC.md
-@@ -8,8 +8,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+@@ -6,7 +6,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+ 2. Ajuste al plan: Respuestas: 1) Las métricas, los perfiles y el speedup se calculan con los 25M completos (lo corro yo). Para la demo en vivo agrega un "modo demo": ALS y perfiles precalculados sobre 25M, y el streaming con reentrenamiento en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015). 2) Thinking desactivado por defecto, configurable. 3) Sin Dask por ahora; si sobra tiempo lo agrego después. Además: Kafka va a estar corriendo en localhost:9092 durante la construcción, así que la prueba de streaming debe ejecutar la integración real (productor → Kafka → Structured Streaming → SQLite) y solo saltarse si el broker no responde.
+ 
  ## Requisitos (estado actual)
- - [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
+-- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
++- [verificado] 1. Entorno virtual en Python 3.12 aislado del sistema global
  - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
--- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. productor_kafka.py tiene todos los flags, envía el JSON con las claves en orden, publicar() devuelve int y main() termina con código 2 sin traceback. descargar_movielens.py --dry-run PASA (PRUEBAS.txt). El dry-run de aceptación PASA y emite 5 eventos ordenados (PRUEBAS.txt, líneas 2-8). Aun así, la segunda prueba de aceptación (pytest tests/test_ingesta.py) FA
--- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — crear_topic.py es correcto en el código: es idempotente, crea 6 particiones y RF 1 (config), avisa 'ya existía' y sin broker termina con 2. Pero su prueba real con broker (test_crear_topic_idempotente) forma parte de la suite que falla, y PRUEBAS.txt no muestra cuál de las 18 pruebas es la fallida. No hay evidencia de que el topic se haya creado contra el broker real. Hay que identificar la prueba
-+- [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
-+- [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
- - [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
- - [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
- - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
-@@ -18,7 +18,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
- - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
+ - [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
+ - [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
+@@ -19,7 +19,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
  - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
  - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
--- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite ya corre con el .venv del proyecto: el reenvío pytest.py funciona ('pytest 8.3.4', PRUEBAS.txt línea 74). Además tarda menos de 2 minutos (25-40 s) y no hay regresión en test_entorno (11 passed). Sin embargo, test_ingesta.py termina con código 1 (1 failed). Hay que corregir la prueba fallida para que la suite termine sin errores.
-+- [verificado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde
- - [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
+ - [verificado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde
+-- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
++- [verificado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión)
  - [pendiente] 15. Enriquecimiento IMDb: unir title.basics y title.ratings (datasets no comerciales oficiales) por links.csv (imdbId → tt+7 dígitos) para obtener duración, año y nota IMDb, sin scraping
  - [pendiente] 16. Integración TMDb: póster y sinopsis vía API v3 con TMDB_API_KEY desde el entorno, caché local en JSON y degradación sin errores si no hay clave
-@@ -26,5 +26,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
- - [pendiente] 18. App Streamlit con entrada de userId, tipo de espectador, recomendaciones en tarjetas y chat. Cada recomendación del chat se explica con datos del usuario y de la película obtenidos con herramientas, y las películas que no vengan de las herramientas se eliminan
- - [pendiente] 19. LLM configurable (LLM_PROVIDER, LLM_MODEL=qwen3.5:9b por defecto, OLLAMA_HOST) con un proveedor de respaldo 'reglas' determinista que se activa con aviso visible si Ollama no responde
- - [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
--- [
-+- [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
-+- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
-+- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
-+- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
-+- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualiza
+ - [pendiente] 17. Importador del CSV de Letterboxd (Date, Name, Year, Letterboxd URI, Rating) que empareja con movies.csv por título normalizado y año, crea un userId nuevo (≥ 1.000.000) e informa 'Emparejadas: X de Y', con perfil y recomendaciones por fold-in
+@@ -30,5 +30,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+ - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
+ - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
+ - [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
+-- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualiza
++- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
++
++## Bitacora (lo mas reciente primero)
++- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
++- 2026-11-12T20:34 ronda - [delegado]: p
  …(recortado)
 \ No newline at end of file
 diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
-index 48bb8d5..e9e27cb 100644
+index e9e27cb..8f4b99c 100644
 --- a/_capturas/CAMBIOS.diff
 +++ b/_capturas/CAMBIOS.diff
-@@ -1,368 +1,381 @@
--6ed324e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 2: Encontré la causa raíz del fallo y no está en el código de ingesta: el .venv del proyecto ya tiene pytest 8.3.4, pyspark 3.5.5, confluent-kafka 2.6.1,
-+7e45d03 Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 3: No pude ejecutar comandos: el permiso fue denegado automáticamente. Por eso busqué la causa raíz leyendo el código. Como no hubo pruebas saltadas, cor
+@@ -1,381 +1,366 @@
+-7e45d03 Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 3: No pude ejecutar comandos: el permiso fue denegado automáticamente. Por eso busqué la causa raíz leyendo el código. Como no hubo pruebas saltadas, cor
++7751ea2 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Revisé la causa del fallo informado. El .venv del proyecto (Python 3.12.10) ya tiene todo requirements.txt instalado: pytest 8.3.4, pyspark 3.5.5, con
  
-- ESPEC.md               |   12 +-
-- _capturas/CAMBIOS.diff | 1008 +++++++++++++++++++++---------------------------
-- _capturas/PRUEBAS.txt  |   98 +++--
-- pytest.py              |   65 ++++
-- 4 files changed, 582 insertions(+), 601 deletions(-)
-+ ESPEC.md                   |   9 +-
-+ _capturas/CAMBIOS.diff     | 774 ++++++++++++++++++++-------------------------
-+ _capturas/PRUEBAS.txt      |  83 +++--
-+ scripts/productor_kafka.py |  19 +-
-+ 4 files changed, 415 insertions(+), 470 deletions(-)
+- ESPEC.md                   |   9 +-
+- _capturas/CAMBIOS.diff     | 774 ++++++++++++++++++++-------------------------
+- _capturas/PRUEBAS.txt      |  83 +++--
+- scripts/productor_kafka.py |  19 +-
+- 4 files changed, 415 insertions(+), 470 deletions(-)
++ ARQUITECTURA.md        |   4 +-
++ ESPEC.md               |  12 +-
++ _capturas/CAMBIOS.diff | 667 +++++++++++++++++++++++++------------------------
++ _capturas/PRUEBAS.txt  | 117 +++++----
++ check_entorno.py       |   5 +
++ 5 files changed, 422 insertions(+), 383 deletions(-)
  
++diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
++index cc4dab5..64d3615 100644
++--- a/ARQUITECTURA.md
+++++ b/ARQUITECTURA.md
++@@ -31,7 +31,7 @@ Diseno: Identidad común para el póster y la app: fondo oscuro de cine (#141414
++ Supuestos: La carpeta solo tiene ESPEC.md y ARQUITECTURA.md (plan v1): no hay código verificado, así que el plan v2 parte de cero y conserva la estructura del v1.; Las métricas, perfiles y speedup de 25M los corre el usuario. Las pruebas automáticas usan ml-mini.; En el modo demo, el productor reproduce ratings desde la fecha de corte (2018-01-01) en adelante y acelerados. El reentrenamiento en vivo usa ratings desde 2015-01-01 anteriores al corte, más los eventos recibidos.; Las pruebas usan un topic único 'ratings_test_<uuid>' (que se borra al final) para no contaminar el topic 'ratings' de la demo. Se asume que el broker permite crear y borrar topics.; El conector Kafka de Spark se descarga de Maven la primera vez (requiere internet) y queda en .ivy2 del proyecto para usarse sin conexión.; Fecha de corte de 25M: 2018-01-01. Relevante = rating >= 4. 'Corto' = 100 min o menos según IMDb.; Los ítems que no están en el subconjunto demo después de reentrenar no se recomiendan hasta el siguiente reentrenamiento completo.
++ 
++ ## Paquetes de trabajo
++-### 1. 1. Entorno, configuración, check_entorno y muestra mini [pendiente]
+++### 1. 1. Entorno, configuración, check_entorno y muestra mini [observado]
++ Objetivo: Dejar el .venv, la configuración central (incluido el modo demo y LLM_THINK), la fábrica de SparkSession con conector Kafka cacheado, la detección de Kafka, check_entorno.py y la muestra mini con valores conocidos.
++ Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, requirements.txt, check_entorno.py, .gitignore, recomendador/__init__.py, recomendador/config.py, recomendador/spark_utils.py, recomendador/datos.py, recomendador/kafka_utils.py, muestras/ml-mini/movies.csv, muestras/ml-mini/ratings.csv, muestras/ml-mini/tags.csv, muestras/ml-mini/links.csv, muestras/ml-mini/genome-tags.csv, muestras/ml-mini/genome-scores.csv, muestras/ml-mini/LEEME.md, tests/conftest.py, tests/test_entorno.py · Depende de: -
++ - Criterio: setup_entorno.ps1 ejecuta 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark==3.5.x, confluent-kafka, pandas, pyarrow, numpy, matplotlib, scikit-learn, streamlit, ollam
++@@ -43,7 +43,7 @@ Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, require
++ - Criterio: conftest.py ofrece la fixture spark (session, local[2], kafka=True), ruta_mini y kafka_ok. Las pruebas de Kafka hacen pytest.skip('Kafka no disponible') solo si kafka_disponible() es False.
++ - Prueba de aceptacion: check_entorno corre sin traceback y reporta cada chequeo: el comando «.venv/Scripts/python check_entorno.py» debe terminar sin error
++ - Prueba de aceptacion: La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_entorno.py» debe terminar sin error
++-### 2. 2. Ingesta: descarga, topic 'ratings' y productor Kafka [pendiente]
+++### 2. 2. Ingesta: descarga, topic 'ratings' y productor Kafka [verificado]
++ Objetivo: Descargar ml-25m con verificación md5, ordenar los ratings por timestamp y reproducirlos en un topic Kafka a velocidad configurable, con una función de publicación reutilizable por el streaming y las pruebas.
++ Requisitos: 3, 4, 13 · Archivos: scripts/descargar_movielens.py, scripts/ordenar_ratings.py, scripts/crear_topic.py, scripts/productor_kafka.py, tests/test_ingesta.py · Depende de: 1
++ - Criterio: descargar_movielens.py baja https://files.grouplens.org/datasets/movielens/ml-25m.zip a data/, verifica el .md5, descomprime en data/ml-25m y no repite la descarga si ya existe. Tiene --dry-run.
  diff --git a/ESPEC.md b/ESPEC.md
--index e19a2cb..d68415d 100644
-+index d68415d..a779a26 100644
+-index d68415d..a779a26 100644
++index a779a26..a93ab7c 100644
  --- a/ESPEC.md
  +++ b/ESPEC.md
  @@ -8,8 +8,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
   ## Requisitos (estado actual)
   - [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
   - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
---- [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
---- [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
--+- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
--+- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
-+-- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
-+-- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
-++- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. productor_kafka.py tiene todos los flags, envía el JSON con las claves en orden, publicar() devuelve int y main() termina con código 2 sin traceback. descargar_movielens.py --dry-run PASA (PRUEBAS.txt). El dry-run de aceptación PASA y emite 5 eventos ordenados (PRUEBAS.txt, líneas 2-8). Aun así, la segunda prueba de aceptación (pytest tests/test_ingesta.py) FA
-++- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — crear_topic.py es correcto en el código: es idempotente, crea 6 particiones y RF 1 (config), avisa 'ya existía' y sin broker termina con 2. Pero su prueba real con broker (test_crear_topic_idempotente) forma parte de la suite que falla, y PRUEBAS.txt no muestra cuál de las 18 pruebas es la fallida. No hay evidencia de que el topic se haya creado contra el broker real. Hay que identificar la prueba
+--- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
+--- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
+-+- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. productor_kafka.py tiene todos los flags, envía el JSON con las claves en orden, publicar() devuelve int y main() termina con código 2 sin traceback. descargar_movielens.py --dry-run PASA (PRUEBAS.txt). El dry-run de aceptación PASA y emite 5 eventos ordenados (PRUEBAS.txt, líneas 2-8). Aun así, la segunda prueba de aceptación (pytest tests/test_ingesta.py) FA
+-+- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — crear_topic.py es correcto en el código: es idempotente, crea 6 particiones y RF 1 (config), avisa 'ya existía' y sin broker termina con 2. Pero su prueba real con broker (test_crear_topic_idempotente) forma parte de la suite que falla, y PRUEBAS.txt no muestra cuál de las 18 pruebas es la fallida. No hay evidencia de que el topic se haya creado contra el broker real. Hay que identificar la prueba
++-- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. productor_kafka.py tiene todos los flags, envía el JSON con las claves en orden, publicar() devuelve int y main() termina con código 2 sin traceback. descargar_movielens.py --dry-run PASA (PRUEBAS.txt). El dry-run de aceptación PASA y emite 5 eventos ordenados (PRUEBAS.txt, líneas 2-8). Aun así, la segunda prueba de aceptación (pytest tests/test_ingesta.py) FA
++-- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — crear_topic.py es correcto en el código: es idempotente, crea 6 particiones y RF 1 (config), avisa 'ya existía' y sin broker termina con 2. Pero su prueba real con broker (test_crear_topic_idempotente) forma parte de la suite que falla, y PRUEBAS.txt no muestra cuál de las 18 pruebas es la fallida. No hay evidencia de que el topic se haya creado contra el broker real. Hay que identificar la prueba
+++- [verificado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
+++- [verificado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
   - [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
   - [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
   - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
--@@ -18,16 +18,12 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+@@ -18,12 +18,13 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-@@ -18,12 +18,13 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++@@ -18,7 +18,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
   - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
   - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
   - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
---- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
--+- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
-+-- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
-++- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite ya corre con el .venv del proyecto: el reenvío pytest.py funciona ('pytest 8.3.4', PRUEBAS.txt línea 74). Además tarda menos de 2 minutos (25-40 s) y no hay regresión en test_entorno (11 passed). Sin embargo, test_ingesta.py termina con código 1 (1 failed). Hay que corregir la prueba fallida para que la suite termine sin errores.
+--- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
+-+- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite ya corre con el .venv del proyecto: el reenvío pytest.py funciona ('pytest 8.3.4', PRUEBAS.txt línea 74). Además tarda menos de 2 minutos (25-40 s) y no hay regresión en test_entorno (11 passed). Sin embargo, test_ingesta.py termina con código 1 (1 failed). Hay que corregir la prueba fallida para que la suite termine sin errores.
++-- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite ya corre con el .venv del proyecto: el reenvío pytest.py funciona ('pytest 8.3.4', PRUEBAS.txt línea 74). Además tarda menos de 2 minutos (25-40 s) y no hay regresión en test_entorno (11 passed). Sin embargo, test_ingesta.py termina con código 1 (1 failed). Hay que corregir la prueba fallida para que la suite termine sin errores.
+++- [verificado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde
   - [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
   - [pendiente] 15. Enriquecimiento IMDb: unir title.basics y title.ratings (datasets no comerciales oficiales) por links.csv (imdbId → tt+7 dígitos) para obtener duración, año y nota IMDb, sin scraping
   - [pendiente] 16. Integración TMDb: póster y sinopsis vía API v3 con TMDB_API_KEY desde el entorno, caché local en JSON y degradación sin errores si no hay clave
-  - [pendiente] 17. Importador del CSV de Letterboxd (Date, Name, Year, Letterboxd URI, Rating) que empareja con movies.csv por título normalizado y año, crea un userId nuevo (≥ 1.000.000) e informa 'Emparejadas: X de Y', con perfil y recomendaciones por fold-in
+- - [pendiente] 17. Importador del CSV de Letterboxd (Date, Name, Year, Letterboxd URI, Rating) que empareja con movies.csv por título normalizado y año, crea un userId nuevo (≥ 1.000.000) e informa 'Emparejadas: X de Y', con perfil y recomendaciones por fold-in
++@@ -26,5 +26,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
   - [pendiente] 18. App Streamlit con entrada de userId, tipo de espectador, recomendaciones en tarjetas y chat. Cada recomendación del chat se explica con datos del usuario y de la película obtenidos con herramientas, y las películas que no vengan de las herramientas se eliminan
   - [pendiente] 19. LLM configurable (LLM_PROVIDER, LLM_MODEL=qwen3.5:9b por defecto, OLLAMA_HOST) con un proveedor de respaldo 'reglas' determinista que se activa con aviso visible si Ollama no responde
---- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
---- [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
---- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
---- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
---- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
--+- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
-+-- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
-++- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
-++- [
+--- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
+-+- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
+-+- [
++ - [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
++-- [
+++- [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
+++- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
+++- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
+++- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
+++- [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualiza
   …(recortado)
  \ No newline at end of file
  diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
--index 0107e9a..f78ef45 100644
-+index f78ef45..48bb8d5 100644
+-index f78ef45..48bb8d5 100644
++index 48bb8d5..e9e27cb 100644
  --- a/_capturas/CAMBIOS.diff
  +++ b/_capturas/CAMBIOS.diff
--@@ -1,592 +1,458 @@
---42e9084 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Ataqué la causa raíz: el entorno nunca se instaló. Creé .venv con 'py -3.12 -m venv .venv' (ahora existe .venv\Scripts\python.exe con Python 3.12). Si
--+200849e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 1: Escribí los cuatro scripts del paquete 2 y su suite de pruebas. El productor (scripts/productor_kafka.py) usa solo la biblioteca estándar en el modo -
-+@@ -1,458 +1,368 @@
-+-200849e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 1: Escribí los cuatro scripts del paquete 2 y su suite de pruebas. El productor (scripts/productor_kafka.py) usa solo la biblioteca estándar en el modo -
-++6ed324e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 2: Encontré la causa raíz del fallo y no está en el código de ingesta: el .venv del proyecto ya tiene pytest 8.3.4, pyspark 3.5.5, confluent-kafka 2.6.1,
+-@@ -1,458 +1,368 @@
+--200849e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 1: Escribí los cuatro scripts del paquete 2 y su suite de pruebas. El productor (scripts/productor_kafka.py) usa solo la biblioteca estándar en el modo -
+-+6ed324e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 2: Encontré la causa raíz del fallo y no está en el código de ingesta: el .venv del proyecto ya tiene pytest 8.3.4, pyspark 3.5.5, confluent-kafka 2.6.1,
++@@ -1,368 +1,381 @@
++-6ed324e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 2: Encontré la causa raíz del fallo y no está en el código de ingesta: el .venv del proyecto ya tiene pytest 8.3.4, pyspark 3.5.5, confluent-kafka 2.6.1,
+++7e45d03 Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 3: No pude ejecutar comandos: el permiso fue denegado automáticamente. Por eso busqué la causa raíz leyendo el código. Como no hubo pruebas saltadas, cor
   
--- ESPEC.md               |  21 +-
--- _capturas/CAMBIOS.diff | 957 +++++++++++++++++++++++++++++++++++++++++++++++++
--- _capturas/PRUEBAS.txt  |  15 +-
--- check_entorno.py       |  12 +-
--- setup_entorno.ps1      |   3 +
--- setup_entorno.py       | 118 ++++++
--- 6 files changed, 1106 insertions(+), 20 deletions(-)
--+ ESPEC.md                       |    8 +-
--+ _capturas/CAMBIOS.diff         | 1533 +++++++++++++++-------------------------
--+ _capturas/PRUEBAS.txt          |   37 +-
--+ scripts/__init__.py            |    1 +
--+ scripts/crear_topic.py         |   61 ++
--+ scripts/descargar_movielens.py |  161 +++++
--+ scripts/ordenar_ratings.py     |  102 +++
--+ scripts/productor_kafka.py     |  384 ++++++++++
--+ tests/test_ingesta.py          |  283 ++++++++
--+ 9 files changed, 1609 insertions(+), 961 deletions(-)
-+- ESPEC.md                       |    8 +-
-+- _capturas/CAMBIOS.diff         | 1533 +++++++++++++++-------------------------
-+- _capturas/PRUEBAS.txt          |   37 +-
-+- scripts/__init__.py            |    1 +
-+- scripts/crear_topic.py         |   61 ++
-+- scripts/descargar_movielens.py |  161 +++++
-+- scripts/ordenar_ratings.py     |  102 +++
-+- scripts/productor_kafka.py     |  384 ++++++++++
-+- tests/test_ingesta.py          |  283 ++++++++
-+- 9 files changed, 1609 insertions(+), 961 deletions(-)
-++ ESPEC.md               |   12 +-
-++ _capturas/CAMBIOS.diff | 1008 +++++++++++++++++++++---------------------------
-++ _capturas/PRUEBAS.txt  |   98 +++--
-++ pytest.py              |   65 ++++
-++ 4 files changed, 582 insertions(+), 601 deletions(-)
+-- ESPEC.md                       |    8 +-
+-- _capturas/CAMBIOS.diff         | 1533 +++++++++++++++-------------------------
+-- _capturas/PRUEBAS.txt          |   37 +-
+-- scripts/__init__.py            |    1 +
+-- scripts/crear_topic.py         |   61 ++
+-- scripts/descargar_movielens.py |  161 +++++
+-- scripts/ordenar_ratings.py     |  102 +++
+-- scripts/productor_kafka.py     |  384 ++++++++++
+-- tests/test_ingesta.py          |  283 ++++++++
+-- 9 files changed, 1609 insertions(+), 961 deletions(-)
+-+ ESPEC.md               |   12 +-
+-+ _capturas/CAMBIOS.diff | 1008 +++++++++++++++++++++---------------------------
+-+ _capturas/PRUEBAS.txt  |   98 +++--
+-+ pytest.py              |   65 ++++
+-+ 4 files changed, 582 insertions(+), 601 deletions(-)
++- ESPEC.md               |   12 +-
++- _capturas/CAMBIOS.diff | 1008 +++++++++++++++++++++---------------------------
++- _capturas/PRUEBAS.txt  |   98 +++--
++- pytest.py              |   65 ++++
++- 4 files changed, 582 insertions(+), 601 deletions(-)
+++ ESPEC.md                   |   9 +-
+++ _capturas/CAMBIOS.diff     | 774 ++++++++++++++++++++-------------------------
+++ _capturas/PRUEBAS.txt      |  83 +++--
+++ scripts/productor_kafka.py |  19 +-
+++ 4 files changed, 415 insertions(+), 470 deletions(-)
   
   diff --git a/ESPEC.md b/ESPEC.md
---index 347bc78..5a3aa76 100644
--+index 5a3aa76..e19a2cb 100644
-+-index 5a3aa76..e19a2cb 100644
-++index e19a2cb..d68415d 100644
+--index 5a3aa76..e19a2cb 100644
+-+index e19a2cb..d68415d 100644
++-index e19a2cb..d68415d 100644
+++index d68415d..a779a26 100644
   --- a/ESPEC.md
   +++ b/ESPEC.md
---@@ -6,8 +6,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--+@@ -6,7 +6,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--  2. Ajuste al plan: Respuestas: 1) Las métricas, los perfiles y el speedup se calculan con los 25M completos (lo corro yo). Para la demo en vivo agrega un "modo demo": ALS y perfiles precalculados sobre 25M, y el streaming con reentrenamiento en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015). 2) Thinking desactivado por defecto, configurable. 3) Sin Dask por ahora; si sobra tiempo lo agrego después. Además: Kafka va a estar corriendo en localhost:9092 durante la construcción, así que la prueba de streaming debe ejecutar la integración real (productor → Kafka → Structured Streaming → SQLite) y solo saltarse si el broker no responde.
--  
-+-@@ -6,7 +6,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+- 2. Ajuste al plan: Respuestas: 1) Las métricas, los perfiles y el speedup se calculan con los 25M completos (lo corro yo). Para la demo en vivo agrega un "modo demo": ALS y perfiles precalculados sobre 25M, y el streaming con reentrenamiento en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015). 2) Thinking desactivado por defecto, configurable. 3) Sin Dask por ahora; si sobra tiempo lo agrego después. Además: Kafka va a estar corriendo en localhost:9092 durante la construcción, así que la prueba de streaming debe ejecutar la integración real (productor → Kafka → Structured Streaming → SQLite) y solo saltarse si el broker no responde.
-+- 
-++@@ -8,8 +8,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+--@@ -6,7 +6,7 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-- 2. Ajuste al plan: Respuestas: 1) Las métricas, los perfiles y el speedup se calculan con los 25M completos (lo corro yo). Para la demo en vivo agrega un "modo demo": ALS y perfiles precalculados sobre 25M, y el streaming con reentrenamiento en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015). 2) Thinking desactivado por defecto, configurable. 3) Sin Dask por ahora; si sobra tiempo lo agrego después. Además: Kafka va a estar corriendo en localhost:9092 durante la construcción, así que la prueba de streaming debe ejecutar la integración real (productor → Kafka → Structured Streaming → SQLite) y solo saltarse si el broker no responde.
+-- 
+-+@@ -8,8 +8,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++ @@ -8,8 +8,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
    ## Requisitos (estado actual)
----- [pendiente] 1. Entorno virtual en Python 3.12 aislado del sistema global
----- [pendiente] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
---+- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Evidencia: código setup_entorno.ps1 y PRUEBAS.txt. El script crea .venv con 'py -3.12 -m venv .venv' y está bien hecho, pero el .venv del proyecto no existe. Las pruebas se ejecutaron con C:\Users\vicen\Documents\bot\.venv, que es el entorno de la carpeta padre, y check_entorno informa '[FALTA] Python 3.12'. Falta ejecutar 'powershell -ExecutionPolicy Bypass -File setup_entorno.ps1' (Delegado lo r
---+- [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
--+-- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Evidencia: código setup_entorno.ps1 y PRUEBAS.txt. El script crea .venv con 'py -3.12 -m venv .venv' y está bien hecho, pero el .venv del proyecto no existe. Las pruebas se ejecutaron con C:\Users\vicen\Documents\bot\.venv, que es el entorno de la carpeta padre, y check_entorno informa '[FALTA] Python 3.12'. Falta ejecutar 'powershell -ExecutionPolicy Bypass -File setup_entorno.ps1' (Delegado lo r
--++- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
--+ - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
--  - [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
--  - [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
--- - [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
---@@ -16,10 +16,10 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--- - [pendiente] 8. Agrupamiento KMeans para clasificar usuarios en 'tipos de espectador' con etiquetas interpretables (ej. 'Cinefilo', 'Acción')
--- - [pendiente] 9. Streaming con Spark Structured Streaming que lea Kafka, actualice perfiles y recomendaciones en tiempo real, y ejecute reentrenamiento periódico de ALS por lotes
--+@@ -18,8 +18,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+--- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Evidencia: código setup_entorno.ps1 y PRUEBAS.txt. El script crea .venv con 'py -3.12 -m venv .venv' y está bien hecho, pero el .venv del proyecto no existe. Las pruebas se ejecutaron con C:\Users\vicen\Documents\bot\.venv, que es el entorno de la carpeta padre, y check_entorno informa '[FALTA] Python 3.12'. Falta ejecutar 'powershell -ExecutionPolicy Bypass -File setup_entorno.ps1' (Delegado lo r
-+-+- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
-++ - [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
-+  - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
-+- - [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
-+- - [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
-+-@@ -18,8 +18,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-++-- [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
-++-- [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
-+++- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
-+++- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
-++ - [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
-++ - [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
-++ - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
-++@@ -18,16 +18,12 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+---- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Evidencia: código setup_entorno.ps1 y PRUEBAS.txt. El script crea .venv con 'py -3.12 -m venv .venv' y está bien hecho, pero el .venv del proyecto no existe. Las pruebas se ejecutaron con C:\Users\vicen\Documents\bot\.venv, que es el entorno de la carpeta padre, y check_entorno informa '[FALTA] Python 3.12'. Falta ejecutar 'powershell -ExecutionPolicy Bypass -File setup_entorno.ps1' (Delegado lo r
+--+- [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
+-+ - [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
++  - [observado] 1. Entorno virtual en Python 3.12 aislado del sistema global — Existe .venv con Python 3.12.10 (artefactos/instalacion.log, líneas 6-7), pero no tiene los paquetes instalados: en site-packages solo hay pip y archivos .whl a medio descargar (numpy, scipy). La instalación de requirements se cortó en la línea 21 del log, porque la prueba superó el límite de 3 minutos (PRUEBAS.txt). Hay que completar la instalación dentro del límite. Opciones: instalar por etapas
+   - [verificado] 2. Script check_entorno.py que valide Java 17, rutas HADOOP_HOME/winutils y conexión a Kafka sin levantar contenedores
+-- - [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
+-- - [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
+--@@ -18,8 +18,8 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-+-- [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
+-+-- [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
+-++- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
+-++- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
+-+ - [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
+-+ - [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
+-+ - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
+-+@@ -18,16 +18,12 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
++--- [pendiente] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable
++--- [pendiente] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo
++-+- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
++-+- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
+++-- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. Revisé productor_kafka.py: tiene --datos, --topic, --velocidad (0 = sin pausa), --acelerar, --desde/--hasta, --limite y --dry-run, y envía JSON con las claves en orden fijo. publicar(eventos, topic, bootstrap) -> int lanza KafkaNoDisponible, y main() termina con código 2 sin traceback. La prueba de aceptación del dry-run PASA (PRUEBAS.txt, líneas 2-8: 5 evento
+++-- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — El constructor describe crear_topic.py como idempotente: con el topic ya existente avisa con 'AVISO' y termina con 0, y sin broker termina con 2. No hay evidencia ejecutada. La prueba de pytest que cubre crear_topic.py no pudo correr porque falta el módulo pytest (PRUEBAS.txt, línea 9). Hace falta que la suite corra al menos hasta el salto 'Kafka no disponible'.
++++- [observado] 3. Ingesta de datos: script para descargar MovieLens-25M y productor Kafka en Python que lea ratings.csv secuencialmente por timestamp con velocidad configurable — El código cumple C1, C2, C4, C5 y C6. productor_kafka.py tiene todos los flags, envía el JSON con las claves en orden, publicar() devuelve int y main() termina con código 2 sin traceback. descargar_movielens.py --dry-run PASA (PRUEBAS.txt). El dry-run de aceptación PASA y emite 5 eventos ordenados (PRUEBAS.txt, líneas 2-8). Aun así, la segunda prueba de aceptación (pytest tests/test_ingesta.py) FA
++++- [observado] 4. Tema Kafka 'ratings' configurado para recibir el flujo simulado de calificaciones en vivo — crear_topic.py es correcto en el código: es idempotente, crea 6 particiones y RF 1 (config), avisa 'ya existía' y sin broker termina con 2. Pero su prueba real con broker (test_crear_topic_idempotente) forma parte de la suite que falla, y PRUEBAS.txt no muestra cuál de las 18 pruebas es la fallida. No hay evidencia de que el topic se haya creado contra el broker real. Hay que identificar la prueba
++  - [pendiente] 5. Motor batch en PySpark usando ALS (Alternating Least Squares) de MLlib con partición temporal (entrenamiento previo a una fecha, evaluación posterior)
++  - [pendiente] 6. Métricas de evaluación obligatorias: RMSE, Precision@10 y NDCG@10 comparadas contra una línea base de popularidad
++  - [pendiente] 7. Perfilado de usuario: cálculo de pesos por género y tag genome basado en las calificaciones históricas del usuario
++-@@ -18,16 +18,12 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+++@@ -18,12 +18,13 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
    - [pendiente] 10. Experimento de escalabilidad: script que mida tiempos de ejecución y calcule speedup para 1, 2, 4 y 6 núcleos, generando un gráfico listo para el póster
----- [pendiente] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
----- [pendiente] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
----- [pendiente] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde
----- [pendiente] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión)
---+- [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
---+- [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
---+- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — Evidencia: PRUEBAS.txt. pytest no llega a correr ('No module named pytest') porque no hay entorno instalado. conftest y test_entorno están bien planteados (SparkSession de sesión, skip 'Kafka no disponible'), pero no hay ninguna evidencia de que corran ni de que tarden menos de 2 minutos. Hay que crear el .venv y ejecutar '.venv\Scripts\python -m pytest tests/test_entorno.py'.
---+- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — Evidencia: requirements.txt fija pyspark==3.5.5 y el resto de versiones, y el conector se descarga a .ivy2 con la misma versión (código). Pero setup_entorno.ps1 nunca se ha ejecutado: PRUEBAS.txt muestra 'comando no permitido', y check_entorno informa que faltan pyspark, las dependencias y el conector. Hay que ejecutarlo y dejar evidencia de la instalación.
--+ - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
--+ - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
--+-- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — Evidencia: PRUEBAS.txt. pytest no llega a correr ('No module named pytest') porque no hay entorno instalado. conftest y test_entorno están bien planteados (SparkSession de sesión, skip 'Kafka no disponible'), pero no hay ninguna evidencia de que corran ni de que tarden menos de 2 minutos. Hay que crear el .venv y ejecutar '.venv\Scripts\python -m pytest tests/test_entorno.py'.
--+-- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — Evidencia: requirements.txt fija pyspark==3.5.5 y el resto de versiones, y el conector se descarga a .ivy2 con la misma versión (código). Pero setup_entorno.ps1 nunca se ha ejecutado: PRUEBAS.txt muestra 'comando no permitido', y check_entorno informa que faltan pyspark, las dependencias y el conector. Hay que ejecutarlo y dejar evidencia de la instalación.
--++- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
--++- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
-+  - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
-+  - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
-+--- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — Evidencia: PRUEBAS.txt. pytest no llega a correr ('No module named pytest') porque no hay entorno instalado. conftest y test_entorno están bien planteados (SparkSession de sesión, skip 'Kafka no disponible'), pero no hay ninguna evidencia de que corran ni de que tarden menos de 2 minutos. Hay que crear el .venv y ejecutar '.venv\Scripts\python -m pytest tests/test_entorno.py'.
-+--- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — Evidencia: requirements.txt fija pyspark==3.5.5 y el resto de versiones, y el conector se descarga a .ivy2 con la misma versión (código). Pero setup_entorno.ps1 nunca se ha ejecutado: PRUEBAS.txt muestra 'comando no permitido', y check_entorno informa que faltan pyspark, las dependencias y el conector. Hay que ejecutarlo y dejar evidencia de la instalación.
-+-+- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
-+-+- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
-++-- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
-+++- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
-++ - [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
+   - [verificado] 11. Muestra mini de MovieLens en muestras/ml-mini con el mismo formato que ml-25m y valores conocidos documentados en LEEME.md (corte 2016-01-01, Toy Story como la más popular antes del corte, usuario 1 orientado a Action/Thriller y usuario 2 a Romance/Drama)
+   - [verificado] 12. Configuración central en recomendador/config.py sobrescribible con variables de entorno: Spark local con máximo 6 GB (spark.driver.memory=6g), núcleos configurables, KAFKA_BOOTSTRAP=localhost:9092, TOPIC=ratings y rutas de datos y artefactos
+---- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — Evidencia: PRUEBAS.txt. pytest no llega a correr ('No module named pytest') porque no hay entorno instalado. conftest y test_entorno están bien planteados (SparkSession de sesión, skip 'Kafka no disponible'), pero no hay ninguna evidencia de que corran ni de que tarden menos de 2 minutos. Hay que crear el .venv y ejecutar '.venv\Scripts\python -m pytest tests/test_entorno.py'.
+---- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — Evidencia: requirements.txt fija pyspark==3.5.5 y el resto de versiones, y el conector se descarga a .ivy2 con la misma versión (código). Pero setup_entorno.ps1 nunca se ha ejecutado: PRUEBAS.txt muestra 'comando no permitido', y check_entorno informa que faltan pyspark, las dependencias y el conector. Hay que ejecutarlo y dejar evidencia de la instalación.
+--+- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
+--+- [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
+-+-- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
+-++- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
+-+ - [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
++--- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite pytest no ha corrido nunca: las tres ejecuciones fallan con 'No module named pytest' (PRUEBAS.txt, líneas 11, 13 y 15). Además usan C:\Users\vicen\Documents\bot\.venv (el entorno de la carpeta padre), no el del proyecto. Hay que dejar pytest instalado en el .venv del proyecto (ver requisito 1) y mostrar que la suite pasa en menos de 2 minutos.
++-+- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
+++-- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — FALLA la prueba de aceptación «python -m pytest -q -rs tests/test_ingesta.py» con código 1: 'No module named pytest' (PRUEBAS.txt, líneas 9 y 40). Además, el intérprete del error es C:\Users\vicen\Documents\bot\.venv\Scripts\python.exe y no el .venv del proyecto. Hay que revisar desde qué directorio se ejecuta '.venv/Scripts/python'. Aunque fuera el del proyecto, .venv/Lib/site-packages no tiene p
++++- [observado] 13. Suite pytest en tests/ que corra sobre la muestra mini en menos de 2 minutos por archivo, con una SparkSession compartida, y que salte las pruebas de Kafka con el aviso 'Kafka no disponible' si el broker no responde — La suite ya corre con el .venv del proyecto: el reenvío pytest.py funciona ('pytest 8.3.4', PRUEBAS.txt línea 74). Además tarda menos de 2 minutos (25-40 s) y no hay regresión en test_entorno (11 passed). Sin embargo, test_ingesta.py termina con código 1 (1 failed). Hay que corregir la prueba fallida para que la suite termine sin errores.
++  - [observado] 14. setup_entorno.ps1 crea .venv con 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark 3.5.x y conector Kafka de la misma versión) — setup_entorno.ps1 y setup_entorno.py son correctos en el código: requirements.txt fija pyspark==3.5.5 y el conector usa la versión de pyspark. Pero ninguna de las dos instalaciones terminó: la del .ps1 fue rechazada por el lanzador y la del .py superó los 3 minutos. Falta una instalación que termine y deje el 'pip freeze' en artefactos/instalacion.log.
    - [pendiente] 15. Enriquecimiento IMDb: unir title.basics y title.ratings (datasets no comerciales oficiales) por links.csv (imdbId → tt+7 dígitos) para obtener duración, año y nota IMDb, sin scraping
    - [pendiente] 16. Integración TMDb: póster y sinopsis vía API v3 con TMDB_API_KEY desde el entorno, caché local en JSON y degradación sin errores si no hay clave
    - [pendiente] 17. Importador del CSV de Letterboxd (Date, Name, Year, Letterboxd URI, Rating) que empareja con movies.csv por título normalizado y año, crea un userId nuevo (≥ 1.000.000) e informa 'Emparejadas: X de Y', con perfil y recomendaciones por fold-in
---@@ -28,11 +28,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--- - [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
--+@@ -29,5 +29,5 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
--  - [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
--  - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
----- [pendiente] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
----- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=False a ollama.chat, se activa con LLM_THINK=true y el contenido de thinking nunca se muestra en el chat
----- [pendiente] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
----
----## Bitacora (lo mas reciente primero)
----- 2026-11-12T17:36 ronda - [arquitecto]: Plan v2: Sistema de recomendación de películas distribuido sobre MovieLens 25M para una expo con póster. Usa PySpark/MLlib para entrenar ALS batch con evaluación temporal, construir perfiles de gusto y agrupar a los usuarios con KMeans en «tipos de espectador». Kafka y Spark Structured Streaming procesan cal
----- 2026-11-12T17:34 ronda - [usuario]: Ajuste al plan: Respuestas: 1) Las métricas, los perfiles y el speedup se calculan con los 25M completos (lo corro yo). Para la demo en vivo agrega un "modo demo": ALS y perfiles precalculados sobre 25M, y el streaming con reentrenamiento en vivo sobre un subconjunto c
---+- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
---+- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado p
--+ - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
--+-- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado p
--++- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
-+-@@ -29,5 +29,5 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+- - [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
-+- - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
-+- - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
-+--- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado p
-+-+- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
-++ - [pendiente] 18. App Streamlit con entrada de userId, tipo de espectador, recomendaciones en tarjetas y chat. Cada recomendación del chat se explica con datos del usuario y de la película obtenidos con herramientas, y las películas que no vengan de las herramientas se eliminan
-++ - [pendiente] 19. LLM configurable (LLM_PROVIDER, LLM_MODEL=qwen3.5:9b por defecto, OLLAMA_HOST) con un proveedor de respaldo 'reglas' determinista que se activa con aviso visible si Ollama no responde
-++-- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
-++-- [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
-++-- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
-++-- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
-++-- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
-+++- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
+--@@ -29,5 +29,5 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-- - [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
+-- - [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
+-- - [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
+---- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado p
+--+- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
+-+ - [pendiente] 18. App Streamlit con entrada de userId, tipo de espectador, recomendaciones en tarjetas y chat. Cada recomendación del chat se explica con datos del usuario y de la película obtenidos con herramientas, y las películas que no vengan de las herramientas se eliminan
+-+ - [pendiente] 19. LLM configurable (LLM_PROVIDER, LLM_MODEL=qwen3.5:9b por defecto, OLLAMA_HOST) con un proveedor de respaldo 'reglas' determinista que se activa con aviso visible si Ollama no responde
+-+-- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
+-+-- [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
+-+-- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
+-+-- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
+-+-- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
+-++- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
++  - [pendiente] 18. App Streamlit con entrada de userId, tipo de espectador, recomendaciones en tarjetas y chat. Cada recomendación del chat se explica con datos del usuario y de la película obtenidos con herramientas, y las películas que no vengan de las herramientas se eliminan
++  - [pendiente] 19. LLM configurable (LLM_PROVIDER, LLM_MODEL=qwen3.5:9b por defecto, OLLAMA_HOST) con un proveedor de respaldo 'reglas' determinista que se activa con aviso visible si Ollama no responde
++--- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
++--- [pendiente] 21. README con instalación, corrida completa de 25M paso a paso, guía de demo en vivo de 5 minutos, licencias (MovieLens, IMDb no comercial, TMDb) y solución de problemas en Windows
++--- [pendiente] 22. Estado en vivo compartido en SQLite (artefactos/estado.db) escrito por el streaming y leído por la app, con marca de tiempo de última actualización por usuario
++--- [verificado] 23. Modo demo: preparar_demo.py reutiliza el ALS y los perfiles precalculados sobre 25M (ARTEFACTOS_BASE) y crea un subconjunto para el reentrenamiento en vivo con ratings >= DEMO_DESDE (por defecto 2015-01-01, configurable por variable de entorno y por argumento). streaming.py --modo demo reentrena ALS
++--- [pendiente] 24. El razonamiento (thinking) del LLM está desactivado por defecto: llm.py pasa think=
++-+- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
+++-- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, co
++++- [pendiente] 20. Material del póster en poster/figuras: arquitectura, métricas ALS vs popularidad, speedup vs ideal y tipos de espectador, en PNG a 300 dpi y SVG, con títulos en español
++++- [
    …(recortado)
   \ No newline at end of file
   diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
---new file mode 100644
---index 0000000..78ce7a9
------ /dev/null
--+index 78ce7a9..0107e9a 100644
--+--- a/_capturas/CAMBIOS.diff
-+-index 78ce7a9..0107e9a 100644
-++index 0107e9a..f78ef45 100644
-+ --- a/_capturas/CAMBIOS.diff
+--index 78ce7a9..0107e9a 100644
+-+index 0107e9a..f78ef45 100644
++-index 0107e9a..f78ef45 100644
+++index f78ef45..48bb8d5 100644
+  --- a/_capturas/CAMBIOS.diff
   +++ b/_capturas/CAMBIOS.diff
---@@ -0,0 +1,957 @@
---+53fa13b Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Escribí todos los archivos del paquete 1: config.py (todo sobrescribible con variables de entorno, memoria limitada a 6g, MODO validado), spark_utils.
---+
---+ .gitignore                         |  16 ++
---+ ARQUITECTURA.md                    | 136 +++++++++++++++++
---+ ESPEC.md                           |  38 +++++
---+ _capturas/PRUEBAS.txt              |  13 ++
---+ check_entorno.py                   | 240 +++++++++++++++++++++++++++++
---+ muestras/ml-mini/LEEME.md          |  67 +++++++++
---+ muestras/ml-mini/genome-scores.csv | 251 +++++++++++++++++++++++++++++++
---+ muestras/ml-mini/genome-tags.csv   |  11 ++
---+ muestras/ml-mini/links.csv         |  26 ++++
---+ muestras/ml-mini/movies.csv        |  26 ++++
---+ muestras/ml-mini/ratings.csv       | 301 +++++++++++++++++++++++++++++++++++++
---+ muestras/ml-mini/tags.csv          |  14 ++
---+ recomendador/__init__.py           |  10 ++
---+ recomendador/config.py             | 211 ++++++++++++++++++++++++++
---+ recomendador/datos.py              |  96 ++++++++++++
---+ recomendador/kafka_utils.py        |  87 +++++++++++
---+ recomendador/spark_utils.py        | 129 ++++++++++++++++
---+ requirements.txt                   |  17 +++
---+ setup_entorno.ps1                  |  60 ++++++++
---+ tests/conftest.py                  |  55 +++++++
---+ tests/test_entorno.py              | 191 +++++++++++++++++++++++
---+ 21 files changed, 1995 insertions(+)
---+
---+diff --git a/.gitignore b/.gitignore
---+new file mode 100644
---+index 0000000..98528c8
---+--- /dev/null
---++++ b/.gitignore
---+@@ -0,0 +1,16 @@
---++# Entorno y cachés
---++.venv/
---++.ivy2/
---++__pycache__/
---++*.pyc
---++.pytest_cache/
---++
---++# Datos y resultados pesados (se regeneran)
---++data/
---++artefactos/
---++
---++# Restos de Spark
---++spark-warehouse/
---++metastore_db/
---++derby.log
---++*.crc
---+diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
---+new file mode 100644
---+index 0000000..cc4dab5
---+--- /dev/null
---++++ b/ARQUITECTURA.md
---+@@ -0,0 +1,136 @@
---++# Plan de «recomendador-peliculas» (version 2)
---++Lo mantiene Delegado; no lo edites.
---++
---++Vision: Sistema de recomendación de películas distribuido sobre MovieLens 25M para una expo con póster. Usa PySpark/MLlib para entrenar ALS batch con evaluación temporal, construir perfiles de gusto y agrupar a los usuarios con KMeans en «tipos de espectador». Kafka y Spark Structured Streaming procesan calificaciones en vivo, hay un experimento de speedup de 1 a 6 núcleos y una app Streamlit con chat LLM local (Ollama qwen3.5:9b, thinking desactivado por defecto) que solo explica con datos obtenidos por herramientas. Las métricas, los perfiles y el speedup los calcula el autor sobre los 25M completos. Para la demo en vivo, un «modo demo» carga ALS y perfiles precalculados sobre 25M y reentrena en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015).
---++Stack: Python 3.12 en .venv creado con 'py -3.12 -m venv .venv' por setup_entorno.ps1, con requirements.txt de versiones fijadas (Lo exige el usuario. Fijar versiones evita sorpresas el día de la expo.); PySpark 3.5.x fijado (p. ej. 3.5.5) en local[N] con spark.driver.memory=6g, más el conector org.apache.spark:spark-sql-kafka-0-10_2.12 con la MISMA versión que pyspark.__version__, resuelto con spark.jars.packages y caché Ivy dentro del proyecto (spark.jars.ivy=.ivy2) (La guía oficial de integración Kafka de Spark 3.5 (spark.apache.org/docs/3.5.x/structured-streaming-kafka-integration.html) define el artefacto _2.12 con la versión de Spark. Con la caché Ivy local, después de la primera descarga funciona sin internet en la expo. La rama 3.5 evita los cambios de Scala 2.13 y winutils que trae Spark 4.); Trigger.availableNow + startingOffsets='earliest' para la prueba de integración real con Kafka (y para la opción --availableNow del streaming) (Desde Spark 3.3 la fuente Kafka soporta AvailableNow (SPARK-36649), y en 3.4 se agregaron validaciones del rango de offsets (SPARK-41387). Así la prueba procesa lo que hay en el topic y termina sola, sin quedar colgada, lo que respeta el límite de 2 minutos.); Cliente confluent-kafka (Producer y AdminClient) (Trae wheels oficiales para Windows y Python 3.12. AdminClient crea topics, incluido un topic de prueba único, sin tocar Docker.); SQLite (stdlib) en modo WAL como estado en vivo compartido (artefactos/estado.db) (No requiere instalación y permite que el proceso de streaming escriba mientras Streamlit lee, sin los problemas de leer un parquet a medio escribir.); Fold-in con numpy para actualizar recomendaciones al instante y reentrenamiento ALS periódico por lotes en un hilo aparte (Cumple «tiempo real + reentrenamiento periódico» sin reentrenar ALS en cada micro-lote. En modo demo, el reentrenamiento usa solo el subconjunto desde 2015 para que tarde minutos y no horas.); Paquete oficial 'ollama' con tool calling nativo y parámetro think=False por defecto (LLM_THINK configurable) (La documentación de Ollama expone 'think' por solicitud en chat() (docs.ollama.com/capabilities/thinking) y tool calling con funciones Python (docs.ollama.com/capabilities/tool-calling). Hay reportes de que algunos wrappers no propagan 'think' (github.com/tidyverse/ellmer/issues/940) y de que LiteLLM pierde los tool_calls de qwen3.5 (github.com/BerriAI/litellm/issues/24091), por eso se usa la API directa.); Streamlit, probado con streamlit.testing.v1.AppTest (Lo pide el usuario. AppTest permite probar la UI sin navegador, dentro de pytest.); matplotlib para figuras y diagrama (PNG a 300 dpi y SVG) (No hace falta instalar Graphviz ni nada externo, y las figuras se reproducen con un comando.); pytest con muestra mini fija y SparkSession compartida (scope session, local[2], con conector Kafka) (Una sola SparkSession por proceso evita pagar el arranque (10–15 s en Windows) en cada prueba y permite que el streaming Kafka use la misma sesión.); Sin Dask (El usuario lo decidió: queda como extensión futura.)
---++Arquitectura: recomendador-peliculas/
---++  setup_entorno.ps1, requirements.txt, check_entorno.py, README.md, .gitignore
---++  recomendador/
---++    config.py        rutas, FECHA_CORTE, NUCLEOS, SPARK_MEMORIA=6g, KAFKA_BOOTSTRAP, TOPIC, MODO (completo|demo), DEMO_DESDE=2015-01-01, ARTEFACTOS_BASE, LLM_PROVIDER, LLM_MODEL, OLLAMA_HOST, LLM_THINK=false (todo se sobrescribe con variables de entorno)
---++    spark_utils.py   crear_spark(nucleos, kafka=False)
---++    datos.py         cargar_movielens(ruta)
---++    kafka_utils.py   kafka_disponible(timeout=3), crear_topic(nombre)
---++    batch_als.py     partición temporal, ALS, popularidad, métricas
---++    foldin.py        recomendar_foldin(...)
---++    perfiles.py      vectores de gusto, KMeans, nombrado, perfil_usuario()
---++    estado.py        SQLite WAL: eventos, perfiles, recomendaciones, meta
---++    demo.py          preparar_demo(): base precalculada de 25M + subconjunto >= DEMO_DESDE
---++    streaming.py     readStream kafka|archivo -> foreachBatch procesar_lote() -> estado.db; hilo de reentrenamiento
---++    enriquecimiento.py  IMDb, TMDb con caché, Letterb
+--@@ -1,957 +1,592 @@
+---53fa13b Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 1: Escribí todos los archivos del paquete 1: config.py (todo sobrescribible con variables de entorno, memoria limitada a 6g, MODO validado), spark_utils.
+--+42e9084 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Ataqué la causa raíz: el entorno nunca se instaló. Creé .venv con 'py -3.12 -m venv .venv' (ahora existe .venv\Scripts\python.exe con Python 3.12). Si
+-+@@ -1,592 +1,458 @@
+-+-42e9084 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Ataqué la causa raíz: el entorno nunca se instaló. Creé .venv con 'py -3.12 -m venv .venv' (ahora existe .venv\Scripts\python.exe con Python 3.12). Si
+-++200849e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 1: Escribí los cuatro scripts del paquete 2 y su suite de pruebas. El productor (scripts/productor_kafka.py) usa solo la biblioteca estándar en el modo -
++-@@ -1,592 +1,458 @@
++--42e9084 Paquete 1 (1. Entorno, configuración, check_entorno y muestra mini), intento 2: Ataqué la causa raíz: el entorno nunca se instaló. Creé .venv con 'py -3.12 -m venv .venv' (ahora existe .venv\Scripts\python.exe con Python 3.12). Si
++-+200849e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 1: Escribí los cuatro scripts del paquete 2 y su suite de pruebas. El productor (scripts/productor_kafka.py) usa solo la biblioteca estándar en el modo -
+++@@ -1,458 +1,368 @@
+++-200849e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 1: Escribí los cuatro scripts del paquete 2 y su suite de pruebas. El productor (scripts/productor_kafka.py) usa solo la biblioteca estándar en el modo -
++++6ed324e Paquete 2 (2. Ingesta: descarga, topic 'ratings' y productor Kafka), intento 2: Encontré la causa raíz del fallo y no está en el código de ingesta: el .venv del proyecto ya tiene pytest 8.3.4, pyspark 3.5.5, confluent-kafka 2.6.1,
+   
+--- .gitignore                         |  16 ++
+--- ARQUITECTURA.md                    | 136 +++++++++++++++++
+--- ESPEC.md                           |  38 +++++
+--- _capturas/PRUEBAS.txt              |  13 ++
+--- check_entorno.py                   | 240 +++++++++++++++++++++++++++++
+--- muestras/ml-mini/LEEME.md          |  67 +++++++++
+--- muestras/ml-mini/genome-scores.csv | 251 +++++++++++++++++++++++++++++++
+--- muestras/ml-mini/genome-tags.csv   |  11 ++
+--- muestras/ml-mini/links.csv         |  26 ++++
+--- muestras/ml-mini/movies.csv        |  26 ++++
+--- muestras/ml-mini/ratings.csv       | 301 +++++++++++++++++++++++++++++++++++++
+--- muestras/ml-mini/tags.csv          |  14 ++
+--- recomendador/__init__.py           |  10 ++
+--- recomendador/config.py             | 211 ++++++++++++++++++++++++++
+--- recomendador/datos.py              |  96 ++++++++++++
+--- recomendador/kafka_utils.py        |  87 +++++++++++
+--- recomendador/spark_utils.py        | 129 ++++++++++++++++
+--- requirements.txt                   |  17 +++
+--- setup_entorno.ps1                  |  60 ++++++++
+--- tests/conftest.py                  |  55 +++++++
+--- tests/test_entorno.py              | 191 +++++++++++++++++++++++
+--- 21 files changed, 1995 insertions(+)
+--+ ESPEC.md               |  21 +-
+--+ _capturas/CAMBIOS.diff | 957 +++++++++++++++++++++++++++++++++++++++++++++++++
+--+ _capturas/PRUEBAS.txt  |  15 +-
+--+ check_entorno.py       |  12 +-
+--+ setup_entorno.ps1      |   3 +
+--+ setup_entorno.py       | 118 ++++++
+--+ 6 files changed, 1106 insertions(+), 20 deletions(-)
+-+- ESPEC.md               |  21 +-
+-+- _capturas/CAMBIOS.diff | 957 +++++++++++++++++++++++++++++++++++++++++++++++++
+-+- _capturas/PRUEBAS.txt  |  15 +-
+-+- check_entorno.py       |  12 +-
+-+- setup_entorno.ps1      |   3 +
+-+- setup_entorno.py       | 118 ++++++
+-+- 6 files changed, 1106 insertions(+), 20 deletions(-)
+-++ ESPEC.md                       |    8 +-
+-++ _capturas/CAMBIOS.diff         | 1533 +++++++++++++++-------------------------
+-++ _capturas/PRUEBAS.txt          |   37 +-
+-++ scripts/__init__.py            |    1 +
+-++ scripts/crear_topic.py         |   61 ++
+-++ scripts/descargar_movielens.py |  161 +++++
+-++ scripts/ordenar_ratings.py     |  102 +++
+-++ scripts/productor_kafka.py     |  384 ++++++++++
+-++ tests/test_ingesta.py          |  283 ++++++++
+-++ 9 files changed, 1609 insertions(+), 961 deletions(-)
++-- ESPEC.md               |  21 +-
++-- _capturas/CAMBIOS.diff | 957 +++++++++++++++++++++++++++++++++++++++++++++++++
++-- _capturas/PRUEBAS.txt  |  15 +-
++-- check_entorno.py       |  12 +-
++-- setup_entorno.ps1      |   3 +
++-- setup_entorno.py       | 118 ++++++
++-- 6 files changed, 1106 insertions(+), 20 deletions(-)
++-+ ESPEC.md                       |    8 +-
++-+ _capturas/CAMBIOS.diff         | 1533 +++++++++++++++-------------------------
++-+ _capturas/PRUEBAS.txt          |   37 +-
++-+ scripts/__init__.py            |    1 +
++-+ scripts/crear_topic.py         |   61 ++
++-+ scripts/descargar_movielens.py |  161 +++++
++-+ scripts/ordenar_ratings.py     |  102 +++
++-+ scripts/productor_kafka.py     |  384 ++++++++++
++-+ tests/test_ingesta.py          |  283 ++++++++
++-+ 9 files changed, 1609 insertions(+), 961 deletions(-)
+++- ESPEC.md                       |    8 +-
+++- _capturas/CAMBIOS.diff         | 1533 +++++++++++++++-------------------------
+++- _capturas/PRUEBAS.txt          |   37 +-
+++- scripts/__init__.py            |    1 +
+++- scripts/crear_topic.py         |   61 ++
+++- scripts/descargar_movielens.py |  161 +++++
+++- scripts/ordenar_ratings.py     |  102 +++
+++- scripts/productor_kafka.py     |  384 ++++++++++
+++- tests/test_ingesta.py          |  283 ++++++++
+++- 9 files changed, 1609 insertions(+), 961 deletions(-)
++++ ESPEC.md               |   12 +-
++++ _capturas/CAMBIOS.diff | 1008 +++++++++++++++++++++---------------------------
++++ _capturas/PRUEBAS.txt  |   98 +++--
++++ pytest.py              |   65 ++++
++++ 4 files changed, 582 insertions(+), 601 deletions(-)
+   
+---diff --git a/.gitignore b/.gitignore
+---new file mode 100644
+---index 0000000..98528c8
+------ /dev/null
+---+++ b/.gitignore
+---@@ -0,0 +1,16 @@
+---+# Entorno y cachés
+---+.venv/
+---+.ivy2/
+---+__pycache__/
+---+*.pyc
+---+.pytest_cache/
+---+
+---+# Datos y resultados pesados (se regeneran)
+---+data/
+---+artefactos/
+---+
+---+# Restos de Spark
+---+spark-warehouse/
+---+metastore_db/
+---+derby.log
+---+*.crc
+---diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+---new file mode 100644
+---index 0000000..cc4dab5
+------ /dev/null
+---+++ b/ARQUITECTURA.md
+---@@ -0,0 +1,136 @@
+---+# Plan de «recomendador-peliculas» (version 2)
+---+Lo mantiene Delegado; no lo edites.
+---+
+---+Vision: Sistema de recomendación de películas distribuido sobre MovieLens 25M para una expo con póster. Usa PySpark/MLlib para entrenar ALS batch con evaluación temporal, construir perfiles de gusto y agrupar a los usuarios con KMeans en «tipos de espectador». Kafka y Spark Structured Streaming procesan calificaciones en vivo, hay un experimento de speedup de 1 a 6 núcleos y una app Streamlit con chat LLM local (Ollama qwen3.5:9b, thinking desactivado por defecto) que solo explica con datos obtenidos por herramientas. Las métricas, los perfiles y el speedup los calcula el autor sobre los 25M completos. Para la demo en vivo, un «modo demo» carga ALS y perfiles precalculados sobre 25M y reentrena en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015).
+---+Stack: Python 3.12 en .venv creado con 'py -3.12 -m venv .venv' por setup_entorno.ps1, con requirements.txt de versiones fijadas (Lo exige el usuario. Fijar versiones evita sorpresas el día de la expo.); PySpark 3.5.x fijado (p. ej. 3.5.5) en local[N] con spark.driver.memory=6g, más el conector org.apache.spark:spark-sql-kafka-0-10_2.12 con la MISMA versión que pyspark.__version__, resuelto con spark.jars.packages y caché Ivy dentro del proyecto (spark.jars.ivy=.ivy2) (La guía oficial de integración Kafka de Spark 3.5 (spark.apache.org/docs/3.5.x/structured-streaming-kafka-integration.html) define el artefacto _2.12 con la versión de Spark. Con la caché Ivy local, después de la primera descarga funciona sin internet en la expo. La rama 3.5 evita los cambios de Scala 2.13 y winutils que trae Spark 4.); Trigger.availableNow + startingOffsets='earliest' para la prueba de integración real con Kafka (y para la opción --availableNow del streaming) (Desde Spark 3.3 la fuente Kafka soporta AvailableNow (SPARK-36649), y en 3.4 se agregaron validaciones del rango de offsets (SPARK-41387). Así la prueba procesa lo que hay en el topic y termina sola, sin quedar colgada, lo que respeta el límite de 2 minutos.); Cliente confluent-kafka (Producer y AdminClient) (Trae wheels oficiales para Windows y Python 3.12. AdminClient crea topics, incluido un topic de prueba único, sin tocar Docker.); SQLite (stdlib) en modo WAL como estado en vivo compartido (artefactos/estado.db) (No requiere instalación y permite que el proceso de streaming escriba mientras Streamlit lee, sin los problemas de leer un parquet a medio escribir.); Fold-in con numpy para actualizar recomendaciones al instante y reentrenamiento ALS periódico por lotes en un hilo aparte (Cumple «tiempo real + reentrenamiento periódico» sin reentrenar ALS en cada micro-lote. En modo demo, el reentrenamiento usa solo el subconjunto desde 2015 para que tarde minutos y no horas.); Paquete oficial 'ollama' con tool calling nativo y parámetro think=False por defecto (LLM_THINK configurable) (La documentación de Ollama expone 'think' por solicitud en chat() (docs.ollama.com/capabilities/thinking) y tool calling con funciones Python (docs.ollama.com/capabilities/tool-calling). Hay reportes de que algunos wrappers no propagan 'think' (github.com/tidyverse/ellmer/issues/940) y de que LiteLLM pierde los tool_calls de qwen3.5 (github.com/BerriAI/litellm/issues/24091), por eso se usa la API directa.); Streamlit, probado con streamlit.testing.v1.AppTest (Lo pide el usuario. AppTest permite probar la UI sin navegador, dentro de pytest.); matplotlib para figuras y diagrama (PNG a 300 dpi y SVG) (No hace falta instalar Graphviz ni nada externo, y las figuras se reproducen con un comando.); pytest con muestra mini fija y SparkSession compartida (scope session, local[2], con conector Kafka) (Una sola SparkSession por proceso evita pagar el arranque (10–15 s en Windows) en cada prueba y permite que el streaming Kafka use la misma sesión.); Sin Dask (El usuario lo decidió: queda como extensión futura.)
+---+Arquitectura: recomendador-peliculas/
+---+  setup_entorno.ps1, requirements.txt, check_entorno.py, README.md, .gitignore
+---+  recomendador/
+---+    config.py        rutas, FECHA_CORTE, NUCLEOS, SPARK_MEMORIA=6g, KAFKA_BOOTSTRAP, TOPIC, MODO (completo|demo), DEMO_DESDE=2015-01-01, ARTEFACTOS_BASE, LLM_PROVIDER, LLM_MODEL, OLLAMA_HOST, LLM_THINK=false (todo se sobrescribe con variables de entorno)
+---+    spark_utils.py   crear_spark(nucleos, kafka=False)
+---+    datos.py         cargar_moviele
 …(diff recortado)

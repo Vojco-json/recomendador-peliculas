@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-12T20:35 ronda 1 [revisor paquete 1]: corregir (pruebas que fallan 2, requisitos verificados 8): Prueba automatica fallida: No hay regresión en la suite del paquete 1 (ahora con el .venv del proyecto gracias al reenvío) — se paso de 3 minutos | Prueba automatica fallida: Sin regresión en la suite del paquete 1 — se paso de 3 minutos | General: Dos corridas de la prueba de regresión del paquete 1 superaron los 3 minutos (PRUEBAS.txt, líneas 109 y 125), mientras que las demás terminan en ~25 s. Hay que revisar si algo puede bloquearse de forma intermitente (red/Ivy, broker, Ollama) y agregar 
-- 2026-11-12T20:34 ronda - [delegado]: p
+- 2026-11-12T20:45 ronda 2 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: La salida recortada de PRUEBAS.txt no deja ver las líneas [OK]/[FALTA] de Java 17, HADOOP_HOME y winutils. Conviene que la prueba de aceptación verifique explícitamente que aparecen. | General: jars_conector_en_cache agrega TODOS los .jar de .ivy2/jars (excepto otras versiones del conector). Si se acumulan jars ajenos en la caché, podrían cargarse clases no deseadas. Sería mejor limitarse a la lista de dependencias conocidas (kafka-clients, commons-pool2, etc.). | General: No se pudo ve
+- 2026-11-12T20:44 ronda - [delegado]: p
 …(recortado)
