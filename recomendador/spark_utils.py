@@ -144,6 +144,141 @@ def crear_spark(nucleos: int | None = None, kafka: bool = False, memoria: str | 
     return spark
 
 
+def _popen_vigilado():
+    """Subclase de ``subprocess.Popen`` para lanzar la JVM de Spark de forma vigilada.
+
+    Causa raíz de los cuelgues intermitentes al crear la SparkSession en Windows:
+    pyspark (``java_gateway.launch_gateway``) espera el puerto de la JVM con
+    ``while not proc.poll() and not os.path.isfile(conn_info_file)``. En Windows el
+    proceso hijo es ``spark-submit.cmd``; si ese .cmd termina con código 0 sin haber
+    escrito el archivo del puerto (``not 0`` es True), el bucle no termina nunca.
+
+    Esta subclase hace que ``poll()`` informe 1 en ese caso (o cuando el vigilante
+    abortó el arranque), así pyspark lanza ``JAVA_GATEWAY_EXITED`` en vez de colgarse
+    y ``crear_spark_vigilado`` puede reintentar.
+    """
+    import subprocess
+
+    class PopenVigilado(subprocess.Popen):
+        lanzados: list = []   # procesos creados durante el arranque en curso
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.abortado = False
+            self.arrancando = True
+            PopenVigilado.lanzados.append(self)
+
+        def poll(self):
+            codigo = super().poll()
+            if self.abortado or (self.arrancando and codigo == 0):
+                return 1
+            return codigo
+
+    return PopenVigilado
+
+
+def _matar_arbol(proc) -> None:
+    """Termina el proceso y sus hijos (en Windows el hijo directo es un .cmd, no la JVM)."""
+    import subprocess
+
+    try:
+        if proc.stdin:
+            proc.stdin.close()   # la JVM de pyspark termina al ver EOF en su stdin
+    except OSError:
+        pass
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/f", "/t", "/pid", str(proc.pid)],
+                       capture_output=True, check=False)
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
+def _reiniciar_estado_pyspark() -> None:
+    """Olvida un gateway/contexto a medio crear para poder lanzar otra JVM."""
+    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
+
+    SparkContext._gateway = None
+    SparkContext._jvm = None
+    SparkContext._active_spark_context = None
+    SparkSession._instantiatedSession = None
+    SparkSession._activeSession = None
+
+
+def crear_spark_vigilado(plazo_s: float = 60, intentos: int = 3, registro=None, **kwargs):
+    """Como ``crear_spark``, pero si el arranque no termina en ``plazo_s`` segundos lo
+    aborta (matando la JVM a medio lanzar) y reintenta, hasta ``intentos`` veces.
+
+    ``registro`` es un archivo de texto opcional donde se anota cada intento fallido
+    (código del proceso lanzado y pilas de los hilos de Python) como evidencia.
+    """
+    import faulthandler
+    import threading
+    import time
+
+    from pyspark import java_gateway
+
+    popen_original = java_gateway.Popen
+    clase = _popen_vigilado()
+    ultimo_error: BaseException | None = None
+    for intento in range(1, intentos + 1):
+        clase.lanzados = []
+        resultado: dict = {}
+
+        def _arrancar():
+            try:
+                resultado["spark"] = crear_spark(**kwargs)
+            except BaseException as exc:  # se reporta desde el hilo principal
+                resultado["error"] = exc
+
+        java_gateway.Popen = clase
+        try:
+            inicio = time.monotonic()
+            hilo = threading.Thread(target=_arrancar, name=f"arranque-spark-{intento}",
+                                    daemon=True)
+            hilo.start()
+            hilo.join(plazo_s)
+            colgado = hilo.is_alive()
+            if colgado:
+                if registro is not None:
+                    codigos = [p.returncode if p.returncode is not None else "vivo"
+                               for p in clase.lanzados]
+                    registro.write(f"[arranque Spark] intento {intento}: sin terminar tras "
+                                   f"{time.monotonic() - inicio:.0f}s; procesos lanzados: "
+                                   f"{codigos}. Pilas:\n")
+                    faulthandler.dump_traceback(file=registro, all_threads=True)
+                    registro.flush()
+                for proc in clase.lanzados:
+                    proc.abortado = True
+                    _matar_arbol(proc)
+                hilo.join(20)
+                if hilo.is_alive():
+                    raise RuntimeError("El arranque de Spark quedó colgado y no se pudo abortar")
+                ultimo_error = TimeoutError(f"Spark no arrancó en {plazo_s:.0f}s")
+        finally:
+            java_gateway.Popen = popen_original
+            for proc in clase.lanzados:
+                proc.arrancando = False
+
+        if not colgado and "spark" in resultado:
+            return resultado["spark"]
+        if not colgado:
+            ultimo_error = resultado.get("error")
+            # Solo se reintenta si la JVM murió al arrancar; otros errores (p. ej. de
+            # configuración o del conector) se propagan tal cual.
+            if "JAVA_GATEWAY_EXITED" not in repr(ultimo_error):
+                raise ultimo_error
+            if registro is not None:
+                registro.write(f"[arranque Spark] intento {intento}: error {ultimo_error!r}\n")
+                registro.flush()
+            for proc in clase.lanzados:
+                _matar_arbol(proc)
+        _reiniciar_estado_pyspark()
+    raise RuntimeError(f"Spark no arrancó tras {intentos} intentos") from ultimo_error
+
+
 def detener_spark() -> None:
     """Detiene la SparkSession activa, si existe."""
     from pyspark.sql import SparkSession

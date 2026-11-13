@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-13T03:04 ronda - [delegado]: pruebas automáticas 31/33 ❌; 2 prueba(s) nueva(s); version d7aab21
-- 2026-11-13T02:48 ronda 1 [constructor paquete 4]: Repetí las dos pruebas de aceptación en el orden en que las corre Delegado. Ambas terminaron bien. scripts/perfilar_usuarios.py --k 3 dio 3 tipos con nombre único: «Violencia y tono oscuro» (6 usuarios), «Drama y romance» (5) y «Aventura y animación» (4). Corrí tests/test_perfiles.py dos veces y las dos dieron «14 passed», en unos 26-32 s. No pude reproducir la falla (código 1 sin ninguna salida). En _capturas/PRUEBAS.txt las corridas más recientes de esa misma prueba también salen
+- 2026-11-13T15:38 ronda 1 [revisor paquete 4]: corregir (pruebas que fallan 3, requisitos verificados 3): Prueba automatica fallida: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 1:  | Prueba automatica fallida: Suites del paquete 1 y del paquete 2 juntas, sin regresión — codigo 1: ........ | Prueba automatica fallida: Regresión: suite del paquete 1 (muestra, config y kafka_disponible) — codigo 1: ........ | General: Regresión intermitente: en PRUEBAS.txt la suite del paquete 1 (t
+- 2026-11-13T15:38 ronda - [delegado
 …(recortado)

@@ -24,6 +24,7 @@ from recomendador import config, kafka_utils, spark_utils  # noqa: E402
 
 import faulthandler  # noqa: E402
 import os  # noqa: E402
+import time  # noqa: E402
 
 # Límite por prueba (incluye crear sus fixtures, p. ej. la SparkSession). Si una
 # prueba se cuelga (red, JVM, broker), se vuelcan las pilas de todos los hilos y el
@@ -41,14 +42,24 @@ except (AttributeError, ValueError):
 # Arrancar la JVM de Spark en frío (primer uso tras reiniciar, antivirus revisando los
 # jars) puede tardar bastante más que una prueba normal. El arranque tiene su propio
 # presupuesto y, al terminar, el temporizador de la prueba se rearma desde cero.
-LIMITE_ARRANQUE_SPARK_S = float(os.environ.get("PRUEBAS_LIMITE_SPARK_S", "100"))
+# Es la última red de seguridad: debe cubrir los reintentos del arranque vigilado.
+LIMITE_ARRANQUE_SPARK_S = float(os.environ.get("PRUEBAS_LIMITE_SPARK_S", "200"))
+
+# Plazo de cada intento de arranque de Spark: si la JVM no responde a tiempo, el
+# intento se aborta y se reintenta (ver spark_utils.crear_spark_vigilado).
+PLAZO_INTENTO_SPARK_S = float(os.environ.get("PRUEBAS_PLAZO_INTENTO_SPARK_S", "45"))
 
 # Si el temporizador vence, las pilas se escriben en este archivo (además de stderr),
 # porque el ejecutor de pruebas muestra solo la cola de stdout y el volcado se perdía.
+# Se abre en modo 'a' (anexar) con un encabezado por sesión: una suite que se cuelga
+# no pierde su volcado cuando después corre otra.
 _LOG_COLGADAS = RAIZ / "artefactos" / "pruebas_colgadas.log"
 try:
     _LOG_COLGADAS.parent.mkdir(parents=True, exist_ok=True)
-    _archivo_volcado = open(_LOG_COLGADAS, "w", encoding="utf-8")  # noqa: SIM115
+    _archivo_volcado = open(_LOG_COLGADAS, "a", encoding="utf-8")  # noqa: SIM115
+    _archivo_volcado.write(f"\n===== sesión pytest {time.strftime('%Y-%m-%d %H:%M:%S')} "
+                           f"pid={os.getpid()} args={' '.join(sys.argv[1:])} =====\n")
+    _archivo_volcado.flush()
 except OSError:
     _archivo_volcado = sys.stderr
 
@@ -73,16 +84,20 @@ def pytest_runtest_protocol(item, nextitem):
 
 
 def _crear_sesion_pruebas():
-    """Crea la SparkSession de pruebas (con conector Kafka si está disponible)."""
+    """Crea la SparkSession de pruebas (con conector Kafka si está disponible).
+
+    El arranque es vigilado: si la JVM queda colgada al lanzarse (falla intermitente
+    de pyspark en Windows), el intento se aborta, se anota en el log y se reintenta.
+    """
+    opciones = dict(nucleos=2, app="pruebas", extra={"spark.ui.enabled": "false"},
+                    plazo_s=PLAZO_INTENTO_SPARK_S, registro=_archivo_volcado)
     try:
-        sesion = spark_utils.crear_spark(nucleos=2, kafka=True, app="pruebas",
-                                         extra={"spark.ui.enabled": "false"})
+        sesion = spark_utils.crear_spark_vigilado(kafka=True, **opciones)
         sesion.conector_kafka_ok = True
     except Exception as exc:  # p. ej. sin internet la primera vez
         warnings.warn(f"No se pudo cargar el conector Kafka ({exc}); Spark sin conector")
         spark_utils.detener_spark()
-        sesion = spark_utils.crear_spark(nucleos=2, kafka=False, app="pruebas",
-                                         extra={"spark.ui.enabled": "false"})
+        sesion = spark_utils.crear_spark_vigilado(kafka=False, **opciones)
         sesion.conector_kafka_ok = False
     return sesion
 

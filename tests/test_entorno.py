@@ -92,6 +92,17 @@ def test_opciones_spark_sin_jvm():
         spark_utils.opciones_spark(nucleos=2, memoria="8g")
 
 
+def test_popen_vigilado_no_deja_colgado_el_arranque():
+    """Un .cmd que termina con código 0 sin dar el puerto no debe colgar a pyspark."""
+    clase = spark_utils._popen_vigilado()
+    proc = clase([sys.executable, "-c", "pass"])
+    proc.wait()
+    assert proc.returncode == 0
+    assert proc.poll() == 1          # durante el arranque: 'murió', pyspark no se cuelga
+    proc.arrancando = False
+    assert proc.poll() == 0          # ya arrancado: código real
+
+
 # --------------------------------------------------------------------------- #
 # Kafka
 # --------------------------------------------------------------------------- #
