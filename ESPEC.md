@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-13T16:06 ronda 2 [revisor paquete 4]: corregir (pruebas que fallan 1, requisitos verificados 3): Prueba automatica fallida: Estrés: entorno, batch y perfiles 2 veces cada una, sin ninguna corrida con error — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: La prueba de estrés de Delegado («entorno, batch y perfiles 2 veces cada una») FALLA por pasar de 3 minutos. No es de aceptación y la suma de tiempos explica casi todo el límite, pero conviene registrar en pruebas_colgadas.log si hubo un arranque abortado o reintentado. Si lo hubo, es evidencia del cuelgue intermitent
-- 2026-11-13T16:06 ronda - [delegado
+- 2026-11-13T16:34 ronda 3 [revisor paquete 4]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Persiste un cuelgue intermitente al arrancar la JVM de Spark. crear_spark_vigilado lo mitiga con reintentos (PRUEBAS.txt: 'intento 1: sin terminar tras 20s'). Conviene vigilarlo de cara a la expo. | General: La objeción del constructor sobre la prueba de estrés es válida: no era una prueba de aceptación del arquitecto, y la versión nueva (unos 100 s) pasó. | General: ejecutar() hace toPandas() de todos los usuarios. En 25M son unos 162k usuarios, aceptable, pero hay que tenerlo en cuent
+- 2026-11-13T16:34 ronda - [delegado
 …(recortado)
