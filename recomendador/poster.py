@@ -251,7 +251,30 @@ def figura_metricas(metricas: dict, carpeta, nombre: str = "metricas") -> list[P
                   f"top-{k} sin películas ya vistas")
         fig.text(0.02, -0.03, nota, ha="left", va="top", fontsize=14, color=TEXTO_2)
         fig.tight_layout(rect=(0, 0, 1, 0.94))
+        if sin_usuarios_evaluados(metricas):
+            # Con 0 usuarios evaluados las barras valen 0 y no significan nada:
+            # se marca la figura para que nadie la imprima en el póster por error.
+            fig.text(0.5, 0.5, AVISO_SIN_EVALUADOS, ha="center", va="center",
+                     fontsize=26, fontweight="bold", color=TEXTO, zorder=10,
+                     bbox={"boxstyle": "round,pad=0.8", "facecolor": ROJO,
+                           "edgecolor": AMBAR, "linewidth": 3, "alpha": 0.95})
         return guardar(fig, carpeta, nombre)
+
+
+#: Texto que se superpone a la figura de métricas cuando no hubo usuarios evaluados.
+AVISO_SIN_EVALUADOS = "Sin usuarios evaluados: no usar en el póster"
+
+
+def sin_usuarios_evaluados(metricas: dict) -> bool:
+    """True si la evaluación declara 0 usuarios evaluados (ALS o popularidad).
+
+    Si el dato no viene (artefactos antiguos), no se asume nada y no se avisa.
+    """
+    for modelo in ("als", "popularidad"):
+        n = (metricas.get(modelo) or {}).get("usuarios_evaluados")
+        if n is not None and int(n) == 0:
+            return True
+    return False
 
 
 # --------------------------------------------------------------------------- #

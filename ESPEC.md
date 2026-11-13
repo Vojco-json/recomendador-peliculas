@@ -33,6 +33,6 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe 
 - [verificado] 25. La prueba de streaming ejecuta la integración real productor_kafka.publicar → Kafka (topic de prueba único) → Spark Structured Streaming (startingOffsets=earliest, Trigger.availableNow) → SQLite. Verifica recomendaciones actualizadas de los usuarios con eventos y se salta con 'Kafka no disponible' s
 
 ## Bitacora (lo mas reciente primero)
-- 2026-11-13T18:33 ronda 7 [revisor paquete 8]: corregir (pruebas que fallan 1, requisitos verificados 5): Prueba automatica fallida: Estrés: entorno, batch y perfiles 2 veces cada una, sin ninguna corrida con error — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: No hay capturas de la app Streamlit (faltan escritorio.png y celular.png). El aspecto visual y el responsive de las tarjetas y la barra lateral solo se respaldan con el código y AppTest. Conviene capturar la app a 1400 px y en celular antes de la expo. | General: El aviso 'Ollama no responde: usando modo reglas' solo 
-- 2026-11-13T18:33 ronda 
+- 2026-11-13T19:00 ronda 8 [revisor paquete 8]: aprobado (pruebas que fallan 0, requisitos verificados 5): General: Las capturas verif_1 y verif_2 son de una vista previa HTML estática (scripts/vista_previa_app.py, que usa AppTest), no de `streamlit run` en un navegador. El contenido coincide con la app real, pero conviene sacar una captura real en el paquete 9 para el README y la demo. | General: En la tarjeta de Groundhog Day no aparece la nota IMDb (falta en la muestra mini). La tarjeta lo maneja bien y no muestra un valor vacío. | General: La objeción sobre la prueba de estrés es correcta: ahora 
+- 2026-11-13T18:59 ronda 
 …(recortado)

@@ -203,6 +203,42 @@ def test_falta_artefacto_avisa_y_genera_las_demas(tmp_path):
     assert (tmp_path / "f" / "tipos_espectador.png").stat().st_size > 5_000
 
 
+AVISO = "Sin usuarios evaluados: no usar en el póster"
+
+
+def test_metricas_con_usuarios_no_muestra_aviso(generadas):
+    figuras, _ = generadas
+    assert AVISO not in _svg(figuras, "metricas")
+
+
+def test_metricas_sin_usuarios_evaluados_muestra_aviso(tmp_path):
+    """Paquete 9 (C2): con 0 usuarios evaluados la figura avisa que no va al póster."""
+    metricas = {
+        "als": {"RMSE": float("nan"), "Precision@10": 0.0, "NDCG@10": 0.0,
+                "usuarios_evaluados": 0},
+        "popularidad": {"RMSE": float("nan"), "Precision@10": 0.0, "NDCG@10": 0.0,
+                        "usuarios_evaluados": 0},
+        "corte": "2018-01-01", "n_train": 1000, "n_test": 0, "k": 10,
+        "relevante_min": 4.0,
+    }
+    assert poster.AVISO_SIN_EVALUADOS == AVISO
+    rutas = poster.figura_metricas(metricas, tmp_path)
+    assert {r.suffix for r in rutas} == {".png", ".svg"}
+    svg = (tmp_path / "metricas.svg").read_text(encoding="utf-8")
+    assert AVISO in svg
+    assert "ALS frente a la línea base de popularidad" in svg   # el resto no cambia
+    assert (tmp_path / "metricas.png").stat().st_size > 5_000
+
+
+def test_sin_usuarios_evaluados_solo_con_cero_explicito():
+    assert poster.sin_usuarios_evaluados({"als": {"usuarios_evaluados": 0}})
+    assert poster.sin_usuarios_evaluados({"als": {"usuarios_evaluados": 5},
+                                          "popularidad": {"usuarios_evaluados": 0}})
+    assert not poster.sin_usuarios_evaluados({"als": {"usuarios_evaluados": 5}})
+    assert not poster.sin_usuarios_evaluados({"als": {"RMSE": 0.8}})   # dato ausente
+    assert not poster.sin_usuarios_evaluados({})
+
+
 def test_script_sin_artefactos_termina_bien(tmp_path):
     figuras = tmp_path / "f"
     proc = subprocess.run([sys.executable, str(RAIZ / "scripts" / "figuras_poster.py"),
