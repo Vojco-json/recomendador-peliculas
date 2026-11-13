@@ -61,6 +61,12 @@ def obtener_herramientas(datos: str, artefactos: str, estado_db: str) -> Herrami
     return Herramientas(datos, artefactos, estado_db)
 
 
+@st.cache_data(ttl=20, show_spinner=False)
+def estado_ollama(host: str, modelo: str) -> dict:
+    """Chequeo de Ollama al cargar la página (cacheado 20 s por host y modelo)."""
+    return llm.estado_ollama()
+
+
 def esc(texto) -> str:
     return html.escape("" if texto is None else str(texto))
 
@@ -155,6 +161,16 @@ with st.sidebar:
     cfg = llm.descripcion_config()
     st.markdown(f"**LLM_PROVIDER:** `{cfg['LLM_PROVIDER']}`  \n**LLM_MODEL:** "
                 f"`{cfg['LLM_MODEL']}`  \n**think:** `{str(cfg['think']).lower()}`")
+    # Estado de Ollama visible desde el inicio (no solo al enviar un mensaje).
+    if cfg["LLM_PROVIDER"].lower() == "reglas":
+        st.caption("Chat en modo reglas (configurado con LLM_PROVIDER=reglas).")
+    else:
+        estado = estado_ollama(cfg["OLLAMA_HOST"], cfg["LLM_MODEL"])
+        if estado["ok"]:
+            st.markdown(f'<div class="vivo">● {esc(estado["mensaje"])}</div>',
+                        unsafe_allow_html=True)
+        else:
+            st.warning(estado["mensaje"], icon="⚠️")
     if st.button("🔄 Actualizar", use_container_width=True):
         st.rerun()
 

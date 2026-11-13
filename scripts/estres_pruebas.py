@@ -3,9 +3,13 @@
 Uso:
     .venv/Scripts/python scripts/estres_pruebas.py --veces 5 tests/test_entorno.py tests/test_batch.py
 
-Cada archivo se ejecuta en su propio proceso (como lo hace Delegado). Al final
-imprime los códigos de salida y cuántos arranques de Spark tuvieron que reintentarse
-(según artefactos/pruebas_colgadas.log).
+Cada archivo se ejecuta en su propio proceso (como lo hace Delegado). Por defecto,
+los archivos de una misma vuelta corren EN PARALELO (cada uno con su propia JVM y
+sus artefactos en un directorio temporal): seis corridas secuenciales de Spark
+suman ~160 s y rozaban el límite de 3 minutos del ejecutor; en paralelo cada vuelta
+dura lo que tarda la suite más lenta. Con --secuencial se recupera el modo anterior.
+Al final imprime los códigos de salida y cuántos arranques de Spark tuvieron que
+reintentarse (según artefactos/pruebas_colgadas.log).
 """
 
 from __future__ import annotations
@@ -24,21 +28,29 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("archivos", nargs="+", help="archivos de prueba")
     parser.add_argument("--veces", type=int, default=3)
+    parser.add_argument("--secuencial", action="store_true",
+                        help="corre los archivos uno tras otro (más lento)")
     args = parser.parse_args()
 
     tam_log = LOG.stat().st_size if LOG.exists() else 0
     fallas = 0
     for vuelta in range(1, args.veces + 1):
-        for archivo in args.archivos:
-            inicio = time.monotonic()
-            proc = subprocess.run([sys.executable, "-m", "pytest", "-q", archivo],
-                                  cwd=RAIZ, capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace")
-            resumen = [l for l in proc.stdout.splitlines() if " passed" in l or " failed" in l]
-            fallas += proc.returncode != 0
-            print(f"vuelta {vuelta} {archivo}: código {proc.returncode} "
-                  f"({time.monotonic() - inicio:.0f}s) {resumen[-1] if resumen else proc.stdout[-300:]}",
-                  flush=True)
+        grupos = [[a] for a in args.archivos] if args.secuencial else [args.archivos]
+        for grupo in grupos:
+            # Lanza todos los archivos del grupo a la vez y después espera a cada uno.
+            procesos = []
+            for archivo in grupo:
+                procesos.append((archivo, time.monotonic(), subprocess.Popen(
+                    [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", archivo],
+                    cwd=RAIZ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace")))
+            for archivo, inicio, proc in procesos:
+                salida, _ = proc.communicate()
+                resumen = [l for l in salida.splitlines() if " passed" in l or " failed" in l]
+                fallas += proc.returncode != 0
+                print(f"vuelta {vuelta} {archivo}: código {proc.returncode} "
+                      f"({time.monotonic() - inicio:.0f}s) "
+                      f"{resumen[-1] if resumen else salida[-300:]}", flush=True)
 
     nuevo = LOG.read_text(encoding="utf-8", errors="replace")[tam_log:] if LOG.exists() else ""
     print(f"\nCorridas con error: {fallas}. Intentos de arranque de Spark reintentados: "

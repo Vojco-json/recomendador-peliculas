@@ -1,0 +1,11 @@
+# Tema oscuro con la paleta del póster. Streamlit lee este archivo cuando se
+# ejecuta «streamlit run app/app.py» desde la raíz del proyecto.
+[theme]
+base = "dark"
+primaryColor = "#E50914"
+backgroundColor = "#141414"
+secondaryBackgroundColor = "#1E1E1E"
+textColor = "#F2F2F2"
+
+[browser]
+gatherUsageStats = false

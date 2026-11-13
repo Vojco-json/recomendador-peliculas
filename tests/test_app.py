@@ -76,10 +76,47 @@ def test_app_aviso_si_ollama_no_responde(entorno, monkeypatch):
     monkeypatch.setattr(config, "OLLAMA_HOST", "http://127.0.0.1:9")   # puerto cerrado
     at = AppTest.from_file(str(APP), default_timeout=60)
     at.run()
+    assert not at.exception, at.exception
+    # El aviso aparece en la barra lateral al cargar, antes de escribir en el chat.
+    assert llm.AVISO_REGLAS in [w.value for w in at.sidebar.warning]
     at.chat_input[0].set_value(PEDIDO).run()
     assert not at.exception, at.exception
-    assert llm.AVISO_REGLAS in [w.value for w in at.warning]
+    assert llm.AVISO_REGLAS in [w.value for w in at.main.warning]
     assert at.session_state["chat_1"][-1]["recomendaciones"]
+
+
+def test_estado_ollama_con_clientes_simulados(monkeypatch):
+    monkeypatch.setattr(config, "LLM_MODEL", "qwen3.5:9b")
+
+    class Lista:
+        def __init__(self, nombres):
+            self.nombres = nombres
+
+        def list(self):
+            return {"models": [{"model": n} for n in self.nombres]}
+
+    class Caido:
+        def list(self):
+            raise ConnectionError("Failed to connect to Ollama")
+
+    assert llm.estado_ollama(Lista(["qwen3.5:9b"])) == {"ok": True,
+                                                        "mensaje": "Ollama listo (qwen3.5:9b)"}
+    sin_modelo = llm.estado_ollama(Lista(["llama3:8b"]))
+    assert not sin_modelo["ok"] and "ollama pull qwen3.5:9b" in sin_modelo["mensaje"]
+    assert llm.estado_ollama(Caido()) == {"ok": False, "mensaje": llm.AVISO_REGLAS}
+
+
+def test_leyenda_indica_completado_con_reglas(entorno):
+    """Si el LLM no entrega recomendaciones válidas, el proveedor lo dice."""
+    class SoloInventa:
+        def chat(self, **kw):
+            dato = {"intro": "x", "recomendaciones": [{"movieId": 999999, "titulo": "Falsa"}]}
+            return {"message": {"role": "assistant", "content": json.dumps(dato)}}
+
+    r = llm.responder(PEDIDO, 1, entorno, proveedor="ollama", cliente=SoloInventa())
+    assert r.proveedor == llm.PROVEEDOR_COMPLETADO and "reglas" in r.proveedor
+    assert [x["movieId"] for x in r.recomendaciones] == [1307]
+    assert "Falsa" not in r.texto + json.dumps(r.recomendaciones, default=str)
 
 
 def test_reglas_determinista(entorno):

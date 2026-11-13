@@ -1,5 +1,3 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Diagrama de arquitectura del póster (Kafka, Spark batch y streaming, SQLite, Streamlit, Ollama) | pagina poster/figuras/arquitectura.png | ancho 1400 px
-- verif_2: Speedup medido vs ideal y tiempos (muestra mini, 1 y 2 núcleos) con anotación de dataset, fracción y Ryzen 5 3600 | pagina artefactos/mini/figuras/speedup.png | ancho 1400 px
-- verif_3: Métricas ALS vs popularidad con los artefactos de la muestra | pagina artefactos/mini/figuras/metricas.png | ancho 1400 px
-- verif_4: Tipos de espectador en PCA 2D con nombres y tamaños (muestra mini, k=3) | pagina artefactos/mini/figuras/tipos_espectador.png | ancho 1400 px
+- verif_1: escritorio.png: vista previa de la app real (barra lateral con badge, barras de géneros, modo, 'Sin actualizaciones en vivo', LLM y think; tarjetas y chat con respuesta explicada) a 1400 px | pagina artefactos/vista_previa/app.html | ancho 1400 px
+- verif_2: celular.png: la misma vista a 390 px, con la barra lateral arriba y las tarjetas en una columna | pagina artefactos/vista_previa/app.html | ancho 390 px | densidad 2.0

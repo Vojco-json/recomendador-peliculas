@@ -336,7 +336,37 @@ def responder(mensaje: str, userId: int, herramientas: Herramientas,
         respuesta.recomendaciones = respaldo.recomendaciones
         if respaldo.recomendaciones:
             respuesta.texto += " Te dejo las del recomendador directamente:"
+            # Transparencia: la leyenda «Proveedor: …» indica que las tarjetas vienen
+            # del modo reglas y no del LLM.
+            respuesta.proveedor = PROVEEDOR_COMPLETADO
     return respuesta
+
+
+PROVEEDOR_COMPLETADO = "ollama (sin recomendaciones válidas; completado con reglas)"
+
+
+def estado_ollama(cliente=None, timeout_s: float = 2.0) -> dict:
+    """Chequeo rápido de Ollama para la barra lateral (no lanza excepciones).
+
+    Devuelve ``{"ok": bool, "mensaje": str}``. ``ok`` es True solo si el servidor
+    responde y el modelo configurado (LLM_MODEL) está descargado.
+    """
+    try:
+        if cliente is None:
+            import ollama
+
+            cliente = ollama.Client(host=config.OLLAMA_HOST, timeout=timeout_s)
+        lista = cliente.list()
+    except Exception as exc:  # servidor apagado, host mal escrito, timeout...
+        log.info("Ollama no disponible (%s: %s)", type(exc).__name__, exc)
+        return {"ok": False, "mensaje": AVISO_REGLAS}
+    modelos = _campo(lista, "models", []) or []
+    nombres = {str(_campo(m, "model") or _campo(m, "name") or "") for m in modelos}
+    modelo = config.LLM_MODEL
+    if modelo in nombres or f"{modelo}:latest" in nombres:
+        return {"ok": True, "mensaje": f"Ollama listo ({modelo})"}
+    return {"ok": False, "mensaje": f"Ollama responde, pero falta el modelo {modelo} "
+                                    f"(ollama pull {modelo}): usando modo reglas"}
 
 
 def descripcion_config() -> dict:
@@ -346,4 +376,5 @@ def descripcion_config() -> dict:
 
 
 __all__ = ["responder", "responder_reglas", "responder_ollama", "interpretar",
-           "Respuesta", "AVISO_REGLAS", "MAX_RONDAS_HERRAMIENTAS", "descripcion_config"]
+           "Respuesta", "AVISO_REGLAS", "MAX_RONDAS_HERRAMIENTAS", "descripcion_config",
+           "estado_ollama", "PROVEEDOR_COMPLETADO"]
