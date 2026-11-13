@@ -29,3 +29,12 @@ def crear_base_mini(spark, ruta_mini, salida) -> Path:
                                           encoding="utf-8")
     perfiles.ejecutar(spark, tablas, salida, k=3, seed=42, hasta=CORTE, log=lambda *_: None)
     return salida
+
+
+def crear_artefactos_app(spark, ruta_mini, salida) -> Path:
+    """Base mini + peliculas_enriquecidas.parquet (duraciones de muestras/imdb-mini)."""
+    from recomendador.enriquecimiento import enriquecer_imdb
+
+    salida = crear_base_mini(spark, ruta_mini, salida)
+    enriquecer_imdb(ruta_mini, config.RAIZ / "muestras" / "imdb-mini", salida)
+    return salida
