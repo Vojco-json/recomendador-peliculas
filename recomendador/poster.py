@@ -223,26 +223,41 @@ def figura_metricas(metricas: dict, carpeta, nombre: str = "metricas") -> list[P
     modelos = [("als", "ALS (MLlib)", ROJO), ("popularidad", "Popularidad", GRIS)]
     # Si la corrida trae ALS implícito e híbrido (validados en el tiempo), también van.
     if "hibrido" in metricas:
-        modelos[1:1] = [("als_implicito", "ALS implícito", AMBAR),
-                        ("hibrido", "Híbrido ALS+pop.", "#4C9BE8")]
-        for clave in ("als_implicito", "hibrido"):
-            metricas[clave].setdefault("RMSE", float("nan"))   # no aplica a implícito
+        modelos = [("als", "ALS\nexplícito", ROJO),
+                   ("als_implicito", "ALS\nimplícito", AMBAR),
+                   ("hibrido", "Híbrido\nALS+pop.", "#4C9BE8"),
+                   ("popularidad", "Popula-\nridad", GRIS)]
+    n_mod = len(modelos)
+    # Posiciones según la cantidad de modelos (2 o 4), nunca fijas.
+    posiciones = np.arange(n_mod)
+    ancho_fig = 15 if n_mod <= 2 else 18
 
     with matplotlib.rc_context(estilo()):
-        fig, ejes = plt.subplots(1, 3, figsize=(15, 6.4))
+        fig, ejes = plt.subplots(1, 3, figsize=(ancho_fig, 6.8))
         fig.suptitle("ALS frente a la línea base de popularidad", x=0.02, ha="left")
         for ax, (clave, titulo, sentido) in zip(ejes, paneles):
+            # None = la métrica no aplica (p. ej. RMSE del ALS implícito o del híbrido,
+            # que no predicen ratings): se rotula "n/a" en vez de dibujar un 0 engañoso.
             valores = []
             for m, _, _ in modelos:
-                v = metricas.get(m, {}).get(clave)
-                valores.append(float(v) if v is not None and not math.isnan(float(v)) else 0.0)
-            barras = ax.bar([0, 1], valores, color=[c for *_, c in modelos], width=0.62)
-            tope = max(valores) if max(valores) > 0 else 1.0
+                v = (metricas.get(m) or {}).get(clave)
+                try:
+                    v = float(v)
+                    valores.append(None if math.isnan(v) else v)
+                except (TypeError, ValueError):
+                    valores.append(None)
+            alturas = [v if v is not None else 0.0 for v in valores]
+            barras = ax.bar(posiciones, alturas, color=[c for *_, c in modelos],
+                            width=0.62 if n_mod <= 2 else 0.7)
+            tope = max(alturas) if max(alturas) > 0 else 1.0
             for b, v in zip(barras, valores):
-                ax.annotate(_decimal(v, 3), (b.get_x() + b.get_width() / 2, v),
+                ax.annotate(_decimal(v, 3) if v is not None else "n/a",
+                            (b.get_x() + b.get_width() / 2, v or 0.0),
                             textcoords="offset points", xytext=(0, 8), ha="center",
-                            fontsize=16, color=AMBAR, fontweight="bold")
-            ax.set_xticks([0, 1], [etq for _, etq, _ in modelos])
+                            fontsize=16 if n_mod <= 2 else 14,
+                            color=AMBAR if v is not None else TEXTO_2, fontweight="bold")
+            ax.set_xticks(posiciones, [etq for _, etq, _ in modelos],
+                          fontsize=None if n_mod <= 2 else 14)
             ax.set_ylim(0, tope * 1.25)
             ax.set_title(titulo, loc="left", pad=34)
             ax.text(0, 1.02, sentido, transform=ax.transAxes, ha="left", va="bottom",
