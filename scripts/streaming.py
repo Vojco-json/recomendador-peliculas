@@ -91,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         if hilo:
             hilo.detener()
         ctx.cerrar()
-        spark.stop()
+        from recomendador.spark_utils import detener_spark
+        detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
     return 0
 
 

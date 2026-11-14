@@ -26,6 +26,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -110,7 +111,7 @@ def crear_parser() -> argparse.ArgumentParser:
 def trabajador(args) -> int:
     from recomendador import batch_als
     from recomendador.datos import cargar_movielens
-    from recomendador.spark_utils import crear_spark_vigilado
+    from recomendador.spark_utils import crear_spark_vigilado, detener_spark
 
     n = args._trabajador
     params = {**batch_als.PARAMS_DEFECTO, "rank": args.rank, "maxIter": args.iter,
@@ -141,12 +142,26 @@ def trabajador(args) -> int:
             print(f"  [N={n}] repetición {r + 1}/{args.repeticiones}: {tiempos[-1]:.2f} s",
                   flush=True)
         paralelismo = spark.sparkContext.defaultParallelism
+        # El resultado se imprime ANTES de detener Spark: si el apagado de la JVM se
+        # cuelga en Windows, el proceso principal ya tiene los tiempos.
+        print(MARCA + json.dumps({"nucleos": n, "tiempos": tiempos,
+                                  "calentamiento": calentamiento, "arranque_s": arranque,
+                                  "n_ratings": n_ratings, "paralelismo": paralelismo}),
+              flush=True)
     finally:
-        spark.stop()
-    print(MARCA + json.dumps({"nucleos": n, "tiempos": tiempos, "calentamiento": calentamiento,
-                              "arranque_s": arranque, "n_ratings": n_ratings,
-                              "paralelismo": paralelismo}), flush=True)
+        detener_spark(spark)   # detención con plazo: mata la JVM si no termina
     return 0
+
+
+PLAZO_CIERRE_S = 60   # segundos de espera al subproceso después de entregar su resultado
+
+
+def _matar_subproceso(proc) -> None:
+    """Mata el subproceso y su árbol (incluida la JVM de Spark en Windows)."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/f", "/t", "/pid", str(proc.pid)],
+                       capture_output=True, check=False)
+    proc.kill()
 
 
 def _correr_subproceso(args, n: int) -> dict:
@@ -159,24 +174,43 @@ def _correr_subproceso(args, n: int) -> dict:
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace", env=entorno,
                             cwd=str(RAIZ))
-    resultado = None
+    # Un hilo lee la salida; el hilo principal vigila el plazo aunque el subproceso
+    # no imprima nada (antes el plazo solo se revisaba al llegar una línea).
+    estado: dict = {"resultado": None, "cola": []}
+
+    def _leer() -> None:
+        assert proc.stdout is not None
+        for linea in proc.stdout:
+            if linea.startswith(MARCA):
+                estado["resultado"] = json.loads(linea[len(MARCA):])
+            elif linea.startswith("  [N="):
+                print(linea.rstrip(), flush=True)
+            else:   # se guardan las últimas líneas para diagnosticar si falla
+                estado["cola"] = (estado["cola"] + [linea.rstrip()])[-25:]
+
+    lector = threading.Thread(target=_leer, daemon=True)
+    lector.start()
     limite = time.monotonic() + args.plazo
-    cola: list[str] = []
-    assert proc.stdout is not None
-    for linea in proc.stdout:
-        if linea.startswith(MARCA):
-            resultado = json.loads(linea[len(MARCA):])
-        elif linea.startswith("  [N="):
-            print(linea.rstrip(), flush=True)
-        else:
-            cola = (cola + [linea.rstrip()])[-25:]   # para diagnosticar si falla
-        if time.monotonic() > limite:
-            proc.kill()
+    limite_cierre = None   # tras recibir el resultado, margen para que cierre solo
+    while proc.poll() is None:
+        ahora = time.monotonic()
+        if estado["resultado"] is not None and limite_cierre is None:
+            limite_cierre = ahora + PLAZO_CIERRE_S
+        if limite_cierre is not None and ahora > limite_cierre:
+            print(f"  [N={n}] el subproceso no cerró tras entregar su resultado; "
+                  "se termina a la fuerza", flush=True)
+            _matar_subproceso(proc)
+            break
+        if ahora > limite:
+            _matar_subproceso(proc)
             raise TimeoutError(f"N={n}: superó --plazo {args.plazo:.0f} s")
+        time.sleep(0.5)
+    lector.join(5)
     codigo = proc.wait()
-    if codigo != 0 or resultado is None:
+    resultado = estado["resultado"]
+    if resultado is None or (codigo != 0 and limite_cierre is None):
         raise RuntimeError(f"El subproceso con N={n} terminó con código {codigo}.\n"
-                           + "\n".join(cola))
+                           + "\n".join(estado["cola"]))
     return resultado
 
 

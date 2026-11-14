@@ -283,13 +283,65 @@ def crear_spark_vigilado(plazo_s: float = 60, intentos: int = 3, registro=None, 
     raise RuntimeError(f"Spark no arrancó tras {intentos} intentos") from ultimo_error
 
 
-def detener_spark() -> None:
-    """Detiene la SparkSession activa, si existe."""
+PLAZO_DETENER_S = float(os.environ.get("SPARK_PLAZO_DETENER", "30"))
+
+
+def _pid_jvm(spark) -> int | None:
+    """PID del proceso Java de la sesión (se pregunta a la propia JVM)."""
+    try:
+        return int(spark.sparkContext._jvm.java.lang.ProcessHandle.current().pid())
+    except Exception:  # noqa: BLE001 - sin JVM viva no hay PID que obtener
+        return None
+
+
+def _matar_pid(pid: int) -> None:
+    """Mata un proceso por PID (con su árbol en Windows)."""
+    import signal
+    import subprocess
+
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/f", "/t", "/pid", str(pid)],
+                       capture_output=True, check=False)
+    else:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def detener_spark(spark=None, plazo_s: float | None = None) -> bool:
+    """Detiene la SparkSession con plazo (por defecto 30 s, env SPARK_PLAZO_DETENER).
+
+    En Windows ``spark.stop()`` a veces se cuelga al apagar la JVM. Aquí el stop corre
+    en un hilo; si no termina dentro del plazo se mata el proceso Java de ESA sesión
+    (su PID se obtiene antes de detener) y se limpia el estado de pyspark para que el
+    script pueda terminar. Devuelve True si se detuvo a tiempo, False si hubo que matar.
+    """
+    import threading
+
     from pyspark.sql import SparkSession
 
-    activa = SparkSession.getActiveSession()
-    if activa is not None:
-        activa.stop()
+    spark = spark or SparkSession.getActiveSession()
+    if spark is None:
+        return True
+    plazo = PLAZO_DETENER_S if plazo_s is None else float(plazo_s)
+    pid = _pid_jvm(spark)
+    gateway = getattr(spark.sparkContext, "_gateway", None)
+    proc = getattr(gateway, "proc", None)
+
+    hilo = threading.Thread(target=spark.stop, name="detener-spark", daemon=True)
+    hilo.start()
+    hilo.join(plazo)
+    if not hilo.is_alive():
+        return True
+    print(f"Aviso: spark.stop() no terminó en {plazo:.0f} s; se mata la JVM "
+          f"(pid {pid}).", file=sys.stderr, flush=True)
+    if pid is not None:
+        _matar_pid(pid)
+    if proc is not None:
+        _matar_arbol(proc)
+    _reiniciar_estado_pyspark()
+    return False
 
 
 def precalentar_conector() -> Path | None:

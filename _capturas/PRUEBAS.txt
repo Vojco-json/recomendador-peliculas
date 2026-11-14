@@ -1,6 +1,7 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 - PASA: La vista previa muestra el tipo de espectador, las tarjetas y la respuesta del chat explicada — ok
-- PASA: [aceptación] check_entorno corre sin traceback y reporta cada chequeo — codigo 0: = C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\demo
+- PASA: [aceptación] check_entorno corre sin traceback y reporta cada chequeo — codigo 0: omendador-peliculas\artefactos\25m
+  ARTEFACTOS_DEMO = C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\demo
   ESTADO_DB = C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\estado.db
   LLM_PROVIDER = ollama
   LLM_MODEL = qwen3.5:9b
@@ -8,15 +9,14 @@ Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
   LLM_THINK = False
   TMDB_API_KEY = no definida
 
-Resumen: entorno listo.
-Opcionales pendientes: Topic 'ratings', Datos ml-25m
+Resumen: entorno listo.
 - PASA: [aceptación] La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones — codigo 0: ............                                                             [100%]
-12 passed in 21.86s
-CORRECTO: el proceso con PID 21448 (proceso secundario de PID 21076)
+12 passed in 22.39s
+CORRECTO: el proceso con PID 20852 (proceso secundario de PID 21020)
 ha sido terminado.
-CORRECTO: el proceso con PID 21076 (proceso secundario de PID 22052)
+CORRECTO: el proceso con PID 21020 (proceso secundario de PID 4068)
 ha sido terminado.
-CORRECTO: el proceso con PID 22052 (proceso secundario de PID 16616)
+CORRECTO: el proceso con PID 4068 (proceso secundario de PID 17900)
 ha sido terminado.
 - PASA: [aceptación] Dry-run sobre la muestra emite 5 eventos ordenados por timestamp — codigo 0: {"userId":1,"movieId":1,"rating":2.5,"timestamp":1262404000}
 {"userId":1,"movieId":6,"rating":5.0,"timestamp":1262407600}
@@ -28,182 +28,138 @@ ha sido terminado.
 - PASA: [aceptación] Pruebas de orden temporal, formato JSON y filtro --desde; con broker disponible, ida y vuelta real de 5 mensajes por un topic de prueba único — codigo 0: ..................                                                       [100%]
 18 passed in 23.15s
 - PASA: [aceptación] El entrenamiento sobre la muestra imprime la tabla de métricas sin NaN — codigo 0:  use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
-26/11/13 19:06:18 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 19:06:18 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-26/11/13 19:06:18 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
-- PASA: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 0: nimum_pyarrow_version):
+26/11/13 20:46:35 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 20:46:35 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/11/13 20:46:36 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
+- PASA: [aceptación] Partición temporal correcta, Toy Story primera en popularidad, métricas en [0,1], fold-in sin películas vistas y --desde reduce el entrenamiento — codigo 0: ow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 29.63s
-CORRECTO: el proceso con PID 18688 (proceso secundario de PID 10596)
+12 passed, 102 warnings in 60.17s (0:01:00)
+CORRECTO: el proceso con PID 18440 (proceso secundario de PID 4804)
 ha sido terminado.
-CORRECTO: el proceso con PID 10596 (proceso secundario de PID 2900)
+CORRECTO: el proceso con PID 4804 (proceso secundario de PID 22516)
 ha sido terminado.
-CORRECTO: el proceso con PID 2900 (proceso secundario de PID 20472)
+CORRECTO: el proceso con PID 22516 (proceso secundario de PID 18564)
 ha sido terminado.
-- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: 3 19:07:12 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 19:07:19 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 19:07:19 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 0: nimum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.70s
-CORRECTO: el proceso con PID 21700 (proceso secundario de PID 21656)
+- PASA: [aceptación] El perfilado sobre la muestra lista los tipos de espectador con nombre y tamaño — codigo 0: 3 20:48:29 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 20:48:38 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 20:48:38 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: [aceptación] El usuario 1 tiene Action entre sus 2 géneros principales y el usuario 2 tiene Romance o Drama. Quedan en clusters distintos, los nombres son únicos y la actualización incremental sube el peso del gén — codigo 0: docs.pytest.org/en/stable/how-to/capture-warnings.html
+15 passed, 8 warnings in 46.65s
+CORRECTO: el proceso con PID 3024 (proceso secundario de PID 15848)
 ha sido terminado.
-CORRECTO: el proceso con PID 21656 (proceso secundario de PID 12336)
+CORRECTO: el proceso con PID 15848 (proceso secundario de PID 21984)
 ha sido terminado.
-CORRECTO: el proceso con PID 12336 (proceso secundario de PID 5456)
-ha sido terminado.
-- PASA: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 0: ...                                                                      [100%]
-3 passed in 31.74s
-CORRECTO: el proceso con PID 4524 (proceso secundario de PID 21532)
-ha sido terminado.
-CORRECTO: el proceso con PID 21532 (proceso secundario de PID 12900)
-ha sido terminado.
-CORRECTO: el proceso con PID 12900 (proceso secundario de PID 20564)
-ha sido terminado.
-- PASA: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 0: //docs.pytest.org/en/stable/how-to/capture-warnings.html
-3 passed, 4 warnings in 53.20s
-CORRECTO: el proceso con PID 9316 (proceso secundario de PID 20080)
-ha sido terminado.
-CORRECTO: el proceso con PID 20080 (proceso secundario de PID 21544)
-ha sido terminado.
-CORRECTO: el proceso con PID 21544 (proceso secundario de PID 5520)
+CORRECTO: el proceso con PID 21984 (proceso secundario de PID 22480)
 ha sido terminado.
 
-ERROR: no se encontr� el proceso "12796".
+ERROR: no se encontr� el proceso "22048".
+- PASA: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite (se salta solo si no hay broker) y prueba con fuente archivo — codigo 0:        [100%]
+3 passed in 93.29s (0:01:33)
+CORRECTO: el proceso con PID 12896 (proceso secundario de PID 21700)
+ha sido terminado.
+CORRECTO: el proceso con PID 21700 (proceso secundario de PID 20792)
+ha sido terminado.
+CORRECTO: el proceso con PID 20792 (proceso secundario de PID 16872)
+ha sido terminado.
+
+ERROR: no se encontr� el proceso "13188".
+ERROR: no se encontr� el proceso "14572".
+- PASA: [aceptación] preparar_demo sobre la muestra crea el subconjunto desde 2015 con el conteo documentado en LEEME.md, y el reentrenamiento demo cambia version_modelo en meta — codigo 0: minimum_pyarrow_version):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3 passed, 4 warnings in 35.23s
+CORRECTO: el proceso con PID 20564 (proceso secundario de PID 3280)
+ha sido terminado.
+CORRECTO: el proceso con PID 3280 (proceso secundario de PID 20728)
+ha sido terminado.
+CORRECTO: el proceso con PID 20728 (proceso secundario de PID 19732)
+ha sido terminado.
 - PASA: [aceptación] La escalabilidad rápida sobre la muestra con 1 y 2 núcleos imprime los speedups — codigo 0: os en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\escalabilidad.json
 Gráfico: C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.png, C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.svg
 Nota: con datos pequeños el speedup no es representativo (domina el costo fijo de Spark).
-- PASA: [aceptación] Se generan las figuras del póster como PNG y SVG no vacíos — codigo 0: e()
-
-tests/test_poster.py::test_genera_png_y_svg_no_vacios
-  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+- FALLA: [aceptación] Se generan las figuras del póster como PNG y SVG no vacíos — codigo 1: xt.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-16 passed, 14 warnings in 13.02s
-- PASA: Suites del paquete 1 y del paquete 2 juntas, sin regresión (incluye la prueba del Popen vigilado) — codigo 0: ..............................                                           [100%]
-30 passed in 51.22s
-CORRECTO: el proceso con PID 19932 (proceso secundario de PID 3620)
-ha sido terminado.
-CORRECTO: el proceso con PID 3620 (proceso secundario de PID 9064)
-ha sido terminado.
-CORRECTO: el proceso con PID 9064 (proceso secundario de PID 21876)
-ha sido terminado.
-- PASA: Regresión: suite batch del paquete 3 — codigo 0: imum_pyarrow_version):
+=========================== short test summary info ===========================
+FAILED tests/test_poster.py::test_artefactos_reales_de_la_muestra_si_existen
+1 failed, 15 passed, 14 warnings in 8.14s
+- PASA: Aceptación: el perfilado de la muestra lista los tipos con nombre y tamaño — codigo 0: 3 20:52:57 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+26/11/13 20:53:04 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 20:53:04 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+- PASA: Aceptación: suite de perfiles (top géneros, clusters distintos, nombres únicos, actualización incremental, diccionario de tags) — codigo 0: imum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 30.95s
-CORRECTO: el proceso con PID 6460 (proceso secundario de PID 20712)
+15 passed, 8 warnings in 26.42s
+CORRECTO: el proceso con PID 19184 (proceso secundario de PID 20312)
 ha sido terminado.
-CORRECTO: el proceso con PID 20712 (proceso secundario de PID 20580)
+CORRECTO: el proceso con PID 20312 (proceso secundario de PID 15848)
 ha sido terminado.
-CORRECTO: el proceso con PID 20580 (proceso secundario de PID 20296)
+CORRECTO: el proceso con PID 15848 (proceso secundario de PID 17676)
 ha sido terminado.
-- PASA: Perfilado sobre la muestra mini con k=3 — codigo 0: 3 19:12:07 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 19:12:13 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 19:12:13 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: Suite de perfiles — codigo 0: inimum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.08s
-CORRECTO: el proceso con PID 20632 (proceso secundario de PID 16404)
-ha sido terminado.
-CORRECTO: el proceso con PID 16404 (proceso secundario de PID 5452)
-ha sido terminado.
-CORRECTO: el proceso con PID 5452 (proceso secundario de PID 21812)
-ha sido terminado.
-- PASA: Estrés: entorno, batch y perfiles 2 veces cada una, sin ninguna corrida con error — codigo 0:  warnings in 36.12s
-vuelta 1 tests/test_perfiles.py: código 0 (37s) 15 passed, 9 warnings in 30.97s
-vuelta 2 tests/test_entorno.py: código 0 (45s) 12 passed in 44.36s
-vuelta 2 tests/test_batch.py: código 0 (45s) 12 passed, 31 warnings in 33.70s
-vuelta 2 tests/test_perfiles.py: código 0 (45s) 15 passed, 8 warnings in 29.69s
+- PASA: Estrés: perfiles y entorno 2 veces cada una sin ninguna corrida con error (unos 100 s; deja margen para un reintento de arranque) — codigo 0: vuelta 1 tests/test_perfiles.py: código 0 (30s) 15 passed, 8 warnings in 29.13s
+vuelta 1 tests/test_entorno.py: código 0 (30s) 12 passed in 26.43s
+vuelta 2 tests/test_perfiles.py: código 0 (32s) 15 passed, 8 warnings in 30.65s
+vuelta 2 tests/test_entorno.py: código 0 (32s) 12 passed in 27.30s
 
 Corridas con error: 0. Intentos de arranque de Spark reintentados: 0
-- PASA: Aceptación: el perfilado de la muestra lista los tipos con nombre y tamaño — codigo 0: 3 19:14:16 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-26/11/13 19:14:23 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
-26/11/13 19:14:23 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
-- PASA: Aceptación: suite de perfiles (top géneros, clusters distintos, nombres únicos, actualización incremental, diccionario de tags) — codigo 0: minimum_pyarrow_version):
+- PASA: Regresión del paquete 3 (batch) con la SparkSession compartida — codigo 0: Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-15 passed, 8 warnings in 25.66s
-CORRECTO: el proceso con PID 2000 (proceso secundario de PID 1876)
-ha sido terminado.
-CORRECTO: el proceso con PID 1876 (proceso secundario de PID 21228)
-ha sido terminado.
-CORRECTO: el proceso con PID 21228 (proceso secundario de PID 21844)
-ha sido terminado.
-- PASA: Estrés: perfiles y entorno 2 veces cada una sin ninguna corrida con error (unos 100 s; deja margen para un reintento de arranque) — codigo 0: vuelta 1 tests/test_perfiles.py: código 0 (28s) 15 passed, 8 warnings in 27.56s
-vuelta 1 tests/test_entorno.py: código 0 (28s) 12 passed in 24.39s
-vuelta 2 tests/test_perfiles.py: código 0 (28s) 15 passed, 8 warnings in 27.44s
-vuelta 2 tests/test_entorno.py: código 0 (28s) 12 passed in 24.34s
-
-Corridas con error: 0. Intentos de arranque de Spark reintentados: 0
-- PASA: Regresión del paquete 3 (batch) con la SparkSession compartida — codigo 0: minimum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 30 warnings in 29.84s
-CORRECTO: el proceso con PID 21792 (proceso secundario de PID 8984)
-ha sido terminado.
-CORRECTO: el proceso con PID 8984 (proceso secundario de PID 5384)
-ha sido terminado.
-CORRECTO: el proceso con PID 5384 (proceso secundario de PID 12336)
-ha sido terminado.
+12 passed, 102 warnings in 58.44s
 - PASA: [aceptación] Integración real productor → Kafka → Structured Streaming → SQLite y prueba con fuente archivo — codigo 0: ...                                                                      [100%]
-3 passed in 31.97s
-CORRECTO: el proceso con PID 9984 (proceso secundario de PID 21436)
+3 passed in 33.75s
+CORRECTO: el proceso con PID 18740 (proceso secundario de PID 18780)
 ha sido terminado.
-CORRECTO: el proceso con PID 21436 (proceso secundario de PID 21564)
+CORRECTO: el proceso con PID 18780 (proceso secundario de PID 21024)
 ha sido terminado.
-CORRECTO: el proceso con PID 21564 (proceso secundario de PID 8436)
+CORRECTO: el proceso con PID 21024 (proceso secundario de PID 1608)
 ha sido terminado.
-- PASA: [aceptación] preparar_demo crea un subconjunto de 90 ratings (LEEME.md) y el reentrenamiento demo cambia version_modelo — codigo 0: on(minimum_pyarrow_version):
+- PASA: [aceptación] preparar_demo crea un subconjunto de 90 ratings (LEEME.md) y el reentrenamiento demo cambia version_modelo — codigo 0: nimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-3 passed, 4 warnings in 34.18s
-CORRECTO: el proceso con PID 17984 (proceso secundario de PID 9360)
+3 passed, 4 warnings in 34.69s
+CORRECTO: el proceso con PID 20900 (proceso secundario de PID 20792)
 ha sido terminado.
-CORRECTO: el proceso con PID 9360 (proceso secundario de PID 2388)
+CORRECTO: el proceso con PID 20792 (proceso secundario de PID 10152)
 ha sido terminado.
-CORRECTO: el proceso con PID 2388 (proceso secundario de PID 2616)
+CORRECTO: el proceso con PID 10152 (proceso secundario de PID 12984)
 ha sido terminado.
-- PASA: Regresión de los paquetes 3 y 4 (batch y perfiles) — codigo 0: (minimum_pyarrow_version):
+- PASA: Regresión de los paquetes 3 y 4 (batch y perfiles) — codigo 0: row_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-27 passed, 46 warnings in 37.49s
-CORRECTO: el proceso con PID 16408 (proceso secundario de PID 7480)
+27 passed, 118 warnings in 64.82s (0:01:04)
+CORRECTO: el proceso con PID 2380 (proceso secundario de PID 17528)
 ha sido terminado.
-CORRECTO: el proceso con PID 7480 (proceso secundario de PID 7400)
+CORRECTO: el proceso con PID 17528 (proceso secundario de PID 3436)
 ha sido terminado.
-CORRECTO: el proceso con PID 7400 (proceso secundario de PID 4004)
+CORRECTO: el proceso con PID 3436 (proceso secundario de PID 21532)
 ha sido terminado.
 - PASA: [aceptación] Escalabilidad rápida sobre la muestra con 1 y 2 núcleos (subproceso por N, calentamiento descartado, imprime speedups) — codigo 0: os en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\escalabilidad.json
 Gráfico: C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.png, C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.svg
 Nota: con datos pequeños el speedup no es representativo (domina el costo fijo de Spark).
-- PASA: [aceptación] Figuras del póster en PNG (300 dpi) y SVG no vacíos, títulos en español, fuentes >= 14 pt, paleta, componentes de la arquitectura, anotación Ryzen 5 3600, aviso si falta un artefacto y cá — codigo 0: he()
-
-tests/test_poster.py::test_genera_png_y_svg_no_vacios
-  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+- FALLA: [aceptación] Figuras del póster en PNG (300 dpi) y SVG no vacíos, títulos en español, fuentes >= 14 pt, paleta, componentes de la arquitectura, anotación Ryzen 5 3600, aviso si falta un artefacto y cá — codigo 1: xt.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-16 passed, 14 warnings in 9.22s
-- PASA: figuras_poster.py sobre los artefactos reales de la muestra genera las 4 figuras — codigo 0: Figuras generadas en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras:
-  arquitectura      arquitectura.png, arquitectura.svg
-  metricas          metricas.png, metricas.svg
-  tipos_espectador  tipos_espectador.png, tipos_espectador.svg
-  speedup           speedup.png, speedup.svg
-- PASA: [aceptación] Cruce IMDb (Toy Story, 81 min), TMDb sin clave degrada sin error, normalización de títulos e importación de Letterboxd con 'Emparejadas: 4 de 5' en un directorio temporal — codigo 0: ....                                                        [100%]
-17 passed in 48.25s
-CORRECTO: el proceso con PID 7732 (proceso secundario de PID 16040)
+=========================== short test summary info ===========================
+FAILED tests/test_poster.py::test_artefactos_reales_de_la_muestra_si_existen
+1 failed, 15 passed, 14 warnings in 7.91s
+- FALLA: figuras_poster.py sobre los artefactos reales de la muestra genera las 4 figuras — codigo 1:          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\numpy\lib\stride_tricks.py", line 422, in _broadcast_shape
+    b = np.broadcast(*args[:32])
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (2,) and arg 1 with shape (4,).
+- PASA: [aceptación] Cruce IMDb (Toy Story, 81 min), TMDb sin clave degrada sin error, normalización de títulos e importación de Letterboxd con 'Emparejadas: 4 de 5' en un directorio temporal — codigo 0: .................                                                        [100%]
+17 passed in 28.38s
+CORRECTO: el proceso con PID 12008 (proceso secundario de PID 2956)
 ha sido terminado.
-CORRECTO: el proceso con PID 16040 (proceso secundario de PID 21768)
+CORRECTO: el proceso con PID 2956 (proceso secundario de PID 12904)
 ha sido terminado.
-CORRECTO: el proceso con PID 21768 (proceso secundario de PID 19636)
-ha sido terminado.
-
-ERROR: no se encontr� el proceso "16880".
+CORRECTO: el proceso con PID 12904 (proceso secundario de PID 14708)
+ha sido terminado.
 - PASA: [aceptación] El importador funciona de punta a punta sobre la muestra creando sus artefactos si faltan — codigo 0: pe (1977)  · puntaje 4.63
    4. Finding Nemo (2003)  · puntaje 4.58
    5. The Lion King (1994)  · puntaje 4.56
@@ -214,38 +170,37 @@ ERROR: no se encontr� el proceso "16880".
   10. Groundhog Day (1993)  · puntaje 4.13
 Guardado en artefactos\mini_letterboxd\letterboxd\usuario_1000000.json
 - PASA: [aceptación] AppTest con el proveedor 'reglas' sobre la muestra: el usuario 1 ve su tipo de espectador y, al pedir 'algo corto y liviano para hoy', recibe recomendaciones explicadas sin películas vistas. Con un cl — codigo 0: .........                                                                [100%]
-9 passed in 33.14s
-CORRECTO: el proceso con PID 20664 (proceso secundario de PID 22020)
+9 passed in 35.66s
+CORRECTO: el proceso con PID 16600 (proceso secundario de PID 22352)
 ha sido terminado.
-CORRECTO: el proceso con PID 22020 (proceso secundario de PID 14464)
+CORRECTO: el proceso con PID 22352 (proceso secundario de PID 5968)
 ha sido terminado.
-CORRECTO: el proceso con PID 14464 (proceso secundario de PID 10652)
+CORRECTO: el proceso con PID 5968 (proceso secundario de PID 16028)
 ha sido terminado.
 - PASA: [aceptación] Las herramientas devuelven datos reales del usuario 1 de ml-mini (Action/Thriller) y un userId inexistente no rompe — codigo 0: ....                                                                     [100%]
-4 passed in 27.28s
-CORRECTO: el proceso con PID 20052 (proceso secundario de PID 12672)
+4 passed in 28.14s
+CORRECTO: el proceso con PID 2820 (proceso secundario de PID 19688)
 ha sido terminado.
-CORRECTO: el proceso con PID 12672 (proceso secundario de PID 21892)
+CORRECTO: el proceso con PID 19688 (proceso secundario de PID 19420)
 ha sido terminado.
-CORRECTO: el proceso con PID 21892 (proceso secundario de PID 9676)
+CORRECTO: el proceso con PID 19420 (proceso secundario de PID 22480)
 ha sido terminado.
 - PASA: [aceptación] El README tiene todas las secciones y solo cita scripts que existen — codigo 0: ........                                                                 [100%]
-8 passed in 0.03s
-- PASA: [aceptación] Las figuras siguen generándose y la de métricas avisa cuando hay 0 usuarios evaluados — codigo 0: he()
-
-tests/test_poster.py::test_genera_png_y_svg_no_vacios
-  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+8 passed in 0.04s
+- FALLA: [aceptación] Las figuras siguen generándose y la de métricas avisa cuando hay 0 usuarios evaluados — codigo 1: xt.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-16 passed, 14 warnings in 9.13s
+=========================== short test summary info ===========================
+FAILED tests/test_poster.py::test_artefactos_reales_de_la_muestra_si_existen
+1 failed, 15 passed, 14 warnings in 7.96s
 - PASA: Suite del paquete 7: cruce IMDb (Toy Story 81 min), TMDb sin clave y con sesión falsa (es-ES, respaldo en-US, caché, 404, sin red), normalización de títulos, año ±1 e importación de Letterboxd ('Empar — codigo 0: .................                                                        [100%]
-17 passed in 27.51s
-CORRECTO: el proceso con PID 17320 (proceso secundario de PID 18092)
+17 passed in 28.79s
+CORRECTO: el proceso con PID 10280 (proceso secundario de PID 1724)
 ha sido terminado.
-CORRECTO: el proceso con PID 18092 (proceso secundario de PID 20804)
+CORRECTO: el proceso con PID 1724 (proceso secundario de PID 21548)
 ha sido terminado.
-CORRECTO: el proceso con PID 20804 (proceso secundario de PID 18556)
+CORRECTO: el proceso con PID 21548 (proceso secundario de PID 10844)
 ha sido terminado.
 - PASA: Importador de Letterboxd de punta a punta sobre la muestra; crea los artefactos si faltan — codigo 0: pe (1977)  · puntaje 4.63
    4. Finding Nemo (2003)  · puntaje 4.58
@@ -260,44 +215,78 @@ Guardado en artefactos\mini_letterboxd\letterboxd\usuario_1000000.json
 Películas: 25 · con duración IMDb: 24 · con nota IMDb: 24
 Escrito: artefactos\mini_imdb\peliculas_enriquecidas.parquet
 - PASA: Aceptación: AppTest con 'reglas' (usuario 1 ve su tipo y recibe solo When Harry Met Sally, 95 min, explicada y no vista), aviso visible si Ollama no responde, cliente ollama simulado (think=False por  — codigo 0: .........                                                                [100%]
-9 passed in 33.11s
-CORRECTO: el proceso con PID 10932 (proceso secundario de PID 4336)
+9 passed in 34.40s
+CORRECTO: el proceso con PID 17524 (proceso secundario de PID 21684)
 ha sido terminado.
-CORRECTO: el proceso con PID 4336 (proceso secundario de PID 22404)
+CORRECTO: el proceso con PID 21684 (proceso secundario de PID 19984)
 ha sido terminado.
-CORRECTO: el proceso con PID 22404 (proceso secundario de PID 10936)
+CORRECTO: el proceso con PID 19984 (proceso secundario de PID 16600)
 ha sido terminado.
 - PASA: Aceptación: herramientas con datos reales del usuario 1 de ml-mini (Action/Thriller, 20 películas, 4 tags), filtro corto+liviano, usuario inexistente sin errores y prioridad de estado.db — codigo 0: ....                                                                     [100%]
-4 passed in 27.27s
-CORRECTO: el proceso con PID 1964 (proceso secundario de PID 22364)
+4 passed in 28.81s
+CORRECTO: el proceso con PID 14828 (proceso secundario de PID 10416)
 ha sido terminado.
-CORRECTO: el proceso con PID 22364 (proceso secundario de PID 7172)
+CORRECTO: el proceso con PID 10416 (proceso secundario de PID 3612)
 ha sido terminado.
-CORRECTO: el proceso con PID 7172 (proceso secundario de PID 6856)
+CORRECTO: el proceso con PID 3612 (proceso secundario de PID 17844)
 ha sido terminado.
 - PASA: Aceptación: AppTest con 'reglas' (usuario 1, tipo visible, solo When Harry Met Sally, no vista y explicada). Aviso de Ollama en la barra lateral al cargar y en el chat. Cliente ollama simulado con thi — codigo 0: .........                                                                [100%]
-9 passed in 33.17s
-CORRECTO: el proceso con PID 3948 (proceso secundario de PID 412)
+9 passed in 35.79s
+CORRECTO: el proceso con PID 9272 (proceso secundario de PID 20268)
 ha sido terminado.
-CORRECTO: el proceso con PID 412 (proceso secundario de PID 20364)
+CORRECTO: el proceso con PID 20268 (proceso secundario de PID 21864)
 ha sido terminado.
-CORRECTO: el proceso con PID 20364 (proceso secundario de PID 12644)
+CORRECTO: el proceso con PID 21864 (proceso secundario de PID 6460)
 ha sido terminado.
 - PASA: Aceptación: herramientas con datos reales del usuario 1 de ml-mini (Action/Thriller); un userId inexistente no rompe — codigo 0: ....                                                                     [100%]
-4 passed in 27.82s
-CORRECTO: el proceso con PID 2000 (proceso secundario de PID 20692)
+4 passed in 27.47s
+CORRECTO: el proceso con PID 8264 (proceso secundario de PID 22400)
 ha sido terminado.
-CORRECTO: el proceso con PID 20692 (proceso secundario de PID 19996)
+CORRECTO: el proceso con PID 22400 (proceso secundario de PID 3860)
 ha sido terminado.
-CORRECTO: el proceso con PID 19996 (proceso secundario de PID 11072)
+CORRECTO: el proceso con PID 3860 (proceso secundario de PID 4772)
 ha sido terminado.
-- PASA: Estrés (reemplaza a la versión secuencial que pasaba de 3 min): entorno, batch y perfiles 2 veces cada una, en paralelo por vuelta, sin ninguna corrida con error (unos 75 s) — codigo 0:  warnings in 35.12s
-vuelta 1 tests/test_perfiles.py: código 0 (36s) 15 passed, 8 warnings in 31.59s
-vuelta 2 tests/test_entorno.py: código 0 (29s) 12 passed in 28.05s
-vuelta 2 tests/test_batch.py: código 0 (35s) 12 passed, 31 warnings in 34.69s
-vuelta 2 tests/test_perfiles.py: código 0 (35s) 15 passed, 8 warnings in 31.59s
+- PASA: Estrés (reemplaza a la versión secuencial que pasaba de 3 min): entorno, batch y perfiles 2 veces cada una, en paralelo por vuelta, sin ninguna corrida con error (unos 75 s) — codigo 0: 0:01:07)
+vuelta 1 tests/test_perfiles.py: código 0 (68s) 15 passed, 9 warnings in 32.02s
+vuelta 2 tests/test_entorno.py: código 0 (30s) 12 passed in 29.10s
+vuelta 2 tests/test_batch.py: código 0 (65s) 12 passed, 102 warnings in 64.03s (0:01:04)
+vuelta 2 tests/test_perfiles.py: código 0 (65s) 15 passed, 8 warnings in 32.20s
 
 Corridas con error: 0. Intentos de arranque de Spark reintentados: 0
 - PASA: Genera la vista previa estática de la app real (AppTest) en artefactos/vista_previa/app.html — codigo 0: b.lapack.JNILAPACK
-26/11/13 19:25:20 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
-2026-11-13 19:25:25.897 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+26/11/13 21:05:54 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+2026-11-13 21:06:01.109 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+- PASA: ALS batch (con implícito, validación temporal e híbrido) sobre la muestra — codigo 0: t.org/en/stable/how-to/capture-warnings.html
+12 passed, 102 warnings in 77.50s (0:01:17)
+CORRECTO: el proceso con PID 18596 (proceso secundario de PID 8512)
+ha sido terminado.
+CORRECTO: el proceso con PID 8512 (proceso secundario de PID 17068)
+ha sido terminado.
+CORRECTO: el proceso con PID 17068 (proceso secundario de PID 18080)
+ha sido terminado.
+
+ERROR: no se encontr� el proceso "9928".
+- FALLA: Figuras del póster, con la de métricas extendida — codigo 1: xt.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_poster.py::test_artefactos_reales_de_la_muestra_si_existen
+1 failed, 15 passed, 14 warnings in 7.71s
+- PASA: Escalabilidad rápida con la vigilancia de plazo nueva — codigo 0: os en C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\escalabilidad.json
+Gráfico: C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.png, C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas\artefactos\mini\figuras\speedup.svg
+Nota: con datos pequeños el speedup no es representativo (domina el costo fijo de Spark).
+- PASA: Entrenamiento batch de punta a punta sobre la muestra — codigo 0:  use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/11/13 21:08:37 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/11/13 21:08:37 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/11/13 21:08:38 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.lapack.JNILAPACK
+- PASA: Modo demo y fold-in con los factores implícitos — codigo 0: minimum_pyarrow_version):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3 passed, 4 warnings in 32.83s
+CORRECTO: el proceso con PID 11628 (proceso secundario de PID 5224)
+ha sido terminado.
+CORRECTO: el proceso con PID 5224 (proceso secundario de PID 11780)
+ha sido terminado.
+CORRECTO: el proceso con PID 11780 (proceso secundario de PID 17404)
+ha sido terminado.

@@ -82,7 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         inicio = time.perf_counter()
         spark = crear_spark(nucleos=args.nucleos, app="ordenar-ratings")
         destino, n = ordenar(datos, args.salida, spark)
-        spark.stop()
+        from recomendador.spark_utils import detener_spark
+        detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
     except ImportError as exc:
         print(f"ERROR: falta una dependencia ({exc}). Ejecuta setup_entorno.ps1.",
               file=sys.stderr)

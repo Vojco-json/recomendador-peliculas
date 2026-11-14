@@ -221,6 +221,12 @@ def figura_metricas(metricas: dict, carpeta, nombre: str = "metricas") -> list[P
                (f"Precision@{k}", f"Precision@{k}", "mayor es mejor"),
                (f"NDCG@{k}", f"NDCG@{k}", "mayor es mejor")]
     modelos = [("als", "ALS (MLlib)", ROJO), ("popularidad", "Popularidad", GRIS)]
+    # Si la corrida trae ALS implícito e híbrido (validados en el tiempo), también van.
+    if "hibrido" in metricas:
+        modelos[1:1] = [("als_implicito", "ALS implícito", AMBAR),
+                        ("hibrido", "Híbrido ALS+pop.", "#4C9BE8")]
+        for clave in ("als_implicito", "hibrido"):
+            metricas[clave].setdefault("RMSE", float("nan"))   # no aplica a implícito
 
     with matplotlib.rc_context(estilo()):
         fig, ejes = plt.subplots(1, 3, figsize=(15, 6.4))

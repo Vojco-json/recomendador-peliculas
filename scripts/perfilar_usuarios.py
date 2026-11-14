@@ -94,7 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     finally:
-        spark.stop()
+        from recomendador.spark_utils import detener_spark
+        detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
 
     print()
     print(f"Tipos de espectador (k={args.k}, seed={args.seed}, "

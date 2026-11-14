@@ -117,6 +117,31 @@ Tiempos orientativos en un Ryzen 5 3600 con 6 GB para Spark.
     ```
 11. **App**: `.venv\Scripts\python -m streamlit run app/app.py`.
 
+### Métricas de ranking: ALS implícito, híbrido y cold start
+
+La primera corrida de 25M dio RMSE 0,845 con ALS explícito, pero Precision@10 y NDCG@10
+de 0,0002 (azar) frente a 0,060 / 0,072 de la popularidad. Se descartó primero un error de
+IDs: `metricas.json` trae `error_ids_max`, la diferencia entre la predicción de Spark y u·v
+calculado con los factores guardados (debe ser ~0). El problema era de modelo: el ALS
+explícito predice bien la nota, pero sube al top películas con muy pocos votos.
+
+`entrenar_batch.py` ahora:
+
+1. Recomienda solo entre películas con **al menos 50 votos** (`--min-votos`).
+2. Entrena **ALS implícito** (`implicitPrefs=True`, `alpha` configurable con `--alphas` o
+   `ALS_ALPHA`, ranks `--ranks-implicito 50,100`).
+3. Elige rank, alpha y el peso del **híbrido ALS + popularidad** (`--pesos-hibrido`;
+   score = peso·z(ALS) + (1−peso)·z(log votos)) con **validación temporal**: entrena antes de
+   2017 y valida con 2017. El conjunto de prueba (2018 en adelante) nunca se usa para elegir.
+4. Reporta en `metricas.json` y en la figura `metricas`: `als` (explícito, con RMSE),
+   `als_implicito`, `hibrido`, `popularidad`, la grilla de `validacion` y `cold_start_pct`.
+   Los artefactos `modelo_als`/factores y `recs_top20` salen del modelo del híbrido.
+
+**Cold start:** cerca del **82 % de las calificaciones de prueba** son de usuarios (o películas)
+que no aparecen antes del corte. Ningún modelo de factores puede recomendarles nada, por eso
+quedan fuera de Precision@10/NDCG@10 (se reporta el porcentaje como `cold_start_pct`). En la
+demo, esos usuarios se atienden con la popularidad, el fold-in del streaming o Letterboxd.
+
 ## Guía de la demo en vivo (5 minutos)
 
 **Antes de la expo (con internet, el día anterior):** pasos 1–9 terminados,

@@ -82,7 +82,8 @@ def crear_artefactos_si_faltan(datos: Path, artefactos: Path, k: int | None) -> 
             perfiles.ejecutar(spark, tablas, artefactos, k=k, log=lambda *_: None)
             print(f"  Perfiles y tipos de espectador (k={k}): perfiles.parquet, tipos.json")
     finally:
-        spark.stop()
+        from recomendador.spark_utils import detener_spark
+        detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
 
 
 def imprimir(res: dict) -> None:

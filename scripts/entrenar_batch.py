@@ -80,6 +80,14 @@ def crear_parser() -> argparse.ArgumentParser:
                    help="mínimo de votos para la lista de popularidad (%(default)s)")
     p.add_argument("--relevante", type=float, default=config.RELEVANTE_MIN,
                    help="rating mínimo para considerar relevante una película (%(default)s)")
+    lista = lambda tipo: (lambda t: [tipo(x) for x in t.split(",") if x.strip()])  # noqa: E731
+    p.add_argument("--ranks-implicito", type=lista(int), default=[50, 100],
+                   help="ranks del ALS implícito a validar, separados por coma (50,100)")
+    p.add_argument("--alphas", type=lista(float),
+                   default=[float(x) for x in os.environ.get("ALS_ALPHA", "10,40").split(",")],
+                   help="valores de alpha del ALS implícito (env ALS_ALPHA; 10,40)")
+    p.add_argument("--pesos-hibrido", type=lista(float), default=[0.3, 0.5, 0.7],
+                   help="pesos del ALS en el híbrido ALS+popularidad (0.3,0.5,0.7)")
     return p
 
 
@@ -105,12 +113,16 @@ def main(argv: list[str] | None = None) -> int:
         ratings = cargar_movielens(datos, spark, ["ratings"])["ratings"]
         res = batch_als.ejecutar(spark, ratings, args.corte, args.salida, params,
                                  desde=args.desde, fraccion=args.fraccion,
-                                 min_votos=args.min_votos, relevante_min=args.relevante)
+                                 min_votos=args.min_votos, relevante_min=args.relevante,
+                                 grilla={"rank": args.ranks_implicito,
+                                         "alpha": args.alphas,
+                                         "peso": args.pesos_hibrido})
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     finally:
-        spark.stop()
+        from recomendador.spark_utils import detener_spark
+        detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
 
     print()
     print(batch_als.tabla_metricas(res))

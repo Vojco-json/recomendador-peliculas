@@ -89,9 +89,11 @@ def entrenar(df_train, params: dict | None = None):
     from pyspark.ml.recommendation import ALS
 
     p = {**PARAMS_DEFECTO, **(params or {})}
+    implicito = bool(p.get("implicitPrefs", False))
     als = ALS(userCol="userId", itemCol="movieId", ratingCol="rating",
               rank=int(p["rank"]), regParam=float(p["regParam"]), maxIter=int(p["maxIter"]),
-              seed=int(p["seed"]), implicitPrefs=False, nonnegative=False,
+              seed=int(p["seed"]), implicitPrefs=implicito,
+              alpha=float(p.get("alpha", 1.0)), nonnegative=False,
               coldStartStrategy="drop")
     return als.fit(df_train.select("userId", "movieId", "rating"))
 
@@ -286,13 +288,141 @@ def rmse_media_item(train, test) -> float:
 
 
 # --------------------------------------------------------------------------- #
+# Ranking: ALS implícito, candidatos con >= MIN_VOTOS, híbrido y validación temporal
+# --------------------------------------------------------------------------- #
+
+GRILLA_DEFECTO = {"rank": [50, 100], "alpha": [10.0, 40.0], "peso": [0.3, 0.5, 0.7]}
+MAX_USUARIOS_VALIDACION = 20000   # acota el costo del ranking en la validación
+
+
+def _matrices(modelo):
+    """(ids_items, matriz_items, ids_usuarios, matriz_usuarios) de un ALSModel."""
+    items_df, users_df = factores(modelo)
+    ids, matriz = factores_numpy(items_df)
+    u_pdf = users_df.toPandas().sort_values("userId").reset_index(drop=True)
+    u_ids = u_pdf["userId"].to_numpy(dtype=np.int64)
+    u_mat = np.vstack(u_pdf["features"].to_numpy()).astype(np.float64) if len(u_pdf) else \
+        np.zeros((0, matriz.shape[1] if matriz.ndim == 2 else 0))
+    return ids, matriz, u_ids, u_mat
+
+
+def verificar_ids(modelo, df, n: int = 200) -> float:
+    """Descarta errores de IDs: compara la predicción de Spark con u·v calculado en numpy.
+
+    Devuelve la diferencia absoluta máxima (debe ser ~0). Si los IDs de factores y
+    ratings estuvieran desalineados, aquí aparecería una diferencia grande.
+    """
+    muestra = modelo.transform(df.select("userId", "movieId").limit(n)).toPandas()
+    if muestra.empty:
+        return 0.0
+    ids, matriz, u_ids, u_mat = _matrices(modelo)
+    fi = {int(m): i for i, m in enumerate(ids)}
+    fu = {int(u): i for i, u in enumerate(u_ids)}
+    calc = [float(u_mat[fu[int(u)]] @ matriz[fi[int(m)]])
+            for u, m in zip(muestra["userId"], muestra["movieId"])]
+    return float(np.max(np.abs(np.asarray(calc) - muestra["prediction"].to_numpy())))
+
+
+def candidatos(pop, ids: np.ndarray, matriz: np.ndarray):
+    """Restringe los ítems de ALS a la lista de popularidad (>= min_votos) y entrega
+    también el puntaje de popularidad log(1+votos) alineado a esos ítems."""
+    votos = dict(zip(pop["movieId"].to_numpy(dtype=np.int64), pop["n_votos"].to_numpy()))
+    sel = np.array([int(m) in votos for m in ids], dtype=bool)
+    ids_c, mat_c = ids[sel], matriz[sel]
+    pop_c = np.log1p(np.array([votos[int(m)] for m in ids_c], dtype=np.float64))
+    return ids_c, mat_c, pop_c
+
+
+def _zscore(x: np.ndarray, eje: int) -> np.ndarray:
+    return (x - x.mean(axis=eje, keepdims=True)) / (x.std(axis=eje, keepdims=True) + 1e-9)
+
+
+def recs_hibrido(ids, matriz, pop_scores, n, vistas, u_ids, u_mat, peso: float):
+    """Híbrido ALS + popularidad: score = peso·z(u·v) + (1-peso)·z(log votos).
+
+    Se implementa ampliando los factores: [peso·u/σ_u, 1] · [v, (1-peso)·z_pop], de modo
+    que reutiliza ``top_n_sin_vistas`` (mismo filtro de vistas y desempates)."""
+    if len(u_ids) == 0:
+        return top_n_sin_vistas(ids, matriz, n, vistas, u_ids, u_mat)
+    s = u_mat @ matriz.T                       # puntajes ALS (usuarios × ítems)
+    z_pop = _zscore(pop_scores[None, :], 1)[0]
+    m, sd = s.mean(axis=1, keepdims=True), s.std(axis=1, keepdims=True) + 1e-9
+    # peso·(s - m)/sd + (1-peso)·z_pop  ==  [peso·u/sd, 1] · [v, (1-peso)·z_pop] - cte
+    u_ext = np.hstack([peso * u_mat / sd, np.ones((len(u_ids), 1))])
+    i_ext = np.hstack([matriz, ((1 - peso) * z_pop)[:, None]])
+    del s, m
+    return top_n_sin_vistas(ids, i_ext, n, vistas, u_ids, u_ext)
+
+
+def _un_ano_antes(fecha: str) -> str:
+    from datetime import date
+
+    d = date.fromisoformat(fecha)
+    return d.replace(year=d.year - 1).isoformat()
+
+
+def validar_temporal(ratings, corte: str, base: dict, grilla: dict, min_votos: int,
+                     k: int, umbral: float, log=print) -> dict:
+    """Elige rank, alpha y el peso del híbrido SIN mirar la prueba.
+
+    Validación temporal: entrena con ratings anteriores a (corte − 1 año) y valida con
+    el año previo al corte (en 25M: entrenar antes de 2017, validar con 2017).
+    """
+    v_corte = _un_ano_antes(corte)
+    part = particion_temporal(ratings.filter(ratings["timestamp"] < fecha_a_epoch(corte)),
+                              v_corte)
+    log(f"Validación temporal: entrenar antes de {v_corte}, validar [{v_corte}, {corte}) · "
+        f"{part['n_train']:,} / {part['n_test']:,} ratings")
+    resultados, mejor = [], None
+    if part["n_train"] == 0 or part["n_test"] == 0:
+        log("Aviso: sin datos de validación; se usan los primeros valores de la grilla")
+        return {"corte_validacion": v_corte, "resultados": [],
+                "mejor": {"rank": grilla["rank"][0], "alpha": grilla["alpha"][0],
+                          "hibrido": {"rank": grilla["rank"][0], "alpha": grilla["alpha"][0],
+                                      "peso": grilla["peso"][0]}}}
+    val_pdf = part["test"].select("userId", "movieId", "rating").toPandas()
+    usuarios = np.unique(val_pdf["userId"].to_numpy(dtype=np.int64))
+    if len(usuarios) > MAX_USUARIOS_VALIDACION:   # muestra determinista de usuarios
+        usuarios = np.random.default_rng(42).choice(usuarios, MAX_USUARIOS_VALIDACION,
+                                                    replace=False)
+    vistas = vistas_pandas(part["train"])
+    pop, _ = popularidad(part["train"], min_votos)
+    for rank in grilla["rank"]:
+        for alpha in grilla["alpha"]:
+            modelo = entrenar(part["train"], {**base, "rank": rank, "alpha": alpha,
+                                              "implicitPrefs": True})
+            ids, mat, u_ids, u_mat = _matrices(modelo)
+            ids, mat, pop_s = candidatos(pop, ids, mat)
+            sel = np.isin(u_ids, usuarios)
+            for peso in [1.0, *grilla["peso"]]:     # 1.0 = ALS implícito puro
+                recs = recs_hibrido(ids, mat, pop_s, k, vistas, u_ids[sel], u_mat[sel], peso)
+                m = metricas_ranking(recs, val_pdf, k, umbral)
+                fila = {"rank": rank, "alpha": alpha, "peso": peso,
+                        f"NDCG@{k}": m[f"NDCG@{k}"], f"Precision@{k}": m[f"Precision@{k}"]}
+                resultados.append(fila)
+                log(f"  rank={rank} alpha={alpha:g} peso_ALS={peso:g}: "
+                    f"NDCG@{k}={fila[f'NDCG@{k}']:.4f} P@{k}={fila[f'Precision@{k}']:.4f}")
+    puros = [r for r in resultados if r["peso"] == 1.0]
+    hibridos = [r for r in resultados if r["peso"] < 1.0] or puros
+    mejor_als = max(puros, key=lambda r: r[f"NDCG@{k}"])
+    mejor_hib = max(hibridos, key=lambda r: r[f"NDCG@{k}"])
+    mejor = {"rank": mejor_als["rank"], "alpha": mejor_als["alpha"],
+             "hibrido": {"rank": mejor_hib["rank"], "alpha": mejor_hib["alpha"],
+                         "peso": mejor_hib["peso"]}}
+    part["train"].unpersist()
+    part["test"].unpersist()
+    return {"corte_validacion": v_corte, "resultados": resultados, "mejor": mejor}
+
+
+# --------------------------------------------------------------------------- #
 # Corrida completa
 # --------------------------------------------------------------------------- #
 
 def ejecutar(spark, ratings, corte: str, salida=None, params: dict | None = None,
              desde: str | None = None, fraccion: float | None = None,
              min_votos: int = MIN_VOTOS, n_recs: int = N_RECS, k: int = K,
-             guardar: bool = True, log=print, relevante_min: float | None = None) -> dict:
+             guardar: bool = True, log=print, relevante_min: float | None = None,
+             grilla: dict | None = None) -> dict:
     """Partición temporal -> ALS -> popularidad -> métricas -> artefactos.
 
     Devuelve el dict de metricas.json (más ``modelo`` y ``particion`` sin serializar).
@@ -350,7 +480,36 @@ def ejecutar(spark, ratings, corte: str, salida=None, params: dict | None = None
         log(f"Aviso: ningún usuario tiene ratings de prueba relevantes (>= {umbral:g}); "
             f"Precision@{k} y NDCG@{k} quedan en 0. Prueba con --relevante más bajo.")
 
+    # Cold start: ratings de prueba cuyo usuario o película no está en el entrenamiento.
+    cold_pct = 100.0 * part["descartados"] / max(part["n_test_bruto"], 1)
+    log(f"Cold start: {cold_pct:.1f}% de las calificaciones de prueba")
+
+    # Ranking: ALS implícito + híbrido con hiperparámetros elegidos en validación temporal.
+    g = {**GRILLA_DEFECTO, **{c: v for c, v in (grilla or {}).items() if v}}
+    val = validar_temporal(ratings.filter(ratings["timestamp"] >= fecha_a_epoch(desde))
+                           if desde else ratings, corte, p, g, min_votos, k, umbral, log)
+    ids_pop_ok = pop
+    mejor = val["mejor"]
+    res_impl, modelo_impl = {}, None
+    for nombre, cfg in (("als_implicito", {**mejor, "peso": 1.0}), ("hibrido", mejor["hibrido"])):
+        if modelo_impl is None or (cfg["rank"], cfg["alpha"]) != modelo_impl[0]:
+            mod = entrenar(train, {**p, "rank": cfg["rank"], "alpha": cfg["alpha"],
+                                   "implicitPrefs": True})
+            modelo_impl = ((cfg["rank"], cfg["alpha"]), mod, *_matrices(mod))
+        _, mod, i_ids, i_mat, iu_ids, iu_mat = modelo_impl
+        c_ids, c_mat, c_pop = candidatos(ids_pop_ok, i_ids, i_mat)
+        s = np.isin(iu_ids, usuarios_test)
+        recs = recs_hibrido(c_ids, c_mat, c_pop, k, vistas, iu_ids[s], iu_mat[s], cfg["peso"])
+        res_impl[nombre] = {**metricas_ranking(recs, test_pdf, k, umbral),
+                            "rank": cfg["rank"], "alpha": cfg["alpha"], "peso_als": cfg["peso"],
+                            "candidatos": int(len(c_ids))}
+        res_impl[nombre]["_estado"] = (mod, c_ids, c_mat, c_pop, iu_ids, iu_mat, cfg["peso"])
+
     resultado = {
+        "als_implicito": {k2: v for k2, v in res_impl["als_implicito"].items() if k2 != "_estado"},
+        "hibrido": {k2: v for k2, v in res_impl["hibrido"].items() if k2 != "_estado"},
+        "validacion": val, "cold_start_pct": round(cold_pct, 2),
+        "error_ids_max": verificar_ids(modelo, test),
         "als": m_als, "popularidad": m_pop, "corte": corte, "desde": desde,
         "fraccion": fraccion, "n_train": part["n_train"], "n_test": part["n_test"],
         "descartados": part["descartados"], "params": p, "k": k,
@@ -359,10 +518,14 @@ def ejecutar(spark, ratings, corte: str, salida=None, params: dict | None = None
     if guardar and salida is not None:
         salida = Path(salida)
         salida.mkdir(parents=True, exist_ok=True)
-        modelo.write().overwrite().save(str(salida / "modelo_als"))
-        items_df.write.mode("overwrite").parquet(str(salida / "item_factors.parquet"))
-        users_df.write.mode("overwrite").parquet(str(salida / "user_factors.parquet"))
-        recs_all = top_n_sin_vistas(ids, matriz, n_recs, vistas, u_ids, u_mat)
+        # Se guarda el modelo implícito del híbrido (el mejor ranking en validación);
+        # las recomendaciones top-20 salen del híbrido sobre los candidatos (>= min_votos).
+        h_mod, c_ids, c_mat, c_pop, iu_ids, iu_mat, peso = res_impl["hibrido"]["_estado"]
+        h_items, h_users = factores(h_mod)
+        h_mod.write().overwrite().save(str(salida / "modelo_als"))
+        h_items.write.mode("overwrite").parquet(str(salida / "item_factors.parquet"))
+        h_users.write.mode("overwrite").parquet(str(salida / "user_factors.parquet"))
+        recs_all = recs_hibrido(c_ids, c_mat, c_pop, n_recs, vistas, iu_ids, iu_mat, peso)
         _escribir_parquet_pandas(recs_all, salida / "recs_top20.parquet")
     resultado["segundos"] = round(time.perf_counter() - inicio, 2)
     resultado["segundos_als"] = round(seg_als, 2)
@@ -390,6 +553,12 @@ def tabla_metricas(res: dict, k: int = K) -> str:
     cols = ["RMSE", f"Precision@{k}", f"NDCG@{k}"]
     lineas = [f"{'Modelo':<13}" + "".join(f"{c:>14}" for c in cols),
               "-" * (13 + 14 * len(cols))]
-    for nombre, clave in (("ALS", "als"), ("Popularidad", "popularidad")):
-        lineas.append(f"{nombre:<13}" + "".join(f"{res[clave][c]:>14.4f}" for c in cols))
+    for nombre, clave in (("ALS", "als"), ("ALS implíc.", "als_implicito"),
+                          ("Híbrido", "hibrido"), ("Popularidad", "popularidad")):
+        if clave in res:
+            lineas.append(f"{nombre:<13}" + "".join(
+                f"{res[clave][c]:>14.4f}" if c in res[clave] else f"{'—':>14}" for c in cols))
+    if "cold_start_pct" in res:
+        lineas.append(f"Cold start en prueba: {res['cold_start_pct']:.1f}% · "
+                      f"error de IDs máx: {res.get('error_ids_max', 0):.2e}")
     return "\n".join(lineas)

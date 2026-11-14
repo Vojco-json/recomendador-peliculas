@@ -121,7 +121,7 @@ def main() -> int:
                                              extra={"spark.ui.enabled": "false"})
     with tempfile.TemporaryDirectory() as tmp:
         artefactos = crear_artefactos_app(spark, config.MUESTRA_MINI, Path(tmp) / "art")
-        spark.stop()
+        spark_utils.detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
         # La app lee la configuración desde el módulo config (mismo proceso).
         config.MODO = "completo"
         config.DATOS = config.MUESTRA_MINI
