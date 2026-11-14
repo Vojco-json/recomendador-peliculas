@@ -134,6 +134,7 @@ def crear_spark(nucleos: int | None = None, kafka: bool = False, memoria: str | 
     from pyspark.sql import SparkSession
 
     _preparar_entorno_windows()
+    _silenciar_taskkill_pyspark()
     config.IVY_DIR.mkdir(parents=True, exist_ok=True)
 
     builder = SparkSession.builder.appName(app)
@@ -142,6 +143,51 @@ def crear_spark(nucleos: int | None = None, kafka: bool = False, memoria: str | 
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     return spark
+
+
+def _es_taskkill(args) -> bool:
+    """True si la orden es un ``taskkill`` (directo o vía ``cmd /c``)."""
+    if isinstance(args, (list, tuple)):
+        return any(str(a).lower() == "taskkill" for a in args[:3])
+    return "taskkill" in str(args).lower()
+
+
+def _clase_popen_silenciosa():
+    """Subclase de ``subprocess.Popen`` que descarta la salida de ``taskkill``.
+
+    Al salir del intérprete, pyspark (``java_gateway.killChild``, registrado con atexit)
+    ejecuta ``cmd /c taskkill /f /t /pid <pid>`` sobre la JVM. Si la JVM ya terminó
+    (p. ej. porque ``detener_spark`` la cerró), taskkill imprime en la consola
+    "ERROR: no se encontró el proceso"; es inofensivo pero ensucia los registros.
+    Esta clase redirige stdout/stderr de taskkill a DEVNULL; el resto de los procesos
+    (la JVM incluida) se lanzan sin cambios.
+    """
+    import subprocess
+
+    class PopenSilencioso(subprocess.Popen):
+        def __init__(self, args, *resto, **kwargs):
+            if _es_taskkill(args):
+                kwargs["stdout"] = subprocess.DEVNULL
+                kwargs["stderr"] = subprocess.DEVNULL
+            super().__init__(args, *resto, **kwargs)
+
+    return PopenSilencioso
+
+
+_POPEN_SILENCIOSO = None
+
+
+def _silenciar_taskkill_pyspark() -> None:
+    """Instala (una vez) la clase silenciosa como ``Popen`` de ``pyspark.java_gateway``."""
+    global _POPEN_SILENCIOSO
+    if os.name != "nt":
+        return
+    from pyspark import java_gateway
+
+    if _POPEN_SILENCIOSO is None:
+        _POPEN_SILENCIOSO = _clase_popen_silenciosa()
+    if not issubclass(java_gateway.Popen, _POPEN_SILENCIOSO):
+        java_gateway.Popen = _POPEN_SILENCIOSO
 
 
 def _popen_vigilado():
@@ -159,7 +205,10 @@ def _popen_vigilado():
     """
     import subprocess
 
-    class PopenVigilado(subprocess.Popen):
+    # Hereda de la clase silenciosa (si está instalada) para no perder ese efecto.
+    base = _POPEN_SILENCIOSO or subprocess.Popen
+
+    class PopenVigilado(base):
         lanzados: list = []   # procesos creados durante el arranque en curso
 
         def __init__(self, *args, **kwargs):
@@ -224,6 +273,7 @@ def crear_spark_vigilado(plazo_s: float = 60, intentos: int = 3, registro=None, 
 
     from pyspark import java_gateway
 
+    _silenciar_taskkill_pyspark()   # así la clase restaurada al final también es silenciosa
     popen_original = java_gateway.Popen
     clase = _popen_vigilado()
     ultimo_error: BaseException | None = None

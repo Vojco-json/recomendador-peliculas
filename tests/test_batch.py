@@ -104,11 +104,16 @@ def test_metricas_en_rango_y_sin_nan(corrida):
 
 
 def test_metricas_ranking_con_usuarios_evaluables(corrida, ratings):
-    """En ml-mini ningún rating posterior al corte llega a 4 (LEEME), así que con el
-    umbral oficial P@10 y NDCG@10 valen 0. Con umbral 3 sí hay relevantes y se
-    comprueba que el cálculo sobre recomendaciones reales da valores en (0, 1]."""
+    """En ml-mini hay exactamente 2 usuarios (12 y 15) con un rating >= 4 posterior al
+    corte (LEEME), así que con el umbral oficial se evalúan 2 usuarios en todos los
+    modelos. Con umbral 3 hay más relevantes y el cálculo da valores en (0, 1]."""
     res, salida = corrida
-    assert res["als"]["usuarios_evaluados"] == 0  # umbral 4: sin relevantes en la muestra
+    for modelo in ("als", "popularidad", "als_implicito", "hibrido"):
+        if modelo in res:
+            assert res[modelo]["usuarios_evaluados"] == 2, modelo
+    # Al usuario 12 le quedan pocas películas sin ver: Schindler's List (527) entra en su
+    # top-10, así que al menos un modelo tiene precisión > 0 con el umbral oficial.
+    assert max(res[m]["Precision@10"] for m in ("als", "popularidad") if m in res) > 0
     recs = pd.read_parquet(salida / "recs_top20.parquet")
     test = batch_als.particion_temporal(ratings, CORTE)["test"]
     m = batch_als.metricas_ranking(recs, test, k=10, relevante_min=3.0)

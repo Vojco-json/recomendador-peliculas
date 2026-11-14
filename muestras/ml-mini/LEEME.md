@@ -31,6 +31,11 @@ Las películas son reales: `movieId`, título, géneros, `imdbId` y `tmdbId` son
 Todas las películas y usuarios de la prueba aparecen en el entrenamiento (con
 `coldStartStrategy='drop'` no se descarta ningún rating).
 
+**Relevantes en prueba (rating >= 4, umbral oficial):** exactamente **2** ratings, ambos de
+Schindler's List (`movieId` 527) en 2017: usuario **12** (4.0) y usuario **15** (4.0). Así hay
+**2 usuarios evaluables** para Precision@10 y NDCG@10 sobre la muestra; el resto de los
+ratings posteriores al corte es < 4.
+
 ## Modo demo (DEMO_DESDE = 2015-01-01 = epoch 1420070400)
 
 - Ratings `>= 2015-01-01` y anteriores al corte 2016-01-01: **90** (6 por usuario). Es el
