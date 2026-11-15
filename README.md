@@ -8,9 +8,8 @@ con datos obtenidos por herramientas.
 
 Índice: [Instalación](#instalación) · [check_entorno.py](#check_entornopy) ·
 [Corrida completa de 25M paso a paso](#corrida-completa-de-25m-paso-a-paso) ·
-[Guía de la demo en vivo (5 minutos)](#guía-de-la-demo-en-vivo-5-minutos) ·
 [App Streamlit con chat](#app-streamlit-con-chat) · [Pruebas](#pruebas) ·
-[Licencias](#licencias) · [Solución de problemas en Windows](#solución-de-problemas-en-windows)
+[Solución de problemas en Windows](#solución-de-problemas-en-windows)
 
 Todos los comandos se ejecutan **desde la carpeta del proyecto** en PowerShell.
 
