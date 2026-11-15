@@ -52,7 +52,9 @@ COLUMNAS_ENRIQUECIDAS = ["movieId", "titulo", "anio", "generos", "duracion_min",
 
 URL_TMDB = "https://api.themoviedb.org/3/movie/{tmdb_id}"
 URL_POSTER_TMDB = "https://image.tmdb.org/t/p/w342{ruta}"
+URL_BUSQUEDA_TMDB = "https://api.themoviedb.org/3/search/movie"
 CACHE_TMDB = config.ARTEFACTOS / "tmdb_cache.json"
+CLAVE_BUSQUEDAS = "_busquedas"   # búsquedas /search/movie dentro de la misma caché
 IDIOMAS_TMDB = ("es-ES", "en-US")
 
 ATRIBUCION_TMDB = ("Este producto usa la API de TMDB, pero no está avalado ni certificado "
@@ -403,6 +405,58 @@ class ClienteTMDb:
         cache[clave] = dato
         self._guardar_cache()
         return dato
+
+    def titulos_es(self) -> dict[int, str]:
+        """{tmdbId: título en español} de las fichas guardadas en la caché (sin red)."""
+        salida = {}
+        for clave, dato in self._leer_cache().items():
+            if clave.isdigit() and isinstance(dato, dict) and dato.get("titulo"):
+                salida[int(clave)] = dato["titulo"]
+        return salida
+
+    def buscar(self, consulta: str, idioma: str = IDIOMAS_TMDB[0]) -> list[dict] | None:
+        """GET /3/search/movie con ``language=es-ES``; el resultado se guarda en la caché.
+
+        Devuelve [{tmdbId, titulo, titulo_original, anio}] (lista vacía si no hay
+        resultados) o None si no hay clave o la red falla (sin guardar nada).
+        """
+        consulta = str(consulta or "").strip()
+        if not consulta:
+            return []
+        busquedas = self._leer_cache().setdefault(CLAVE_BUSQUEDAS, {})
+        clave = f"{idioma}|{normalizar_titulo(consulta)}"
+        if clave in busquedas:
+            return busquedas[clave]["resultados"]
+        if not self.disponible:
+            return None
+        import requests
+
+        sesion = self._sesion or requests
+        params = {"query": consulta, "language": idioma, "include_adult": "false"}
+        cabeceras = {"accept": "application/json"}
+        if self.api_key.startswith("eyJ"):
+            cabeceras["Authorization"] = f"Bearer {self.api_key}"
+        else:
+            params["api_key"] = self.api_key
+        try:
+            r = sesion.get(URL_BUSQUEDA_TMDB, params=params, headers=cabeceras,
+                           timeout=self.timeout)
+            if r.status_code != 200:
+                log.warning("TMDb respondió %s a la búsqueda", r.status_code)
+                return None
+            crudos = r.json().get("results") or []
+        except Exception as exc:  # sin internet, timeout, JSON inválido...
+            log.warning("TMDb no responde (%s): se busca solo en MovieLens",
+                        type(exc).__name__)
+            return None
+        resultados = [{"tmdbId": int(x["id"]), "titulo": x.get("title"),
+                       "titulo_original": x.get("original_title"),
+                       "anio": int(x["release_date"][:4])
+                       if str(x.get("release_date") or "")[:4].isdigit() else None}
+                      for x in crudos[:10] if x.get("id") is not None]
+        busquedas[clave] = {"resultados": resultados, "consultado_en": int(time.time())}
+        self._guardar_cache()
+        return resultados
 
 
 def detalle_tmdb(tmdb_id, cliente: ClienteTMDb | None = None) -> dict | None:

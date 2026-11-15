@@ -1,9 +1,19 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 - PASA: [aceptación] Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts — codigo 0: ..................                                                       [100%]
-18 passed in 0.87s
+18 passed in 0.83s
 - PASA: [aceptación] Regresión completa — codigo 0: ::test_genera_png_y_svg_no_vacios
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-134 passed, 4 skipped, 186 warnings in 145.53s (0:02:25)
+195 passed, 4 skipped, 186 warnings in 132.71s (0:02:12)
+- PASA: [aceptación] Interpretación ES/EN, errores de tipeo, ánimos y ocasiones — codigo 0: ........................................                                 [100%]
+40 passed in 0.23s
+- PASA: [aceptación] Búsqueda de títulos con y sin TMDb (cliente falso, caché) — codigo 0: .....................                                                    [100%]
+21 passed in 0.63s
+- PASA: Interpretación ES/EN, errores de tipeo, ánimos, ocasiones y llm.interpretar — codigo 0: ........................................                                 [100%]
+40 passed in 0.23s
+- PASA: Búsqueda de títulos con y sin TMDb (sesión falsa, caché temporal, sin red) — codigo 0: .....................                                                    [100%]
+21 passed in 0.63s
+- PASA: Regresión: el chat por reglas y la app siguen funcionando — codigo 0: .........                                                                [100%]
+9 passed in 30.96s

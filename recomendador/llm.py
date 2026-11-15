@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from . import config, perfiles
 from .herramientas import (DURACION_CORTA_MIN, ESQUEMAS, GENEROS_LIVIANOS, Herramientas,
                            N_DEFECTO)
+from .pedido import interpretar_pedido
 
 log = logging.getLogger(__name__)
 
@@ -81,22 +82,13 @@ def interpretar(mensaje: str) -> dict:
     'corto' -> <= 100 min; 'liviano/ligero' -> Comedy/Animation/Family(Children);
     'menos de 90 min' -> 90; 'dame 3' -> n=3.
     """
-    t = _normalizar(mensaje)
-    filtros: dict = {"max_duracion_min": None, "generos": [], "n": N_DEFECTO}
-    m = re.search(r"(?:menos de|maximo|max\.?|hasta)\s*(\d{2,3})\s*(?:min|minutos)", t)
-    if m:
-        filtros["max_duracion_min"] = int(m.group(1))
-    elif re.search(r"\bcort[oa]s?\b|\bbreve\b|\brapid[oa]\b", t):
-        filtros["max_duracion_min"] = DURACION_CORTA_MIN
-    if re.search(r"\blivian[oa]s?\b|\bliger[oa]s?\b|\bdivertid[oa]s?\b|\brelajad[oa]\b", t):
-        filtros["generos"] += [g for g in GENEROS_LIVIANOS if g not in filtros["generos"]]
-    for palabra, genero in PALABRAS_GENERO.items():
-        if re.search(rf"\b{palabra}", t) and genero not in filtros["generos"]:
-            filtros["generos"].append(genero)
-    m = re.search(r"\b(?:dame|recomienda(?:me)?|quiero|top)\s+(\d{1,2})\b", t)
-    if m:
-        filtros["n"] = max(1, min(int(m.group(1)), 10))
-    return filtros
+    # Delega en pedido.py (ES/EN, errores de tipeo, ánimos) y conserva la forma de salida.
+    p = interpretar_pedido(mensaje)
+    generos = list(p["generos"])
+    if "liviano" in p["animos"]:      # 'liviano' en el chat sigue siendo GENEROS_LIVIANOS
+        generos += [g for g in GENEROS_LIVIANOS if g not in generos]
+    return {"max_duracion_min": p["max_duracion_min"], "generos": generos,
+            "n": p["n"] if p["n"] else N_DEFECTO}
 
 
 # --------------------------------------------------------------------------- #
