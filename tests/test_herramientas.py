@@ -10,6 +10,7 @@ from recomendador import estado, perfiles
 from recomendador.herramientas import ESQUEMAS, Herramientas
 from base_mini import crear_artefactos_app
 
+CORTE_TODO = "2100-01-01"   # corte posterior a todos los ratings de la muestra mini
 VISTAS_U1 = {1, 6, 32, 47, 50, 110, 260, 296, 318, 356, 364, 480, 589, 593, 1036, 1721,
              2571, 4306, 6377, 58559}
 
@@ -21,7 +22,11 @@ def artefactos(spark, ruta_mini, tmp_path_factory):
 
 @pytest.fixture
 def herr(artefactos, ruta_mini, tmp_path):
-    return Herramientas(ruta_mini, artefactos, tmp_path / "estado.db")
+    # Paquete 1 (corte en todos los modos): Herramientas ahora corta por defecto en
+    # FECHA_CORTE_MINI (2016-01-01). Estas pruebas verifican el historial completo de la
+    # muestra (20 ratings del usuario 1), así que pasan un corte explícito posterior a
+    # todos los datos. El corte por defecto se prueba en tests/test_corte.py.
+    return Herramientas(ruta_mini, artefactos, tmp_path / "estado.db", corte=CORTE_TODO)
 
 
 def test_esquemas_completos():

@@ -30,6 +30,11 @@ function Anotar([string]$texto) {
 Add-Type -Namespace Energia -Name Win -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);'
 [Energia.Win]::SetThreadExecutionState([uint32]2147483649) | Out-Null   # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
 
+# Corte temporal (FECHA_CORTE de recomendador/config.py, respeta la variable de entorno):
+# los perfiles solo usan ratings anteriores, igual que el modelo ALS.
+$corte = (& $py -c "from recomendador import config; print(config.FECHA_CORTE)").Trim()
+if (-not $corte) { $corte = "2018-01-01" }
+
 $escala = @("scripts/escalabilidad.py")
 if ($EscalabilidadRapida) { $escala += @("--fraccion", "0.5", "--repeticiones", "1") }
 
@@ -38,7 +43,7 @@ $pasos = @(
     @{ n = 2; nombre = "Ordenar ratings por timestamp";        args = @("scripts/ordenar_ratings.py") },
     @{ n = 3; nombre = "Crear el topic 'ratings' en Kafka";    args = @("scripts/crear_topic.py") },
     @{ n = 4; nombre = "Entrenar ALS batch y evaluar";         args = @("scripts/entrenar_batch.py") },
-    @{ n = 5; nombre = "Perfiles de gusto y tipos de espectador"; args = @("scripts/perfilar_usuarios.py") },
+    @{ n = 5; nombre = "Perfiles de gusto y tipos de espectador"; args = @("scripts/perfilar_usuarios.py", "--hasta", $corte) },
     @{ n = 6; nombre = "Experimento de escalabilidad";         args = $escala },
     @{ n = 7; nombre = "Figuras del poster";                   args = @("scripts/figuras_poster.py") }
 )

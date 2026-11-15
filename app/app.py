@@ -21,7 +21,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from recomendador import config, llm  # noqa: E402
+from recomendador import config, demo, llm  # noqa: E402
 from recomendador.herramientas import Herramientas  # noqa: E402
 
 st.set_page_config(page_title="Recomendador de películas · MovieLens 25M",
@@ -57,8 +57,10 @@ CSS = """
 
 
 @st.cache_resource(show_spinner=False)
-def obtener_herramientas(datos: str, artefactos: str, estado_db: str) -> Herramientas:
-    return Herramientas(datos, artefactos, estado_db)
+def obtener_herramientas(datos: str, artefactos: str, estado_db: str,
+                         corte: str | None = None) -> Herramientas:
+    """Herramientas con el corte temporal siempre aplicado (por defecto FECHA_CORTE)."""
+    return Herramientas(datos, artefactos, estado_db, corte=corte)
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -119,8 +121,15 @@ def mostrar_respuesta(r: dict) -> None:
 # --------------------------------------------------------------------------- #
 
 st.markdown(CSS, unsafe_allow_html=True)
-herr = obtener_herramientas(str(config.DATOS), str(config.artefactos_activos()),
-                            str(config.ESTADO_DB))
+datos_app, corte_app = config.DATOS, None
+if config.MODO == "demo":
+    # demo.json guarda rutas relativas a la raíz; leer_demo_json las resuelve.
+    info_demo = demo.leer_demo_json(config.ARTEFACTOS_DEMO) or {}
+    if info_demo.get("datos") and Path(info_demo["datos"]).exists():
+        datos_app = info_demo["datos"]
+    corte_app = info_demo.get("corte")
+herr = obtener_herramientas(str(datos_app), str(config.artefactos_activos()),
+                            str(config.ESTADO_DB), corte_app)
 
 with st.sidebar:
     st.title("🎬 Recomendador")
@@ -151,6 +160,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"**Modo:** {'demo (reentreno en vivo)' if config.MODO == 'demo' else 'completo'}")
+    st.caption(f"Historial de MovieLens hasta el {herr.corte} (exclusivo) + eventos en vivo")
     t = herr.ultima_actualizacion(user_id)
     if t is None:
         st.markdown('<div class="vivo inactivo">Sin actualizaciones en vivo para este '

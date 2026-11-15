@@ -30,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 from . import config, estado, foldin, perfiles
+from .datos import fecha_a_epoch
 from .enriquecimiento import (NOMBRE_ENRIQUECIDAS, ClienteTMDb, separar_titulo_anio,
                               titulo_legible)
 
@@ -106,12 +107,26 @@ def _catalogo(ruta_movies: str, ruta_enriquecidas: str, _m1: float, _m2: float) 
     return fichas
 
 
-@lru_cache(maxsize=2)
-def _popularidad(ruta: str, _mtime: float) -> list[int]:
-    """movieIds por número de ratings, de mayor a menor (se calcula una vez)."""
-    _, m, _, _ = _ratings_ordenados(ruta, _mtime)
-    ids, conteos = np.unique(m, return_counts=True)
+@lru_cache(maxsize=4)
+def _popularidad(ruta: str, _mtime: float, corte_epoch: int) -> list[int]:
+    """movieIds por número de ratings anteriores al corte, de mayor a menor."""
+    _, m, _, t = _ratings_ordenados(ruta, _mtime)
+    ids, conteos = np.unique(m[t < corte_epoch], return_counts=True)
     return [int(x) for x in ids[np.argsort(-conteos, kind="stable")]]
+
+
+def corte_por_defecto(datos) -> str:
+    """Corte temporal que corresponde a una carpeta de datos.
+
+    La muestra mini tiene su propio corte (FECHA_CORTE_MINI); cualquier otra carpeta
+    usa config.FECHA_CORTE. No existe un camino «sin corte».
+    """
+    try:
+        if Path(datos).resolve() == config.MUESTRA_MINI.resolve():
+            return config.FECHA_CORTE_MINI
+    except OSError:
+        pass
+    return config.FECHA_CORTE
 
 
 @lru_cache(maxsize=4)
@@ -132,13 +147,20 @@ class Herramientas:
     estado_db:  ruta de estado.db (estado en vivo). Si no existe, se usan solo
                 los artefactos (no se crea el archivo).
     tmdb:       ClienteTMDb opcional; sin clave solo usa la caché local.
+    corte:      fecha AAAA-MM-DD (fin exclusivo). Siempre hay un corte, en cualquier
+                MODO: por defecto config.FECHA_CORTE, o config.FECHA_CORTE_MINI si
+                ``datos`` es la muestra mini. Los ratings y tags de MovieLens con
+                timestamp >= corte se ignoran (el modelo se entrenó solo hasta ahí);
+                los eventos en vivo de estado.db se incluyen siempre.
     """
 
-    def __init__(self, datos=None, artefactos=None, estado_db=None, tmdb=None):
+    def __init__(self, datos=None, artefactos=None, estado_db=None, tmdb=None, corte=None):
         self.datos = Path(datos) if datos else config.DATOS
         self.artefactos = Path(artefactos) if artefactos else config.artefactos_activos()
         self.estado_db = Path(estado_db) if estado_db else config.ESTADO_DB
         self.tmdb = tmdb if tmdb is not None else ClienteTMDb()
+        self.corte = corte_por_defecto(self.datos) if not corte else str(corte)
+        self.corte_epoch = fecha_a_epoch(self.corte)   # valida el formato AAAA-MM-DD
 
     # ------------------------------------------------------------------ #
     # Fuentes
@@ -169,14 +191,14 @@ class Herramientas:
         return ficha
 
     def _historial(self, userId: int) -> list[dict]:
-        """Ratings de ratings.csv del usuario: [{movieId, rating, timestamp}]."""
+        """Ratings de ratings.csv del usuario anteriores al corte: [{movieId, rating, timestamp}]."""
         ruta = self.datos / "ratings.csv"
         if not ruta.exists():
             return []
         u, m, r, t = _ratings_ordenados(str(ruta), _mtime(ruta))
         i, j = np.searchsorted(u, userId, "left"), np.searchsorted(u, userId, "right")
         return [{"movieId": int(m[k]), "rating": float(r[k]), "timestamp": int(t[k])}
-                for k in range(i, j)]
+                for k in range(i, j) if t[k] < self.corte_epoch]
 
     def _ratings_usuario(self, userId: int) -> dict[int, dict]:
         """{movieId: {rating, timestamp, fuente}}: historial + eventos en vivo (estos mandan)."""
@@ -217,11 +239,11 @@ class Herramientas:
             return foldin.REG_DEFECTO
 
     def _popularidad(self) -> list[int]:
-        """movieIds ordenados por número de ratings (respaldo sin historial)."""
+        """movieIds ordenados por número de ratings antes del corte (respaldo sin historial)."""
         ruta = self.datos / "ratings.csv"
         if not ruta.exists():
             return []
-        return _popularidad(str(ruta), _mtime(ruta))
+        return _popularidad(str(ruta), _mtime(ruta), self.corte_epoch)
 
     def existe_usuario(self, userId) -> bool:
         uid = _uid(userId)
@@ -270,7 +292,8 @@ class Herramientas:
             return {"userId": userId, "tags": [], "error": "userId no válido"}
         ruta = self.datos / "tags.csv"
         df = _tags(str(ruta), _mtime(ruta))
-        df = df[df["userId"] == uid].sort_values("timestamp", ascending=False)
+        df = df[(df["userId"] == uid) & (df["timestamp"] < self.corte_epoch)]
+        df = df.sort_values("timestamp", ascending=False)
         tags = []
         for mid, tag in zip(df["movieId"].head(_limitar(n, 200)), df["tag"]):
             ficha = self.ficha(int(mid))

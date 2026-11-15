@@ -36,6 +36,11 @@ def entorno(monkeypatch, artefactos, ruta_mini, tmp_path):
     monkeypatch.setattr(config, "ESTADO_DB", tmp_path / "estado.db")
     monkeypatch.setattr(config, "LLM_PROVIDER", "reglas")
     monkeypatch.setattr(config, "LLM_THINK", False)
+    # Paquete 1 (corte en todos los modos): estas pruebas esperan el historial completo
+    # de la muestra mini, así que llevan el corte de la mini a una fecha posterior a
+    # todos sus datos (lo usan esta Herramientas y la de la app). El corte real
+    # (FECHA_CORTE_MINI = 2016-01-01) se prueba en tests/test_corte.py.
+    monkeypatch.setattr(config, "FECHA_CORTE_MINI", "2100-01-01")
     return Herramientas(ruta_mini, artefactos, tmp_path / "estado.db")
 
 
