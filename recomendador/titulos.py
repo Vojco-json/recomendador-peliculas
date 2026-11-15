@@ -49,6 +49,7 @@ class BuscadorTitulos:
         for fila in _leer_csv(self.datos / "links.csv"):
             if (fila.get("tmdbId") or "").strip():
                 self.tmdb_a_movie[int(float(fila["tmdbId"]))] = int(fila["movieId"])
+        self.movie_a_tmdb = {m: t for t, m in self.tmdb_a_movie.items()}
         self._indice_es: dict[str, set[int]] | None = None
 
     @property
@@ -107,7 +108,8 @@ class BuscadorTitulos:
         ficha = self.peliculas[mid]
         return {"encontrada": True, "consulta": consulta, "movieId": mid,
                 "titulo": ficha["titulo"], "titulo_legible": titulo_legible(ficha["titulo"]),
-                "anio": ficha["anio"], "coincidencia": round(puntaje, 3), "fuente": fuente}
+                "anio": ficha["anio"], "coincidencia": round(puntaje, 3), "fuente": fuente,
+                "tmdbId": self.movie_a_tmdb.get(mid)}
 
     def _buscar_en_tmdb(self, consulta: str, clave: str) -> tuple[float, set[int]]:
         """Resultados de /search/movie (es-ES) que estén en el catálogo de MovieLens."""

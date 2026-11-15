@@ -32,7 +32,7 @@ def herr(artefactos, ruta_mini, tmp_path):
 def test_esquemas_completos():
     nombres = {e["function"]["name"] for e in ESQUEMAS}
     assert nombres == {"peliculas_calificadas", "tags_usuario", "perfil_gustos",
-                       "recomendar", "info_pelicula"}
+                       "recomendar", "info_pelicula", "buscar_pelicula"}
 
 
 def test_datos_reales_usuario_1(herr):
@@ -54,8 +54,12 @@ def test_datos_reales_usuario_1(herr):
 
     corto = herr.recomendar(1, n=5, max_duracion_min=100,
                             generos=["Comedy", "Animation", "Family"])
-    assert [r["movieId"] for r in corto["recomendaciones"]] == [1307]   # Harry y Sally, 95 min
-    assert corto["recomendaciones"][0]["duracion_min"] == 95
+    # Paquete 3 (niveles): los filtros ya no descartan, ordenan. Harry y Sally (comedia,
+    # 95 min) cumple las dos condiciones y va en el nivel máximo, antes que el resto.
+    primeras = [r for r in corto["recomendaciones"] if r["nivel"] == 2]
+    assert 1307 in [r["movieId"] for r in primeras]
+    assert next(r for r in primeras if r["movieId"] == 1307)["duracion_min"] == 95
+    assert corto["recomendaciones"][0]["nivel"] == 2
 
     info = herr.info_pelicula(1)
     assert info["titulo"] == "Toy Story" and info["duracion_min"] == 81

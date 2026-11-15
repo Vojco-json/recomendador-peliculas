@@ -69,10 +69,12 @@ def test_app_reglas_usuario_1(entorno):
     assert not at.exception, at.exception
     respuesta = at.session_state["chat_1"][-1]
     ids = [r["movieId"] for r in respuesta["recomendaciones"]]
-    assert ids == [1307]                                   # Harry y Sally: comedia de 95 min
+    # Paquete 3 (niveles): Harry y Sally (comedia de 95 min) cumple todo y va primero;
+    # las demás siguen por nivel, ya no se descartan.
+    assert ids[0] == 1307
     assert not set(ids) & VISTAS_U1
-    assert all(r["explicacion"] and "95 min" in r["explicacion"]
-               for r in respuesta["recomendaciones"])
+    assert all(r["explicacion"] for r in respuesta["recomendaciones"])
+    assert "95 min" in respuesta["recomendaciones"][0]["explicacion"]
     assert "When Harry Met Sally" in _textos(at)
 
 
@@ -120,7 +122,7 @@ def test_leyenda_indica_completado_con_reglas(entorno):
 
     r = llm.responder(PEDIDO, 1, entorno, proveedor="ollama", cliente=SoloInventa())
     assert r.proveedor == llm.PROVEEDOR_COMPLETADO and "reglas" in r.proveedor
-    assert [x["movieId"] for x in r.recomendaciones] == [1307]
+    assert r.recomendaciones[0]["movieId"] == 1307           # nivel máximo primero
     assert "Falsa" not in r.texto + json.dumps(r.recomendaciones, default=str)
 
 
@@ -203,4 +205,4 @@ def test_ollama_caido_usa_reglas_con_aviso(entorno):
 
     r = llm.responder(PEDIDO, 1, entorno, proveedor="ollama", cliente=Caido())
     assert r.aviso == llm.AVISO_REGLAS and r.proveedor == "reglas"
-    assert [x["movieId"] for x in r.recomendaciones] == [1307]
+    assert r.recomendaciones[0]["movieId"] == 1307           # nivel máximo primero

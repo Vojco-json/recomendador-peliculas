@@ -8,8 +8,10 @@ Herramientas
 - peliculas_calificadas(userId, n)      películas que calificó (historial + eventos en vivo)
 - tags_usuario(userId)                  tags que escribió en MovieLens
 - perfil_gustos(userId)                 tipo de espectador, géneros y tags del perfil
-- recomendar(userId, n, max_duracion_min, generos, excluir_vistas=True)
-                                        top-n del ALS (fold-in) con filtros
+- recomendar(userId, n, max_duracion_min, generos, tags, excluir_vistas=True)
+                                        top-n por niveles de coincidencia y, dentro
+                                        de cada nivel, por afinidad ALS (fold-in)
+- buscar_pelicula(titulo)               búsqueda aproximada de títulos (ES/EN)
 - info_pelicula(movieId)                ficha: título, año, géneros, duración, nota IMDb,
                                         sinopsis/póster de TMDb si están en la caché
 
@@ -20,6 +22,7 @@ vigentes y el puntero a los factores ALS reentrenados (meta 'item_factors').
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import sqlite3
@@ -29,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import config, estado, foldin, perfiles
+from . import config, estado, foldin, perfiles, titulos
 from .datos import fecha_a_epoch
 from .enriquecimiento import (NOMBRE_ENRIQUECIDAS, ClienteTMDb, separar_titulo_anio,
                               titulo_legible)
@@ -42,6 +45,8 @@ N_MAXIMO = 20
 # equivalente es 'Children', que se incluye para que el filtro funcione con los datos.
 GENEROS_LIVIANOS = ["Comedy", "Animation", "Family", "Children"]
 DURACION_CORTA_MIN = 100
+# Relevancia genome mínima para que una película «tenga» un tag pedido.
+UMBRAL_GENOME = 0.5
 
 
 # --------------------------------------------------------------------------- #
@@ -113,6 +118,26 @@ def _popularidad(ruta: str, _mtime: float, corte_epoch: int) -> list[int]:
     _, m, _, t = _ratings_ordenados(ruta, _mtime)
     ids, conteos = np.unique(m[t < corte_epoch], return_counts=True)
     return [int(x) for x in ids[np.argsort(-conteos, kind="stable")]]
+
+
+@lru_cache(maxsize=8)
+def _genome(ruta_tags: str, ruta_scores: str, tags: tuple[str, ...], _m1: float,
+            _m2: float) -> dict[str, dict[int, float]]:
+    """{tag: {movieId: relevancia}} solo para los tags pedidos (lee genome por partes,
+    porque en 25M genome-scores.csv tiene ~15 millones de filas)."""
+    import pandas as pd
+
+    if not Path(ruta_tags).exists() or not Path(ruta_scores).exists():
+        return {}
+    gt = pd.read_csv(ruta_tags)
+    ids = {int(i): str(t).lower() for i, t in zip(gt["tagId"], gt["tag"])
+           if str(t).lower() in tags}
+    salida: dict[str, dict[int, float]] = {t: {} for t in ids.values()}
+    for parte in pd.read_csv(ruta_scores, chunksize=5_000_000):
+        parte = parte[parte["tagId"].isin(list(ids))]
+        for m, t, r in zip(parte["movieId"], parte["tagId"], parte["relevance"]):
+            salida[ids[int(t)]][int(m)] = float(r)
+    return salida
 
 
 def corte_por_defecto(datos) -> str:
@@ -342,20 +367,30 @@ class Herramientas:
         }
 
     def recomendar(self, userId, n: int = N_DEFECTO, max_duracion_min=None, generos=None,
-                   excluir_vistas: bool = True) -> dict:
-        """Top-n para el usuario con filtros opcionales.
+                   tags=None, excluir_vistas: bool = True) -> dict:
+        """Top-n para el usuario, ordenado por niveles de coincidencia con el pedido.
 
-        Orden de candidatos: primero el top-N vigente en estado.db (en vivo) y luego el
-        ranking completo por fold-in con los factores vigentes y todos sus ratings
-        (historial + eventos en vivo). Sin historial, se usa la popularidad.
-        max_duracion_min: deja solo películas con duración IMDb conocida y <= este valor.
-        generos: lista (o texto 'A|B') en inglés de MovieLens; basta con uno en común.
+        Orden híbrido de candidatos: primero el top-N vigente en estado.db (en vivo) y
+        luego el ranking completo por fold-in con los factores vigentes y todos sus
+        ratings (historial + eventos en vivo). Sin historial, se usa la popularidad.
+
+        Condiciones (ninguna descarta películas, solo ordenan):
+        - generos: lista (o texto 'A|B') en inglés o español; 1 condición, se cumple con
+          un género en común.
+        - tags: tags del genome (p. ej. 'twist ending'); 1 condición por tag, se cumple
+          con relevancia >= UMBRAL_GENOME.
+        - max_duracion_min: 1 condición, duración IMDb <= este valor.
+        nivel = condiciones pedidas - incumplidas (lo no evaluable, como una duración
+        sin dato, no baja el nivel). Se ordena por nivel de mayor a menor y, dentro de
+        cada nivel, por el orden híbrido. Sin condiciones el orden es el híbrido exacto.
+        La lista solo queda vacía si no hay películas sin ver en el catálogo.
         """
         uid = _uid(userId)
         if uid is None:
             return {"userId": userId, "recomendaciones": [], "error": "userId no válido"}
         n = _limitar(n, N_MAXIMO)
         generos = _lista_generos(generos)
+        tags = _lista_tags(tags)
         try:
             max_dur = None if max_duracion_min in (None, "", 0) else float(max_duracion_min)
         except (TypeError, ValueError):
@@ -386,31 +421,84 @@ class Herramientas:
         if max_dur is not None and not any(f.get("duracion_min") for f in catalogo.values()):
             avisos.append("No hay duraciones IMDb (corre scripts/descargar_imdb.py): "
                           "no se puede filtrar por duración")
-        recs, usados = [], set()
-        for mid, score, fuente in candidatos:
-            if mid in usados or mid in vistas:
+        genome = self._genome(tags) if tags else {}
+        n_cond = int(bool(generos)) + len(tags) + int(max_dur is not None)
+
+        # Recorre los candidatos en el orden híbrido (estado en vivo y luego ALS) y
+        # evalúa cada condición. El orden de llegada ES la afinidad ALS.
+        # Respaldo para que la lista nunca quede vacía: si el orden híbrido no alcanza
+        # (p. ej. todo lo del ALS ya está visto), siguen la popularidad y el catálogo.
+        def respaldo():
+            yield from ((m, None, "popularidad") for m in self._popularidad())
+            yield from ((m, None, "catálogo") for m in catalogo)
+
+        evaluadas: list[tuple[int, int, float | None, str, dict]] = []
+        usados: set[int] = set()
+        en_maximo = 0
+        for mid, score, fuente in itertools.chain(candidatos, respaldo()):
+            if mid in usados or mid in vistas or mid not in catalogo:
                 continue
             usados.add(mid)
-            ficha = self.ficha(mid)
-            if ficha is None:
-                continue
-            if generos and not set(ficha["generos"]) & set(generos):
-                continue
-            if max_dur is not None:
-                dur = ficha.get("duracion_min")
-                if dur is None or dur > max_dur:
-                    continue
-            recs.append({**ficha, "rank": len(recs) + 1,
-                         "score": None if score is None else round(float(score), 4),
-                         "fuente": fuente})
-            if len(recs) >= n:
+            ev = _evaluar(catalogo[mid], generos, tags, genome, max_dur)
+            # Nivel = condiciones pedidas menos las incumplidas: lo no evaluable no baja.
+            nivel = n_cond - len(ev["no_cumple"])
+            evaluadas.append((nivel, mid, score, fuente, ev))
+            # Con n películas en el nivel máximo (o sin condiciones, con n películas) no
+            # hace falta seguir: nada posterior puede adelantarlas.
+            en_maximo += nivel == n_cond
+            if en_maximo >= n:
                 break
-        if not recs:
-            avisos.append("Ninguna película cumple los filtros pedidos")
+        # Orden estable: nivel de mayor a menor; dentro del nivel, el orden ALS.
+        evaluadas.sort(key=lambda e: -e[0])
+
+        recs = []
+        for nivel, mid, score, fuente, ev in evaluadas[:n]:
+            recs.append({**self.ficha(mid), "rank": len(recs) + 1,
+                         "score": None if score is None else round(float(score), 4),
+                         "fuente": fuente, "nivel": nivel, "condiciones_pedidas": n_cond,
+                         "coincidencia": 1.0 if not n_cond else round(nivel / n_cond, 3),
+                         **ev})
+        if n_cond and recs and recs[0]["nivel"] < n_cond:
+            avisos.append("Ninguna película cumple todas las condiciones: van primero las "
+                          "que cumplen más")
+        if any("duración" in c for r in recs for c in r["no_evaluables"]):
+            avisos.append("Algunas películas no tienen duración en IMDb: esa condición no se "
+                          "pudo evaluar y no baja su nivel")
+        if any(c.startswith("tag") for r in recs for c in r["no_evaluables"]):
+            avisos.append("Algunas películas no tienen datos del tag genome: esa condición "
+                          "no se pudo evaluar")
         return {"userId": uid, "existe": bool(ratings),
                 "filtros": {"n": n, "max_duracion_min": max_dur, "generos": generos,
-                            "excluir_vistas": bool(excluir_vistas)},
+                            "tags": tags, "excluir_vistas": bool(excluir_vistas)},
                 "recomendaciones": recs, "avisos": avisos}
+
+    def _genome(self, tags: list[str]) -> dict[str, dict[int, float]]:
+        """Relevancias genome de los tags pedidos (vacío si la carpeta no trae genome)."""
+        rt, rs = self.datos / "genome-tags.csv", self.datos / "genome-scores.csv"
+        return _genome(str(rt), str(rs), tuple(sorted(tags)), _mtime(rt), _mtime(rs))
+
+    def buscar_pelicula(self, titulo) -> dict:
+        """Busca un título (español o inglés, sin importar tildes ni mayúsculas, con
+        errores de tipeo) en MovieLens y, si hay clave TMDb, en sus títulos en español."""
+        r = titulos.buscar(str(titulo or ""), self.datos, self.tmdb)
+        if not r.get("encontrada"):
+            return {"encontrada": False, "consulta": r.get("consulta", titulo),
+                    "mensaje": r.get("mensaje") or "No encontré esa película en el catálogo."}
+        ficha = self.ficha(r["movieId"]) or {}
+        salida = {"encontrada": True, "movieId": r["movieId"],
+                  "titulo": ficha.get("titulo") or r["titulo_legible"],
+                  "anio": r.get("anio"), "generos": ficha.get("generos", []),
+                  "coincidencia": r["coincidencia"], "fuente": r["fuente"]}
+        tmdb_id = ficha.get("tmdbId") or r.get("tmdbId")
+        if tmdb_id and getattr(self.tmdb, "disponible", False):
+            try:
+                titulo_es = self.tmdb.titulos_es().get(int(tmdb_id))
+            except Exception as exc:  # TMDb es opcional: nunca rompe la búsqueda
+                log.warning("TMDb falló: %s", exc)
+                titulo_es = None
+            if titulo_es:
+                salida["titulo_es"] = titulo_es
+        return salida
 
     def info_pelicula(self, movieId) -> dict:
         """Ficha de la película (y sinopsis/póster de TMDb si hay clave o caché)."""
@@ -438,7 +526,8 @@ class Herramientas:
         """Ejecuta una herramienta por nombre; los errores vuelven como {'error': ...}."""
         funciones = {"peliculas_calificadas": self.peliculas_calificadas,
                      "tags_usuario": self.tags_usuario, "perfil_gustos": self.perfil_gustos,
-                     "recomendar": self.recomendar, "info_pelicula": self.info_pelicula}
+                     "recomendar": self.recomendar, "info_pelicula": self.info_pelicula,
+                     "buscar_pelicula": self.buscar_pelicula}
         funcion = funciones.get(nombre)
         if funcion is None:
             return {"error": f"Herramienta desconocida: {nombre}"}
@@ -482,10 +571,19 @@ ESQUEMAS = [
               "generos": {"type": "array", "items": {"type": "string"},
                           "description": "géneros MovieLens en inglés, p. ej. Comedy, "
                                          "Animation, Children (liviano)"},
+              "tags": {"type": "array", "items": {"type": "string"},
+                       "description": "tags del genome en inglés, p. ej. 'twist ending', "
+                                      "'feel-good', 'sad'"},
               "excluir_vistas": {"type": "boolean", "description": "excluir ya vistas"}},
              ["userId"]),
     _esquema("info_pelicula", "Ficha de una película: año, géneros, duración, nota IMDb.",
              {"movieId": {"type": "integer"}}, ["movieId"]),
+    _esquema("buscar_pelicula",
+             "Busca una película por título (español o inglés; ignora tildes, mayúsculas "
+             "y errores de tipeo). Devuelve movieId y título, o encontrada=false.",
+             {"titulo": {"type": "string", "description": "título tal como lo escribió "
+                                                          "el usuario"}},
+             ["titulo"]),
 ]
 
 
@@ -527,6 +625,51 @@ def _lista_generos(generos) -> list[str]:
             nombres = [nombre] if nombre else []
         salida += [x for x in nombres if x not in salida]
     return salida
+
+
+def _lista_tags(tags) -> list[str]:
+    """Tags genome en minúsculas, sin repetir (acepta lista o texto 'a|b' / 'a,b')."""
+    if not tags:
+        return []
+    if isinstance(tags, str):
+        tags = tags.replace(",", "|").split("|")
+    salida = []
+    for t in tags:
+        t = str(t).strip().lower()
+        if t and t not in salida:
+            salida.append(t)
+    return salida
+
+
+def _evaluar(ficha: dict, generos: list[str], tags: list[str],
+             genome: dict[str, dict[int, float]], max_dur: float | None) -> dict:
+    """Clasifica cada condición pedida en cumple / no_cumple / no_evaluables (textos)."""
+    cumple, no_cumple, no_eval = [], [], []
+    if generos:
+        comunes = [g for g in generos if g in ficha["generos"]]
+        if comunes:
+            cumple.append("género: " + ", ".join(perfiles.GENEROS_ES.get(g, g) for g in comunes))
+        else:
+            no_cumple.append("género: " + ", ".join(perfiles.GENEROS_ES.get(g, g)
+                                                    for g in generos if g != "Family"))
+    for t in tags:
+        relevancia = genome.get(t, {}).get(ficha["movieId"])
+        if relevancia is None:
+            no_eval.append(f"tag: {t}")
+        elif relevancia >= UMBRAL_GENOME:
+            cumple.append(f"tag: {t}")
+        else:
+            no_cumple.append(f"tag: {t}")
+    if max_dur is not None:
+        texto = f"duración ≤ {max_dur:g} min"
+        dur = ficha.get("duracion_min")
+        if dur is None:
+            no_eval.append(texto)
+        elif dur <= max_dur:
+            cumple.append(texto)
+        else:
+            no_cumple.append(texto)
+    return {"cumple": cumple, "no_cumple": no_cumple, "no_evaluables": no_eval}
 
 
 __all__ = ["Herramientas", "ESQUEMAS", "GENEROS_LIVIANOS", "DURACION_CORTA_MIN"]
