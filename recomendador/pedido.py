@@ -201,6 +201,16 @@ def _titulo_mencionado(texto: str) -> tuple[str | None, str]:
     return titulo, texto[:m.start()] + " " + texto[m.end():]
 
 
+def es_descripcion(frase: str, tags_validos=None, datos=None) -> bool:
+    """True si X en «algo como X» describe contenido y no es un título: empieza con
+    «de» o contiene géneros, ánimos/ocasiones o tags conocidos."""
+    n = normalizar(frase)
+    if n.startswith("de ") or n.startswith("of "):
+        return True
+    p = interpretar_pedido(frase, tags_validos=tags_validos, datos=datos)
+    return bool(p["generos"] or p["animos"] or p["tags_genome"])
+
+
 def _duracion(t: str) -> int | None:
     m = _RE_MAX_MIN.search(t)
     if m and 30 <= int(m.group(1)) <= 400:
@@ -225,7 +235,10 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None) -> dict:
     """
     texto = str(texto or "")
     titulo, resto = _titulo_mencionado(texto)
-    t = normalizar(resto)          # el título no cuenta como género ('Star Wars' != War)
+    if titulo and es_descripcion(titulo, tags_validos, datos):
+        # «algo como de drama policial…»: X describe contenido, no es un título.
+        titulo, resto = None, texto
+    t = normalizar(resto)         # el título no cuenta como género ('Star Wars' != War)
     palabras = t.split()
 
     generos: list[str] = []

@@ -46,7 +46,7 @@ Requisitos: 4, 5, 11 · Archivos: recomendador/herramientas.py, tests/test_punta
 - Criterio: Las pruebas usan la muestra mini y un cliente TMDb falso o ninguno
 - Prueba de aceptacion: Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía: el comando «.venv/Scripts/python -m pytest -q tests/test_puntaje.py» debe terminar sin error
 - Prueba de aceptacion: buscar_pelicula como herramienta y caso inexistente: el comando «.venv/Scripts/python -m pytest -q tests/test_buscar.py» debe terminar sin error
-### 4. 4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos [pendiente]
+### 4. 4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos [verificado]
 Objetivo: Integrar pedido.py, la recomendación por niveles y buscar_pelicula en responder_reglas y responder_ollama, agregar la red de seguridad y la batería de 30 pedidos con LLM simulados.
 Requisitos: 6, 8 · Archivos: recomendador/llm.py, app/app.py, tests/test_bateria.py, tests/test_red_seguridad.py · Depende de: 3
 - Criterio: SISTEMA incluye una regla sobre ánimos, ocasiones y buscar_pelicula, y el modo Ollama completa con pedido.py los filtros que el modelo omitió
@@ -58,7 +58,7 @@ Requisitos: 6, 8 · Archivos: recomendador/llm.py, app/app.py, tests/test_bateri
 - Criterio: La batería completa tarda menos de 2 minutos (Herramientas se crea una vez por módulo)
 - Prueba de aceptacion: Batería de 30 pedidos en modo reglas y con LLM simulado: el comando «.venv/Scripts/python -m pytest -q tests/test_bateria.py» debe terminar sin error
 - Prueba de aceptacion: Red de seguridad y mensaje de título inexistente: el comando «.venv/Scripts/python -m pytest -q tests/test_red_seguridad.py» debe terminar sin error
-### 5. 5. Figura tipos_espectador legible y cierre (README) [pendiente]
+### 5. 5. Figura tipos_espectador legible y cierre (README) [verificado]
 Objetivo: Rehacer la figura tipos_espectador con barras horizontales sin etiquetas superpuestas y documentar en el README el corte en todos los modos, los niveles de coincidencia, buscar_pelicula con TMDb opcional y los pasos manuales sobre los 25M.
 Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py, README.md · Depende de: 1
 - Criterio: poster.py genera tipos_espectador con barh, ordenada y con las etiquetas a la izquierda

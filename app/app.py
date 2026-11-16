@@ -22,7 +22,7 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from recomendador import config, demo, llm  # noqa: E402
-from recomendador.herramientas import Herramientas  # noqa: E402
+from recomendador.herramientas import Herramientas, _afinidad  # noqa: E402
 
 st.set_page_config(page_title="Recomendador de películas · MovieLens 25M",
                    page_icon="🎬", layout="wide")
@@ -86,7 +86,9 @@ def tarjeta(peli: dict, explicacion: str | None = None) -> str:
                     for g in (peli.get("generos_es") or peli.get("generos") or [])[:4])
     poster = (f'<img src="{esc(peli["poster_url"])}" alt="Póster de {esc(peli["titulo"])}">'
               if peli.get("poster_url") else "")
-    puntaje = f" · ALS {peli['score']:.2f}" if peli.get("score") is not None else ""
+    # La afinidad se muestra como texto («afinidad alta/media»), no como un número.
+    afinidad = peli.get("afinidad") or _afinidad(peli.get("score"))
+    puntaje = f" · {afinidad}" if afinidad else ""
     expl = f'<div class="expl">{esc(explicacion)}</div>' if explicacion else ""
     # Qué condiciones del pedido cumple, cuáles no y cuáles no se pudieron evaluar.
     cond = (f'<div class="cond">{esc(peli["condiciones_texto"])}</div>'

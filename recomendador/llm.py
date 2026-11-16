@@ -21,7 +21,7 @@ import unicodedata
 from dataclasses import dataclass, field
 
 from . import config, perfiles
-from .herramientas import (DURACION_CORTA_MIN, ESQUEMAS, GENEROS_LIVIANOS, Herramientas,
+from .herramientas import (DURACION_CORTA_MIN, _afinidad, ESQUEMAS, GENEROS_LIVIANOS, Herramientas,
                            N_DEFECTO)
 from .pedido import interpretar_pedido
 
@@ -135,6 +135,12 @@ def analizar(mensaje: str, herramientas: Herramientas) -> dict:
         else:
             a["frase_titulo"] = (f"No encontré «{titulo}» en el catálogo, así que te "
                                  "recomiendo según lo demás que pediste.")
+            # Igual se aprovecha lo que describa X (géneros, tags, duración).
+            px = interpretar_pedido(titulo, datos=herramientas.datos)
+            a["generos"] += [g for g in px["generos"] if g not in a["generos"]]
+            a["tags"] += [t for t in px["tags_genome"] if t not in a["tags"]]
+            if not a["max_duracion_min"] and px["max_duracion_min"]:
+                a["max_duracion_min"] = px["max_duracion_min"]
     return a
 
 
@@ -191,7 +197,8 @@ def _lista_es(items: list[str]) -> str:
         if items else ""
 
 
-def datos_de_respaldo(peli: dict, perfil: dict, calificadas: list[dict]) -> str:
+def datos_de_respaldo(peli: dict, perfil: dict, calificadas: list[dict],
+                      usadas: set | None = None) -> str:
     """Línea con la evidencia (datos de herramientas) de por qué encaja la película."""
     partes = []
     gen_es = [perfiles.GENEROS_ES.get(g, g) for g in peli.get("generos", [])]
@@ -211,15 +218,21 @@ def datos_de_respaldo(peli: dict, perfil: dict, calificadas: list[dict]) -> str:
         partes.append(f"Tu perfil ({perfil.get('tipo') or 'sin tipo'}) se inclina por "
                       f"{_lista_es(perfil['top_generos_es'][:2])}; esta te da un cambio "
                       "de tono dentro de lo que pediste.")
-    parecida = next((c for c in calificadas if c["rating"] >= 3.5
-                     and set(c.get("generos", [])) & set(peli.get("generos", []))), None)
+    # Película de referencia: la mejor calificada que comparta géneros y que no se haya
+    # usado ya en otra tarjeta de la misma respuesta (``usadas`` se comparte entre ellas).
+    usadas = usadas if usadas is not None else set()
+    parecidas = [c for c in calificadas if c["rating"] >= 3.5
+                 and set(c.get("generos", [])) & set(peli.get("generos", []))]
+    parecida = next((c for c in parecidas if c.get("movieId") not in usadas), None)
     if parecida:
+        usadas.add(parecida.get("movieId"))
         comun = [perfiles.GENEROS_ES.get(g, g) for g in parecida["generos"]
                  if g in peli.get("generos", [])]
         partes.append(f"Le diste {parecida['rating']:g}★ a {parecida['titulo']}, "
                       f"que también es {_lista_es(comun[:2])}.")
-    if peli.get("score") is not None:
-        partes.append(f"Puntaje ALS para ti: {peli['score']:.2f}.")
+    afinidad = peli.get("afinidad") or _afinidad(peli.get("score"))
+    if afinidad:
+        partes.append(f"Según tu historial, {afinidad} contigo.")
     return " ".join(partes)
 
 
@@ -239,11 +252,13 @@ def responder_reglas(mensaje: str, userId: int, herramientas: Herramientas,
         return Respuesta(texto=AYUDA, proveedor="reglas", aviso=aviso)
     perfil = herramientas.perfil_gustos(userId)
     calificadas = herramientas.peliculas_calificadas(userId, n=200).get("peliculas", [])
+    refs: set = set()   # películas de referencia ya usadas (no se repiten)
     res = recomendar_detectado(userId, herramientas, a)
     usadas = ["perfil_gustos", "peliculas_calificadas", "recomendar"]
     if a["referencia"] is not None or a["frase_titulo"]:
         usadas.append("buscar_pelicula")
-    recs = [_con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas)})
+    refs: set = set()   # películas de referencia ya usadas (no se repiten)
+    recs = [_con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas, refs)})
             for r in res["recomendaciones"]]
     texto = _texto_reglas(a, perfil, recs, res.get("avisos"))
     return Respuesta(texto=texto, recomendaciones=recs, proveedor="reglas", aviso=aviso,
@@ -376,10 +391,11 @@ def _red_de_seguridad(respuesta: Respuesta, userId: int, herramientas: Herramien
     """Se pidieron películas y no quedó ninguna válida: recomendar con lo detectado."""
     perfil = herramientas.perfil_gustos(userId)
     calificadas = herramientas.peliculas_calificadas(userId, n=200).get("peliculas", [])
+    refs: set = set()   # películas de referencia ya usadas (no se repiten)
     res = recomendar_detectado(userId, herramientas, a)
     respuesta.herramientas_usadas.append("recomendar")
     respuesta.recomendaciones = [
-        _con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas)})
+        _con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas, refs)})
         for r in res["recomendaciones"]]
     if respuesta.recomendaciones:
         respuesta.texto = (respuesta.texto + " Te dejo las del recomendador directamente:"
@@ -404,6 +420,7 @@ def _validar(contenido: str, validas: dict[int, dict], usadas: list[str], userId
     """Deja solo películas de las herramientas y agrega la evidencia de cada una."""
     perfil = herramientas.perfil_gustos(userId)
     calificadas = herramientas.peliculas_calificadas(userId, n=200).get("peliculas", [])
+    refs: set = set()   # películas de referencia ya usadas (no se repiten)
     vistas = {c["movieId"] for c in calificadas}
     dato = _extraer_json(contenido)
     propuestas, descartadas = [], []
@@ -426,13 +443,13 @@ def _validar(contenido: str, validas: dict[int, dict], usadas: list[str], userId
         t = _normalizar(contenido)
         propuestas = [(mid, "") for mid, r in validas.items()
                       if _normalizar(r["titulo"]) in t and mid not in vistas]
-    recs, vistos = [], set()
+    recs, vistos, refs = [], set(), set()
     for mid, explicacion in propuestas:
         if mid in vistos:
             continue
         vistos.add(mid)
         ficha = validas[mid]
-        evidencia = datos_de_respaldo(ficha, perfil, calificadas)
+        evidencia = datos_de_respaldo(ficha, perfil, calificadas, refs)
         recs.append(_con_condiciones({**ficha, "explicacion": (
             explicacion + " — " if explicacion else "") + evidencia}))
     # Sin recomendaciones válidas el texto queda vacío: la red de seguridad lo completa.

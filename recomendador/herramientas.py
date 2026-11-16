@@ -44,6 +44,9 @@ N_MAXIMO = 20
 # Géneros que el chat entiende como «liviano». MovieLens no tiene 'Family': su
 # equivalente es 'Children', que se incluye para que el filtro funcione con los datos.
 GENEROS_LIVIANOS = ["Comedy", "Animation", "Family", "Children"]
+MIN_VOTOS = 50        # votos antes del corte para ser candidato (igual que batch_als)
+PESO_HIBRIDO = 0.5    # peso ALS del híbrido si metricas.json no lo trae
+AFINIDAD_ALTA = 1.0   # puntaje híbrido (z) desde el que la afinidad se muestra «alta»
 DURACION_CORTA_MIN = 100
 # Relevancia genome mínima para que una película «tenga» un tag pedido.
 UMBRAL_GENOME = 0.5
@@ -120,6 +123,14 @@ def _popularidad(ruta: str, _mtime: float, corte_epoch: int) -> list[int]:
     return [int(x) for x in ids[np.argsort(-conteos, kind="stable")]]
 
 
+@lru_cache(maxsize=4)
+def _votos(ruta: str, _mtime: float, corte_epoch: int) -> dict[int, int]:
+    """{movieId: número de ratings anteriores al corte}."""
+    _, m, _, t = _ratings_ordenados(ruta, _mtime)
+    ids, conteos = np.unique(m[t < corte_epoch], return_counts=True)
+    return {int(i): int(c) for i, c in zip(ids, conteos)}
+
+
 @lru_cache(maxsize=8)
 def _genome(ruta_tags: str, ruta_scores: str, tags: tuple[str, ...], _m1: float,
             _m2: float) -> dict[str, dict[int, float]]:
@@ -179,7 +190,9 @@ class Herramientas:
                 los eventos en vivo de estado.db se incluyen siempre.
     """
 
-    def __init__(self, datos=None, artefactos=None, estado_db=None, tmdb=None, corte=None):
+    def __init__(self, datos=None, artefactos=None, estado_db=None, tmdb=None, corte=None,
+                 min_votos: int = MIN_VOTOS):
+        self.min_votos = int(min_votos)
         self.datos = Path(datos) if datos else config.DATOS
         self.artefactos = Path(artefactos) if artefactos else config.artefactos_activos()
         self.estado_db = Path(estado_db) if estado_db else config.ESTADO_DB
@@ -269,6 +282,62 @@ class Herramientas:
         if not ruta.exists():
             return []
         return _popularidad(str(ruta), _mtime(ruta), self.corte_epoch)
+
+    def _votos(self) -> dict[int, int]:
+        """{movieId: número de ratings antes del corte}."""
+        ruta = self.datos / "ratings.csv"
+        if not ruta.exists():
+            return {}
+        return _votos(str(ruta), _mtime(ruta), self.corte_epoch)
+
+    def _peso_hibrido(self) -> float:
+        """Peso ALS del híbrido elegido en la validación (metricas.json), o 0.5."""
+        def buscar(d):
+            if isinstance(d, dict):
+                h = d.get("hibrido")
+                if isinstance(h, dict) and "peso_als" in h:
+                    return h["peso_als"]
+                if isinstance(h, dict) and "peso" in h:
+                    return h["peso"]
+                for v in d.values():
+                    r = buscar(v)
+                    if r is not None:
+                        return r
+            return None
+        try:
+            datos = json.loads((self.artefactos / "metricas.json").read_text(encoding="utf-8"))
+            peso = buscar(datos)
+            return PESO_HIBRIDO if peso is None else float(peso)
+        except (OSError, ValueError, TypeError):
+            return PESO_HIBRIDO
+
+    def orden_hibrido(self, ratings: dict, ids, matriz) -> list[tuple[int, float]]:
+        """Orden híbrido original: peso·z(ALS fold-in) + (1-peso)·z(log(1+votos)).
+
+        Es la misma fórmula de batch_als.recs_hibrido. Los z-scores se calculan sobre
+        las películas con >= min_votos (los candidatos del batch); si ninguna llega al
+        mínimo (muestra mini), sobre todas.
+        """
+        orden = foldin.recomendar_foldin(
+            (ids, matriz), [(m, f["rating"]) for m, f in ratings.items()],
+            n=len(ids), reg=self._reg())
+        if not orden:
+            return []
+        votos = self._votos()
+        mids = np.array([m for m, _ in orden], dtype=np.int64)
+        als = np.array([s for _, s in orden], dtype=np.float64)
+        pop = np.log1p(np.array([votos.get(int(m), 0) for m in mids], dtype=np.float64))
+        base = np.array([votos.get(int(m), 0) >= self.min_votos for m in mids])
+        if not base.any():
+            base = np.ones(len(mids), dtype=bool)
+
+        def z(x):
+            return (x - x[base].mean()) / (x[base].std() + 1e-9)
+
+        peso = self._peso_hibrido()
+        hib = peso * z(als) + (1 - peso) * z(pop)
+        idx = np.argsort(-hib, kind="stable")
+        return [(int(mids[i]), float(hib[i])) for i in idx]
 
     def existe_usuario(self, userId) -> bool:
         uid = _uid(userId)
@@ -398,8 +467,13 @@ class Herramientas:
         ratings = self._ratings_usuario(uid)
         vistas = set(ratings) if excluir_vistas else set()
         avisos: list[str] = []
+        votos = self._votos()
 
+        # Candidatos en el orden híbrido original (ALS + popularidad, como recs_hibrido).
+        # Solo entran las películas con >= min_votos antes del corte; las demás quedan
+        # como último respaldo, después de todo lo anterior.
         candidatos: list[tuple[int, float | None, str]] = []
+        poco_votadas: list[tuple[int, float | None, str]] = []
         con = self._con()
         if con is not None:
             try:
@@ -409,26 +483,27 @@ class Herramientas:
                 con.close()
         ids, matriz, origen = self._factores_vigentes()
         if ratings and ids is not None:
-            orden = foldin.recomendar_foldin(
-                (ids, matriz), [(m, f["rating"]) for m, f in ratings.items()],
-                n=len(ids), reg=self._reg())
-            candidatos += [(m, s, f"ALS fold-in ({origen})") for m, s in orden]
+            candidatos += [(m, s, f"híbrido ALS + popularidad ({origen})")
+                           for m, s in self.orden_hibrido(ratings, ids, matriz)]
         if not candidatos:
             avisos.append("Usuario sin historial: se usa la popularidad")
             candidatos = [(m, None, "popularidad") for m in self._popularidad()]
+        poco_votadas = [c for c in candidatos if votos.get(c[0], 0) < self.min_votos]
+        candidatos = [c for c in candidatos if votos.get(c[0], 0) >= self.min_votos]
 
         catalogo = self.catalogo()
         if max_dur is not None and not any(f.get("duracion_min") for f in catalogo.values()):
             avisos.append("No hay duraciones IMDb (corre scripts/descargar_imdb.py): "
                           "no se puede filtrar por duración")
         genome = self._genome(tags) if tags else {}
-        n_cond = int(bool(generos)) + len(tags) + int(max_dur is not None)
+        grupos = _grupos_generos(generos)
+        n_cond = len(grupos) + len(tags) + int(max_dur is not None)
 
-        # Recorre los candidatos en el orden híbrido (estado en vivo y luego ALS) y
-        # evalúa cada condición. El orden de llegada ES la afinidad ALS.
-        # Respaldo para que la lista nunca quede vacía: si el orden híbrido no alcanza
-        # (p. ej. todo lo del ALS ya está visto), siguen la popularidad y el catálogo.
+        # Recorre los candidatos en el orden híbrido y evalúa cada condición. El orden
+        # de llegada ES la afinidad. Respaldo para que la lista nunca quede vacía: las
+        # poco votadas, la popularidad y el catálogo.
         def respaldo():
+            yield from poco_votadas
             yield from ((m, None, "popularidad") for m in self._popularidad())
             yield from ((m, None, "catálogo") for m in catalogo)
 
@@ -439,9 +514,11 @@ class Herramientas:
             if mid in usados or mid in vistas or mid not in catalogo:
                 continue
             usados.add(mid)
-            ev = _evaluar(catalogo[mid], generos, tags, genome, max_dur)
-            # Nivel = condiciones pedidas menos las incumplidas: lo no evaluable no baja.
-            nivel = n_cond - len(ev["no_cumple"])
+            ev = _evaluar(catalogo[mid], grupos, tags, genome, max_dur)
+            # Nivel = condiciones pedidas - incumplidas - tags sin datos genome (cuentan
+            # como no cumplidos). Solo la duración sin dato IMDb queda neutral.
+            nivel = n_cond - len(ev["no_cumple"]) - sum(
+                c.startswith("tag") for c in ev["no_evaluables"])
             evaluadas.append((nivel, mid, score, fuente, ev))
             # Con n películas en el nivel máximo (o sin condiciones, con n películas) no
             # hace falta seguir: nada posterior puede adelantarlas.
@@ -455,6 +532,7 @@ class Herramientas:
         for nivel, mid, score, fuente, ev in evaluadas[:n]:
             recs.append({**self.ficha(mid), "rank": len(recs) + 1,
                          "score": None if score is None else round(float(score), 4),
+                         "afinidad": _afinidad(score), "votos": int(votos.get(mid, 0)),
                          "fuente": fuente, "nivel": nivel, "condiciones_pedidas": n_cond,
                          "coincidencia": 1.0 if not n_cond else round(nivel / n_cond, 3),
                          **ev})
@@ -466,7 +544,7 @@ class Herramientas:
                           "pudo evaluar y no baja su nivel")
         if any(c.startswith("tag") for r in recs for c in r["no_evaluables"]):
             avisos.append("Algunas películas no tienen datos del tag genome: esa condición "
-                          "no se pudo evaluar")
+                          "no se pudo evaluar y cuenta como no cumplida para el orden")
         return {"userId": uid, "existe": bool(ratings),
                 "filtros": {"n": n, "max_duracion_min": max_dur, "generos": generos,
                             "tags": tags, "excluir_vistas": bool(excluir_vistas)},
@@ -641,17 +719,42 @@ def _lista_tags(tags) -> list[str]:
     return salida
 
 
-def _evaluar(ficha: dict, generos: list[str], tags: list[str],
+def _grupos_generos(generos: list[str]) -> list[list[str]]:
+    """Una condición por género pedido ('drama policial' = Drama Y Crime).
+
+    Excepciones que valen como UNA condición cumplida con cualquiera de sus géneros:
+    Family/Children (MovieLens usa Children) y, si vienen los cuatro, el grupo
+    «liviano» (Comedy/Animation/Family/Children).
+    """
+    restantes = list(generos)
+    grupos: list[list[str]] = []
+    if all(g in restantes for g in GENEROS_LIVIANOS):
+        grupos.append(list(GENEROS_LIVIANOS))
+        restantes = [g for g in restantes if g not in GENEROS_LIVIANOS]
+    familia = [g for g in restantes if g in ("Family", "Children")]
+    if familia:
+        grupos.append(familia)
+    grupos += [[g] for g in restantes if g not in ("Family", "Children")]
+    return grupos
+
+
+def _afinidad(score) -> str | None:
+    """Texto de afinidad para mostrar en vez del número: 'alta' o 'media'."""
+    if score is None:
+        return None
+    return "afinidad alta" if float(score) >= AFINIDAD_ALTA else "afinidad media"
+
+
+def _evaluar(ficha: dict, grupos: list[list[str]], tags: list[str],
              genome: dict[str, dict[int, float]], max_dur: float | None) -> dict:
-    """Clasifica cada condición pedida en cumple / no_cumple / no_evaluables (textos)."""
+    """Clasifica cada condición pedida en cumple / no_cumple / no_evaluables (textos).
+
+    grupos: una lista por condición de género (se cumple con cualquiera del grupo)."""
     cumple, no_cumple, no_eval = [], [], []
-    if generos:
-        comunes = [g for g in generos if g in ficha["generos"]]
-        if comunes:
-            cumple.append("género: " + ", ".join(perfiles.GENEROS_ES.get(g, g) for g in comunes))
-        else:
-            no_cumple.append("género: " + ", ".join(perfiles.GENEROS_ES.get(g, g)
-                                                    for g in generos if g != "Family"))
+    for grupo in grupos:
+        visibles = [g for g in grupo if g != "Family"] or grupo
+        texto = "género: " + "/".join(perfiles.GENEROS_ES.get(g, g) for g in visibles)
+        (cumple if any(g in ficha["generos"] for g in grupo) else no_cumple).append(texto)
     for t in tags:
         relevancia = genome.get(t, {}).get(ficha["movieId"])
         if relevancia is None:
