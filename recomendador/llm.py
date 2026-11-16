@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
@@ -33,6 +34,10 @@ AVISO_REGLAS = "Ollama no responde: usando modo reglas"
 TIMEOUT_OLLAMA_S = 20         # tope de la conexión HTTP con Ollama
 LIMITE_RESPUESTA_S = 20       # tope total: si Ollama tarda más, plantilla de reglas
 ENTENDI_NO_PEDIDO = "Entendí: no es un pedido de películas."
+# Modo público: el LLM atiende de a UNA solicitud. Si está ocupado, la siguiente recibe
+# al instante la plantilla de reglas con este aviso (no espera en cola).
+SEMAFORO_LLM = threading.BoundedSemaphore(1)
+AVISO_OCUPADO = "El asistente está atendiendo otra consulta: te respondo con la plantilla"
 
 SISTEMA = """Eres el redactor de un recomendador de películas para el usuario {userId}.
 Tu ÚNICO trabajo es escribir el texto de la respuesta. Reglas obligatorias:
@@ -115,13 +120,19 @@ def analizar(mensaje: str, herramientas: Herramientas) -> dict:
     se pidió ninguno) y ella misma no se recomienda; si no está, queda una frase que
     lo dice y se recomienda igual con lo demás.
     """
-    p = interpretar_pedido(mensaje, datos=herramientas.datos)
+    p = interpretar_pedido(mensaje, datos=herramientas.datos,
+                           personas=herramientas.artefactos / "app" / "personas.parquet")
     filtros = interpretar(mensaje)
+    # Si se nombró a una persona, los géneros salen del texto sin su nombre.
+    if p["personas"]:
+        filtros["generos"] = [g for g in filtros["generos"] if g in p["generos"]
+                              or g in GENEROS_LIVIANOS and "liviano" in p["animos"]]
     a = {"generos": filtros["generos"], "tags": list(p["tags_genome"]),
          "max_duracion_min": filtros["max_duracion_min"], "n": filtros["n"],
          "pide": bool(p["pide_recomendacion"]
                       or _RE_PIDE_EXTRA.search(_normalizar(mensaje))),
-         "condiciones": list(p["condiciones"]), "frase_titulo": "", "referencia": None}
+         "condiciones": list(p["condiciones"]), "frase_titulo": "", "referencia": None,
+         "personas": list(p["personas"])}
     titulo = p.get("titulo_mencionado")
     if titulo:
         r = herramientas.buscar_pelicula(titulo)
@@ -147,7 +158,8 @@ def recomendar_detectado(userId: int, herramientas: Herramientas, a: dict) -> di
     """Llama a ``recomendar`` con lo detectado (sin la película de referencia)."""
     res = herramientas.recomendar(userId, n=a["n"] + (1 if a["referencia"] else 0),
                                   max_duracion_min=a["max_duracion_min"],
-                                  generos=a["generos"], tags=a["tags"], excluir_vistas=True)
+                                  generos=a["generos"], tags=a["tags"], excluir_vistas=True,
+                                  personas=a.get("personas"))
     recs = [r for r in res.get("recomendaciones", []) if r["movieId"] != a["referencia"]]
     for i, r in enumerate(recs[:a["n"]], start=1):
         r["rank"] = i
@@ -260,6 +272,8 @@ def entendi(a: dict) -> str:
         partes.append("tags " + ", ".join(f"«{t}»" for t in a["tags"]))
     if a["max_duracion_min"]:
         partes.append(f"duración de {a['max_duracion_min']} min o menos")
+    for p in a.get("personas") or []:     # 'de Christopher Nolan' / 'con Tom Hanks'
+        partes.append("películas " + p["texto"])
     if a.get("referencia") is not None:
         partes.append("parecidas a la película que nombraste")
     return "Entendí: " + ("; ".join(partes) if partes
@@ -269,7 +283,8 @@ def entendi(a: dict) -> str:
 def filtros_finales(a: dict) -> dict:
     """Filtros que recibe ``recomendar``: salen SOLO de la interpretación del pedido."""
     return {"generos": list(a["generos"]), "tags": list(a["tags"]),
-            "max_duracion_min": a["max_duracion_min"], "n": a["n"]}
+            "max_duracion_min": a["max_duracion_min"], "n": a["n"],
+            "personas": [p["nombre"] for p in a.get("personas") or []]}
 
 
 def _recomendaciones_del_pedido(a: dict, userId: int, herramientas: Herramientas):
@@ -312,6 +327,7 @@ def _texto_reglas(a: dict, perfil: dict, recs: list[dict], avisos) -> str:
     if a["generos"]:
         pedido.append("de " + _lista_es([perfiles.GENEROS_ES.get(g, g)
                                          for g in a["generos"] if g != "Family"]))
+    pedido += [p["texto"] for p in a.get("personas") or []]
     tipo = f" Eres «{perfil['tipo']}»." if perfil.get("tipo") else ""
     texto = (a["frase_titulo"] + " ") if a["frase_titulo"] else ""
     if recs:
@@ -451,11 +467,18 @@ def responder(mensaje: str, userId: int, herramientas: Herramientas,
     proveedor = (proveedor or config.LLM_PROVIDER).lower()
     if proveedor == "reglas":
         return responder_reglas(mensaje, userId, herramientas)
+    # Modo público: una sola solicitud al LLM a la vez; sin esperar si está ocupado.
+    publico = bool(getattr(config, "MODO_PUBLICO", False))
+    if publico and not SEMAFORO_LLM.acquire(blocking=False):
+        return responder_reglas(mensaje, userId, herramientas, aviso=AVISO_OCUPADO)
     try:
         respuesta = responder_ollama(mensaje, userId, herramientas, historial, cliente)
     except Exception as exc:  # conexión rechazada, modelo no descargado, timeout...
         log.warning("Ollama falló (%s: %s): modo reglas", type(exc).__name__, exc)
         return responder_reglas(mensaje, userId, herramientas, aviso=AVISO_REGLAS)
+    finally:
+        if publico:
+            SEMAFORO_LLM.release()
     # La red de seguridad (pedido sin recomendaciones válidas) vive en responder_ollama.
     return respuesta
 
@@ -496,4 +519,4 @@ def descripcion_config() -> dict:
 __all__ = ["responder", "responder_reglas", "responder_ollama", "interpretar", "analizar",
            "resumen_condiciones", "AYUDA",
            "Respuesta", "AVISO_REGLAS", "descripcion_config",
-           "estado_ollama", "PROVEEDOR_COMPLETADO"]
+           "estado_ollama", "PROVEEDOR_COMPLETADO", "SEMAFORO_LLM", "AVISO_OCUPADO"]

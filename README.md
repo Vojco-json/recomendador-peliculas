@@ -179,19 +179,69 @@ $env:MODO = "demo"
 - El reentrenamiento tarda → bajar `DEMO_DESDE` a una fecha más reciente
   (p. ej. 2018-01-01) y volver a correr `preparar_demo.py`.
 
+## CineRuta: la app para la expo
+
+CineRuta es la app Streamlit (`app/app.py`): cuentas locales, onboarding, Inicio con
+filas de carátulas personalizadas, Buscar, Ficha con reseñas, Explorar y Chat. Sigue una
+arquitectura Lambda: Spark batch escribe parquets, Kafka + Structured Streaming manejan
+los eventos y la app **solo lee** lo precalculado (nunca importa pyspark; cada página
+carga en menos de 2 s con la muestra mini, ver `tests/test_rendimiento_app.py`).
+
+Orden de arranque (cada uno en su terminal, desde la raíz y con el `.venv`):
+
+```powershell
+# 1) Capa batch para la app (parquets en artefactos/<perfil>/app/)
+.venv\Scripts\python scripts/precalcular_app.py
+# 2) Streaming: ratings y reseñas de Kafka -> estado.db (sin Kafka, la app escribe directo)
+.venv\Scripts\python scripts/streaming.py
+# 3) App en modo público
+$env:MODO_PUBLICO = "1"
+.venv\Scripts\python -m streamlit run app/app.py
+# 4) Túnel público (paso manual; cloudflared se instala aparte)
+cloudflared tunnel --url http://localhost:8501
+# 5) QR del póster hacia la URL que entregó cloudflared
+$env:URL_PUBLICA = "https://<tu-subdominio>.trycloudflare.com"
+.venv\Scripts\python scripts/figuras_poster.py
+```
+
+- **Modo público (`MODO_PUBLICO=1`):** login obligatorio (sin sesión solo se ve el
+  login), límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de
+  chat, importar CSV; la acción 21 se rechaza con un aviso y no se registra), el LLM
+  atiende de a una solicitud (si está ocupado responde al instante la plantilla de
+  reglas) y la barra lateral no muestra configuración del LLM, estado del servidor ni
+  el botón de recarga.
+- **QR:** `scripts/figuras_poster.py` genera `qr_publico.png` (y `.svg`) hacia
+  `URL_PUBLICA` (o `--url`). Si la variable no está definida, avisa y no lo genera.
+- **Chat por persona:** «algo de Nolan», «una comedia con Tom Hanks» o «dirigida por
+  Almodovar» (sin importar tildes) usan los directores y actores de IMDb de
+  `personas.parquet`. La persona es una condición más del orden por niveles y aparece
+  en la línea «Entendí:».
+
+### Moderación de reseñas
+
+`scripts/moderar_resenas.py` es el **único camino de moderación**: la app no tiene
+ningún control para ocultar reseñas. Se corre en el equipo que guarda `estado.db`:
+
+```powershell
+.venv\Scripts\python scripts/moderar_resenas.py --listar        # reseñas con su ID
+.venv\Scripts\python scripts/moderar_resenas.py --ocultar 12    # deja de mostrarse
+.venv\Scripts\python scripts/moderar_resenas.py --mostrar 12    # vuelve a mostrarse
+```
+
+Ocultar solo marca la reseña como `oculta` en `estado.db`; las ocultas no se muestran.
+
 ## App Streamlit con chat
 
 ```powershell
 .venv\Scripts\python -m streamlit run app/app.py
 ```
 
-- **Barra lateral:** `userId`, tipo de espectador, géneros con más peso, modo
-  (completo/demo), «Actualizado hace X s» (leído de `artefactos/estado.db`) y la
-  configuración del LLM.
-- **Columna principal:** tarjetas con las recomendaciones y un chat
-  (ej.: «algo corto y liviano para hoy»). El chat solo recomienda películas que
-  entrega la herramienta `recomendar` y explica cada una con datos del usuario y de la
-  película; las películas inventadas se descartan.
+- **Barra lateral:** usuario, modo (completo/demo), «Actualizado hace X s» (leído de
+  `estado.db`), acciones que quedan en el minuto y, fuera del modo público, la
+  configuración del LLM y el botón «Actualizar».
+- **Pestaña Chat:** el chat solo recomienda películas que entrega la herramienta
+  `recomendar` y explica cada una con datos del usuario y de la película; las
+  películas inventadas se descartan.
 
 ### Variables del LLM
 

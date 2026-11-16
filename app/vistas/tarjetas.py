@@ -62,6 +62,10 @@ def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, s
     if memoria is not None and clave in memoria:
         return memoria[clave]
     salida = (plantilla, "plantilla")
+    # Modo público: el LLM atiende de a una solicitud; si está ocupado, plantilla ya.
+    publico = bool(getattr(config, "MODO_PUBLICO", False))
+    if publico and not llm.SEMAFORO_LLM.acquire(blocking=False):
+        return salida
     try:
         datos = {k: e.get(k) for k in ("titulo", "veredicto", "parecida_alta", "parecida_baja",
                                        "tags_a_favor", "tags_en_contra", "persona_comun")}
@@ -82,6 +86,9 @@ def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, s
             salida = (texto, "llm")
     except Exception as exc:  # Ollama caído, lento o sin el modelo: plantilla
         log.info("Redacción con LLM no disponible (%s); uso la plantilla.", exc)
+    finally:
+        if publico:
+            llm.SEMAFORO_LLM.release()
     if memoria is not None:
         memoria[clave] = salida
     return salida

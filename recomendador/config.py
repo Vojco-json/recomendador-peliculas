@@ -182,6 +182,16 @@ LLM_THINK: bool = _booleano("LLM_THINK", False)
 
 TMDB_API_KEY: str | None = os.environ.get("TMDB_API_KEY") or None
 
+# --------------------------------------------------------------------------- #
+# Modo público (expo por Cloudflare Tunnel)
+# --------------------------------------------------------------------------- #
+
+# MODO_PUBLICO=1: login obligatorio, límite de acciones por minuto, LLM de a una
+# solicitud y sin ningún control de administración en la app.
+MODO_PUBLICO: bool = _booleano("MODO_PUBLICO", False)
+# URL pública (p. ej. la de cloudflared) a la que apunta el QR del póster.
+URL_PUBLICA: str = _texto("URL_PUBLICA", "").strip()
+
 
 def artefactos_activos() -> Path:
     """Carpeta de artefactos que usan la app y el streaming según el MODO."""

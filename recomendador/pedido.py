@@ -211,6 +211,154 @@ def es_descripcion(frase: str, tags_validos=None, datos=None) -> bool:
     return bool(p["generos"] or p["animos"] or p["tags_genome"])
 
 
+# --------------------------------------------------------------------------- #
+# Personas (directores y actores de IMDb, de personas.parquet)
+# --------------------------------------------------------------------------- #
+
+# Palabras que introducen a una persona: 'algo de Nolan', 'con Tom Hanks',
+# 'dirigida por Greta Gerwig', 'by Nolan', 'starring Tom Hanks'...
+_GATILLOS = {"de", "del", "con", "por", "by", "with", "from", "starring",
+             "dirigida por", "dirigidas por", "dirigido por", "dirigidos por", "directed by",
+             "actuada por", "actuadas por", "protagonizada por", "protagonizadas por"}
+# Gatillos que piden actor (los demás piden director).
+_GATILLOS_ACTOR = {"con", "with", "starring", "actuada por", "actuadas por",
+                   "protagonizada por", "protagonizadas por"}
+LARGO_MIN_APELLIDO = 4      # 'de Lee' (3 letras) exige el nombre completo
+
+
+def _vocabulario_pedido() -> frozenset[str]:
+    """Palabras del propio pedido (géneros, ánimos...) que nunca se leen como apellido."""
+    palabras = set()
+    for claves in GENEROS.values():
+        for c in claves:
+            palabras.update(c.split())
+    for animo in ANIMOS.values():
+        for c in animo["claves"]:
+            palabras.update(c.split())
+    palabras.update({"amor", "accion", "verdad", "noche", "hoy", "familia", "amigos",
+                     "pareja", "minutos", "horas", "final", "giro", "estilo", "algo",
+                     "peliculas", "pelicula", "pelis", "peli", "movie", "movies",
+                     "film", "films", "duracion", "menos", "mas", "maximo"})
+    return frozenset(palabras)
+
+
+VOCABULARIO = _vocabulario_pedido()
+
+
+@lru_cache(maxsize=4)
+def _indice_personas(ruta: str, _mtime: float) -> dict:
+    """Índice de personas.parquet: nombre normalizado y apellido -> persona.
+
+    Cada persona: {'nombre', 'nconst', 'roles': {'director': {ids}, 'actor': {ids}}}.
+    Si un apellido es de varias personas, gana la que tiene más películas.
+    """
+    vacio = {"completo": {}, "apellido": {}}
+    if not Path(ruta).exists():
+        return vacio
+    try:
+        import pandas as pd   # solo pandas/pyarrow: la app nunca importa pyspark
+
+        df = pd.read_parquet(ruta, columns=["movieId", "nconst", "nombre", "nombre_norm",
+                                            "rol"])
+    except Exception:   # parquet dañado o sin columnas: sin personas, sin error
+        return vacio
+    personas: dict[str, dict] = {}
+    for mid, nconst, nombre, norm, rol in df.itertuples(index=False):
+        p = personas.setdefault(str(nconst), {"nombre": str(nombre), "nconst": str(nconst),
+                                              "norm": normalizar(norm or nombre),
+                                              "roles": {"director": set(), "actor": set()}})
+        p["roles"]["director" if rol == "director" else "actor"].add(int(mid))
+    completo: dict[str, dict] = {}
+    apellido: dict[str, dict] = {}
+
+    def total(p):
+        return len(p["roles"]["director"] | p["roles"]["actor"])
+
+    for p in personas.values():
+        if total(p) > total(completo.get(p["norm"], {"roles": {"director": set(),
+                                                               "actor": set()}})):
+            completo[p["norm"]] = p
+        ultimo = p["norm"].split()[-1] if p["norm"] else ""
+        if len(ultimo) >= LARGO_MIN_APELLIDO and ultimo not in VOCABULARIO:
+            actual = apellido.get(ultimo)
+            if actual is None or (total(p), p["nombre"]) > (total(actual), actual["nombre"]):
+                apellido[ultimo] = p
+    return {"completo": completo, "apellido": apellido}
+
+
+def ruta_personas_defecto() -> Path:
+    """personas.parquet de los artefactos activos (lo escribe scripts/precalcular_app.py)."""
+    from . import config
+    return config.artefactos_activos() / "app" / "personas.parquet"
+
+
+def cargar_personas(ruta=None) -> dict:
+    """Índice de personas (vacío si no existe el parquet). Cacheado por ruta y fecha."""
+    ruta = Path(ruta) if ruta else ruta_personas_defecto()
+    try:
+        mtime = ruta.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return _indice_personas(str(ruta), mtime)
+
+
+def _persona_detectada(p: dict, gatillo: str) -> dict:
+    """Persona como condición: rol según el gatillo ('con' -> actor) y si no, el que tenga."""
+    rol = "actor" if gatillo in _GATILLOS_ACTOR else "director"
+    if not p["roles"][rol]:
+        rol = "director" if rol == "actor" else "actor"
+    ids = sorted(p["roles"]["director"] | p["roles"]["actor"])
+    return {"nombre": p["nombre"], "nconst": p["nconst"], "rol": rol, "movieIds": ids,
+            "texto": f"{'de' if rol == 'director' else 'con'} {p['nombre']}"}
+
+
+def detectar_personas(t: str, indice: dict) -> tuple[list[dict], str]:
+    """Personas nombradas en el texto normalizado ``t`` y el texto sin sus nombres.
+
+    Busca, después de cada gatillo ('de', 'con', 'dirigida por', 'by'...), primero el
+    nombre completo y luego el apellido ('algo de Nolan'). Sin tildes ni mayúsculas
+    porque ``t`` y los nombres van normalizados.
+    """
+    if not indice["completo"]:
+        return [], t
+    encontradas: list[dict] = []
+    vistos: set[str] = set()
+    palabras = t.split()
+    quitar: set[int] = set()
+    i = 0
+    while i < len(palabras):
+        m = None
+        for largo in (2, 1):           # 'dirigida por' antes que 'de'
+            gat = " ".join(palabras[i:i + largo])
+            if gat in _GATILLOS:
+                m = (gat, largo)
+                break
+        if not m:
+            i += 1
+            continue
+        gat, largo = m
+        j = i + largo
+        hallada = None
+        for k in (4, 3, 2):            # nombre completo de 2 a 4 palabras
+            nombre = " ".join(palabras[j:j + k])
+            if len(palabras[j:j + k]) == k and nombre in indice["completo"]:
+                hallada = (indice["completo"][nombre], k)
+                break
+        if hallada is None and j < len(palabras) and palabras[j] in indice["apellido"]:
+            hallada = (indice["apellido"][palabras[j]], 1)
+        if hallada is None:
+            i += 1
+            continue
+        p, k = hallada
+        if p["nconst"] not in vistos:
+            vistos.add(p["nconst"])
+            encontradas.append(_persona_detectada(p, gat))
+        quitar.update(range(i, j + k))
+        i = j + k
+    resto = " ".join(w for n, w in enumerate(palabras) if n not in quitar)
+    return encontradas, resto
+
+
 def _duracion(t: str) -> int | None:
     m = _RE_MAX_MIN.search(t)
     if m and 30 <= int(m.group(1)) <= 400:
@@ -227,11 +375,13 @@ def _duracion(t: str) -> int | None:
 # Función principal
 # --------------------------------------------------------------------------- #
 
-def interpretar_pedido(texto: str, tags_validos=None, datos=None) -> dict:
+def interpretar_pedido(texto: str, tags_validos=None, datos=None, personas=None) -> dict:
     """Convierte un mensaje libre en condiciones (ver el docstring del módulo).
 
     tags_validos: conjunto de tags del genome; si es None se lee ``genome-tags.csv``
     de ``datos`` (por defecto ``config.DATOS``). Los tags que no existan se descartan.
+    personas: ruta a personas.parquet (o un índice de ``cargar_personas``); si es
+    None se usa el de los artefactos activos. Sin el archivo no se detectan personas.
     """
     texto = str(texto or "")
     titulo, resto = _titulo_mencionado(texto)
@@ -239,6 +389,9 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None) -> dict:
         # «algo como de drama policial…»: X describe contenido, no es un título.
         titulo, resto = None, texto
     t = normalizar(resto)         # el título no cuenta como género ('Star Wars' != War)
+    indice = personas if isinstance(personas, dict) else cargar_personas(personas)
+    # El nombre de la persona tampoco cuenta como género ni ánimo ('con Tom Hanks').
+    gente, t = detectar_personas(t, indice)
     palabras = t.split()
 
     generos: list[str] = []
@@ -263,7 +416,7 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None) -> dict:
     m = _RE_N.search(t)
     n = max(1, min(int(m.group(1)), 10)) if m else N_DEFECTO
 
-    pide = bool(generos or tags or max_dur or titulo or _RE_PIDE.search(t))
+    pide = bool(generos or tags or max_dur or titulo or gente or _RE_PIDE.search(t))
 
     condiciones: list[str] = []
     if generos:
@@ -275,8 +428,10 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None) -> dict:
     condiciones += [ANIMOS[a]["texto"] for a in animos]
     if titulo:
         condiciones.append(f"parecida a «{titulo}»")
+    condiciones += [f"persona: {p['texto']}" for p in gente]
 
     return {
+        "personas":           gente,
         "generos": generos,
         "tags_genome": tags_ok,
         "tags_descartados": descartados,
@@ -289,5 +444,11 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None) -> dict:
     }
 
 
-__all__ = ["interpretar_pedido", "cargar_tags_genome", "normalizar", "contiene",
+def analizar(texto: str, tags_validos=None, datos=None, personas=None) -> dict:
+    """Alias de ``interpretar_pedido`` (nombre corto que usan el chat y las pruebas)."""
+    return interpretar_pedido(texto, tags_validos=tags_validos, datos=datos, personas=personas)
+
+
+__all__ = ["interpretar_pedido", "analizar", "cargar_personas", "detectar_personas",
+           "cargar_tags_genome", "normalizar", "contiene",
            "GENEROS", "GENEROS_ES", "ANIMOS", "DURACION_CORTA_MIN", "UMBRAL_TIPEO"]

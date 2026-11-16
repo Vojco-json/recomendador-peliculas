@@ -11,6 +11,11 @@ La app solo LEE lo precalculado (artefactos/<perfil>/app/*.parquet, de
 scripts/precalcular_app.py) y el estado en vivo (estado.db, que escribe
 scripts/streaming.py). Nunca importa pyspark. Configuración en recomendador/config.py
 (MODO, DATOS, ARTEFACTOS, ESTADO_DB, LLM_PROVIDER, LLM_MODEL, OLLAMA_HOST, LLM_THINK).
+
+Modo público (MODO_PUBLICO=1, para publicarla por Cloudflare Tunnel): login
+obligatorio, límite de 20 acciones por minuto por sesión, LLM de a una solicitud y
+ningún control de administración (ni configuración del LLM, ni recarga, ni rutas).
+La moderación de reseñas nunca está en la app: solo scripts/moderar_resenas.py.
 """
 
 from __future__ import annotations
@@ -124,6 +129,9 @@ def barra_lateral(ctx: Contexto) -> None:
                         '</div>', unsafe_allow_html=True)
         st.caption(f"Te quedan {ctx.limitador.restantes()} de {ctx.limitador.maximo} "
                    "acciones en este minuto.")
+        if config.MODO_PUBLICO:
+            # Público: nada de configuración, estado del servidor ni recarga manual.
+            return
         cfg = llm.descripcion_config()
         st.markdown(f"**LLM_PROVIDER:** `{cfg['LLM_PROVIDER']}`  \n**LLM_MODEL:** "
                     f"`{cfg['LLM_MODEL']}`  \n**think:** `{str(cfg['think']).lower()}`")

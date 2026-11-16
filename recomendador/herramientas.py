@@ -436,7 +436,7 @@ class Herramientas:
         }
 
     def recomendar(self, userId, n: int = N_DEFECTO, max_duracion_min=None, generos=None,
-                   tags=None, excluir_vistas: bool = True) -> dict:
+                   tags=None, excluir_vistas: bool = True, personas=None) -> dict:
         """Top-n para el usuario, ordenado por niveles de coincidencia con el pedido.
 
         Orden híbrido de candidatos: primero el top-N vigente en estado.db (en vivo) y
@@ -449,6 +449,8 @@ class Herramientas:
         - tags: tags del genome (p. ej. 'twist ending'); 1 condición por tag, se cumple
           con relevancia >= UMBRAL_GENOME.
         - max_duracion_min: 1 condición, duración IMDb <= este valor.
+        - personas: directores o actores (nombres o dicts de ``pedido.detectar_personas``);
+          1 condición por persona, se cumple si participa en la película.
         nivel = condiciones pedidas - incumplidas (lo no evaluable, como una duración
         sin dato, no baja el nivel). Se ordena por nivel de mayor a menor y, dentro de
         cada nivel, por el orden híbrido. Sin condiciones el orden es el híbrido exacto.
@@ -497,7 +499,8 @@ class Herramientas:
                           "no se puede filtrar por duración")
         genome = self._genome(tags) if tags else {}
         grupos = _grupos_generos(generos)
-        n_cond = len(grupos) + len(tags) + int(max_dur is not None)
+        gente = self._personas_pedidas(personas)
+        n_cond = len(grupos) + len(tags) + int(max_dur is not None) + len(gente)
 
         # Recorre los candidatos en el orden híbrido y evalúa cada condición. El orden
         # de llegada ES la afinidad. Respaldo para que la lista nunca quede vacía: las
@@ -515,6 +518,8 @@ class Herramientas:
                 continue
             usados.add(mid)
             ev = _evaluar(catalogo[mid], grupos, tags, genome, max_dur)
+            for p in gente:   # la persona es una condición más del orden por niveles
+                (ev["cumple"] if mid in p["ids"] else ev["no_cumple"]).append(p["texto"])
             # Nivel = condiciones pedidas - incumplidas - tags sin datos genome (cuentan
             # como no cumplidos). Solo la duración sin dato IMDb queda neutral.
             nivel = n_cond - len(ev["no_cumple"]) - sum(
@@ -549,8 +554,31 @@ class Herramientas:
                           "no se pudo evaluar y cuenta como no cumplida para el orden")
         return {"userId": uid, "existe": bool(ratings),
                 "filtros": {"n": n, "max_duracion_min": max_dur, "generos": generos,
-                            "tags": tags, "excluir_vistas": bool(excluir_vistas)},
+                            "tags": tags, "personas": [p["nombre"] for p in gente],
+                            "excluir_vistas": bool(excluir_vistas)},
                 "recomendaciones": recs, "avisos": avisos}
+
+    def _personas_pedidas(self, personas) -> list[dict]:
+        """Normaliza ``personas``: [{'nombre', 'texto', 'ids'}]. Acepta los dicts de
+        pedido.py (con movieIds) o nombres sueltos, que se buscan en personas.parquet."""
+        from . import pedido
+
+        salida = []
+        for p in personas or []:
+            if isinstance(p, dict) and "movieIds" in p:
+                salida.append({"nombre": p["nombre"], "texto": p.get("texto") or p["nombre"],
+                               "ids": {int(m) for m in p["movieIds"]}})
+                continue
+            nombre = p.get("nombre") if isinstance(p, dict) else p
+            if not nombre:
+                continue
+            hallada, _ = pedido.detectar_personas(
+                "de " + pedido.normalizar(nombre),
+                pedido.cargar_personas(self.artefactos / "app" / "personas.parquet"))
+            for h in hallada[:1]:
+                salida.append({"nombre": h["nombre"], "texto": h["texto"],
+                               "ids": set(h["movieIds"])})
+        return salida
 
     def _genome(self, tags: list[str]) -> dict[str, dict[int, float]]:
         """Relevancias genome de los tags pedidos (vacío si la carpeta no trae genome)."""

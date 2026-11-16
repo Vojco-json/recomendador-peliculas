@@ -2,7 +2,7 @@
 
 Se usa desde Buscar y desde Explorar; ``prefijo`` separa las claves de los widgets
 para que la misma película pueda aparecer en dos pestañas a la vez. La app no tiene
-ningún control para ocultar reseñas: la moderación se hace fuera (scripts/moderar.py).
+ningún control para ocultar reseñas: la moderación se hace fuera (scripts/moderar_resenas.py).
 """
 
 from __future__ import annotations

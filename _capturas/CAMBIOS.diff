@@ -1,353 +1,358 @@
-f5be735 Paquete 9 (4. App CineRuta: estilo propio, login, onboarding e Inicio), intento 1: Rehíce app/app.py como CineRuta. La paleta propia y el CSS están en app/estilo.py, y las vistas en app/vistas/ (comun.py, login.py, onboarding.py, ini
+9351f50 Paquete 10 (5. Buscar, Ficha con reseñas, tarjeta 'Para ti' y Explorar), intento 1: Las vistas de este paquete ya estaban en la carpeta desde un intento anterior que no se commiteó: app/vistas/buscar.py, ficha.py, explorar.py y tarjet
 
+ ARQUITECTURA.md                  |   6 +-
  ESPEC.md                         |  12 +-
- _capturas/CAMBIOS.diff           | 581 ++++++++++++++++++++-------------------
- _capturas/INDICE.txt             |   5 +-
- _capturas/PRUEBAS.txt            | 103 ++++---
- _capturas/verif_1.png            | Bin 255946 -> 396936 bytes
- _capturas/verif_1_texto.txt      | 216 ++++++---------
- _capturas/verif_2.png            | Bin 256585 -> 253725 bytes
- _capturas/verif_2_texto.txt      | 216 ++++++---------
- _capturas/verif_3.png            | Bin 0 -> 26029 bytes
- _capturas/verif_3_texto.txt      |   6 +
- app/app.py                       | 341 +++++++++++------------
- app/estilo.py                    | 159 +++++++++++
- app/vistas/__init__.py           |   1 +
- app/vistas/chat.py               |  93 +++++++
- app/vistas/comun.py              | 153 +++++++++++
- app/vistas/inicio.py             |  33 +++
- app/vistas/login.py              |  55 ++++
- app/vistas/onboarding.py         | 133 +++++++++
- muestras/letterboxd_mini.csv     |  11 +
- scripts/vista_previa_cineruta.py |  58 ++++
- tests/base_mini.py               |  11 +
- tests/test_app.py                | 448 ++++++++++++++++--------------
- tests/test_app_letterboxd.py     | 267 ++++++++++++++++++
- tests/test_red_seguridad.py      |   8 +-
- 24 files changed, 1882 insertions(+), 1028 deletions(-)
+ _capturas/CAMBIOS.diff           | 609 ++++++++++++++++++++-------------------
+ _capturas/INDICE.txt             |   7 +-
+ _capturas/PRUEBAS.txt            |  97 ++++---
+ _capturas/verif_1.png            | Bin 396936 -> 126195 bytes
+ _capturas/verif_1_texto.txt      | 110 ++-----
+ _capturas/verif_2.png            | Bin 253725 -> 122045 bytes
+ _capturas/verif_2_texto.txt      | 110 ++-----
+ _capturas/verif_3.png            | Bin 26029 -> 115344 bytes
+ _capturas/verif_3_texto.txt      |  34 ++-
+ _capturas/verif_4.png            | Bin 0 -> 849718 bytes
+ _capturas/verif_4_texto.txt      | 130 +++++++++
+ app/app.py                       |  36 +--
+ app/estilo.py                    |  58 ++++
+ app/vistas/buscar.py             |  52 ++++
+ app/vistas/comun.py              |  17 ++
+ app/vistas/explorar.py           |  79 +++++
+ app/vistas/ficha.py              | 158 ++++++++++
+ app/vistas/inicio.py             |   9 +
+ app/vistas/tarjetas.py           | 178 ++++++++++++
+ scripts/vista_previa_cineruta.py | 138 +++++----
+ tests/test_app_ficha.py          | 272 +++++++++++++++++
+ 23 files changed, 1498 insertions(+), 614 deletions(-)
 
+diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+index 540b81e..c19dae9 100644
+--- a/ARQUITECTURA.md
++++ b/ARQUITECTURA.md
+@@ -93,7 +93,7 @@ Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scri
+ - Criterio: llm.py ya no define los 4 símbolos y la suite previa sigue pasando
+ - Prueba de aceptacion: Precálculos Spark sobre la muestra mini (corte, LSH, personas, populares por tipo): el comando «.venv/Scripts/python -m pytest -q tests/test_precalculo.py» debe terminar sin error
+ - Prueba de aceptacion: Regresión del chat tras la limpieza de llm.py: el comando «.venv/Scripts/python -m pytest -q tests/test_llm_redactor.py tests/test_bateria.py» debe terminar sin error
+-### 7. 2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos [pendiente]
++### 7. 2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos [verificado]
+ Objetivo: Crear cuentas.py (bcrypt + SQLite, userId > 162541, Limitador de 20 acciones/min por sesión), moderacion.py (máx. 500 caracteres y filtro de palabras ofensivas), eventos.py (ratings → topic 'ratings' sin cambiar el formato; reseñas → topic 'resenas'; key userId; respaldo directo a estado.db con aviso), extender streaming.py para el topic 'resenas', crear scripts/moderar_resenas.py y agregar a perfiles.py vector_crudo/tipo_usuario para asignar el centroide más cercano con el mismo escalado. Agregar bcrypt y segno a requirements.txt.
+ Requisitos: 33, 41, 44, 46, 49, 50, 51, 52 · Archivos: recomendador/cuentas.py, recomendador/moderacion.py, recomendador/palabras_ofensivas.txt, recomendador/eventos.py, recomendador/streaming.py, recomendador/estado.py, recomendador/perfiles.py, scripts/moderar_resenas.py, requirements.txt, tests/test_cuentas.py, tests/test_eventos.py, tests/test_tipo_nuevo.py · Depende de: -
+ - Criterio: La contraseña se guarda solo como hash bcrypt; el login con clave incorrecta falla y con la correcta devuelve el userId
+@@ -107,7 +107,7 @@ Requisitos: 33, 41, 44, 46, 49, 50, 51, 52 · Archivos: recomendador/cuentas.py,
+ - Prueba de aceptacion: Cuentas bcrypt, userIds > 162541 y límite de 20 por minuto: el comando «.venv/Scripts/python -m pytest -q tests/test_cuentas.py» debe terminar sin error
+ - Prueba de aceptacion: Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas y moderación local: el comando «.venv/Scripts/python -m pytest -q tests/test_eventos.py tests/test_streaming.py» debe terminar sin error
+ - Prueba de aceptacion: Tipo de espectador del centroide más cercano para usuarios nuevos, con el mismo escalado: el comando «.venv/Scripts/python -m pytest -q tests/test_tipo_nuevo.py» debe terminar sin error
+-### 8. 3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb [pendiente]
++### 8. 3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb [verificado]
+ Objetivo: Crear recomendador/catalogo_app.py (solo lectura de parquets y estado.db, con caché): buscar por título o persona sin tildes; ficha (incluye las reseñas no ocultas); filas_inicio con 'Para ti' (fold-in), 'Populares entre espectadores como tú' (según tipo_usuario) y 'Porque te gustó X' (vecinos); explicar con veredicto, la más parecida calificada alto y la calificada baja, tags a favor/en contra y persona en común. Crear tmdb.py: póster, sinopsis y tráiler con caché, o SVG generado sin clave.
+ Requisitos: 35, 36, 37, 38, 39, 48, 52 · Archivos: recomendador/catalogo_app.py, recomendador/tmdb.py, tests/test_catalogo_app.py, tests/test_tmdb.py · Depende de: 6, 7
+ - Criterio: catalogo_app no importa pyspark (comprobado con sys.modules)
+@@ -119,7 +119,7 @@ Requisitos: 35, 36, 37, 38, 39, 48, 52 · Archivos: recomendador/catalogo_app.py
+ - Criterio: 20 llamadas a ficha() y filas_inicio() con caché caliente tardan menos de 2 s en total
+ - Prueba de aceptacion: Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini: el comando «.venv/Scripts/python -m pytest -q tests/test_catalogo_app.py» debe terminar sin error
+ - Prueba de aceptacion: TMDb con caché y respaldo sin clave: el comando «.venv/Scripts/python -m pytest -q tests/test_tmdb.py» debe terminar sin error
+-### 9. 4. App CineRuta: estilo propio, login, onboarding e Inicio [pendiente]
++### 9. 4. App CineRuta: estilo propio, login, onboarding e Inicio [verificado]
+ Objetivo: Reestructurar app/app.py como 'CineRuta': estilo en app/estilo.py con la paleta propia; pantalla de login/registro; onboarding (calificar ~10 populares o importar CSV de Letterboxd) con fold-in y tipo de espectador al instante; pestañas Inicio | Buscar | Explorar | Chat. Inicio muestra las tres filas y el tipo de espectador del usuario. El chat pasa a su pestaña sin cambiar su lógica. Cada acción (calificar, reseñar, mensaje de chat, importar) pasa por el Limitador.
+ Requisitos: 32, 33, 34, 35, 51, 52, 53 · Archivos: app/app.py, app/estilo.py, app/vistas/login.py, app/vistas/onboarding.py, app/vistas/inicio.py, app/vistas/chat.py, muestras/letterboxd_mini.csv, tests/test_app_letterboxd.py, tests/test_app.py · Depende de: 7, 8
+ - Criterio: Con AppTest, un usuario sin sesión ve solo el login/registro y el nombre 'CineRuta'
 diff --git a/ESPEC.md b/ESPEC.md
-index f0f00df..9d7f3ef 100644
+index 9d7f3ef..b13221b 100644
 --- a/ESPEC.md
 +++ b/ESPEC.md
-@@ -53,7 +53,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+@@ -49,7 +49,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
+ - [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
+ - [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+-- [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
++- [verificado] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
  - [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
  - [verificado] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
  - [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
--- [observado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común — explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos
-+- [verificado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
- - [verificado] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
- - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
- - [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
-@@ -71,13 +71,11 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
- - [pendiente] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
+@@ -68,14 +68,14 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [verificado] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
+ - [verificado] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
+ - [verificado] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
+-- [pendiente] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
++- [verificado] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
  
  ## Bitacora (lo mas reciente primero)
-+- 2026-11-16T03:22 ronda 3 [revisor paquete 8]: aprobado (pruebas que fallan 0, requisitos verificados 7): General: El constructor no volvió a correr la suite completa en esta ronda. Delegado sí la corrió antes y pasa: 442 passed (PRUEBAS.txt l.59 y l.123). El cambio solo toca tarjeta_para_ti, así que el riesgo de regresión es bajo. | General: La parte de los requisitos 37, 39 y 48 que se ve en pantalla (botones de calificar y reseñar, atribución al pie, reproductor) no tiene captura. Se debe verificar con capturas en el paquete 9 (app CineRuta). | General: Menor: tarjeta_para_ti accede a fichas[m]['
-+- 2026-11-16T03:21 ronda - [delegado]: pruebas automáticas 40/40 ✅; 2 prueba(s) nueva(s); version ac27fe6
-+- 2026-11-16T02:59 ronda 3 [constructor paquete 8]: Corregí la causa de fondo del requisito 38 en `Catalogo.tarjeta_para_ti` (recomendador/catalogo_app.py). Antes, la película improbable salía de las 50 de mayor afinidad. Ahora se calcula la misma mediana de afinidad que usa explicar() (sobre las películas no vistas del catálogo). De las no vistas que quedan bajo esa mediana se toma el grupo de las `candidatas` de menor afinidad, y dentro de ese grupo se elige la más votada, para que sea una película reconocible. Así explicar() siempre le da el veredicto «Puede que no», cualquiera sea el tamaño del catálogo. Agregué 5 pruebas: candidatas = 1, 2, 3 y 5, con un catálogo mayor que candidatas, y un usuario nuevo con gustos marcados. Corrí test_catalogo_app.py y test_tmdb.py y pasan las 20 pruebas. No volví a correr la suite completa: el cambio solo toca tarjeta_para_ti, que no se usa en ningún otro módulo.
++- 2026-11-16T04:01 ronda 4 [revisor paquete 9]: aprobado (pruebas que fallan 0, requisitos verificados 7): General: La pestaña Explorar (app.py:168) repite el veredicto: en verif_1 se lee «Probablemente te guste Probablemente te guste» y «Puede que no Puede que no». Parece que 'texto' ya empieza con el veredicto. Quitar uno de los dos. | General: En la vista previa estática (verif_1 y verif_2) el markdown de Explorar y de la barra lateral sale sin renderizar (**Toy Story**, **Modo:**). Es un efecto del HTML estático, pero conviene confirmarlo con una captura real de Streamlit. | General: No hay captu
++- 2026-11-16T04:01 ronda - [delegado]: pruebas automáticas 42/42 ✅; 3 prueba(s) nueva(s); version f5be735
++- 2026-11-16T03:36 ronda 4 [constructor paquete 9]: Rehíce app/app.py como CineRuta. La paleta propia y el CSS están en app/estilo.py, y las vistas en app/vistas/ (comun.py, login.py, onboarding.py, inicio.py, chat.py). Sin sesión solo se ve el login o registro (bcrypt). El onboarding permite calificar las 10 películas más votadas o importar un CSV de Letterboxd; también hay un botón que carga muestras/letterboxd_mini.csv, creado en este paquete. Después aparecen las pestañas Inicio | Buscar | Explorar | Chat. Inicio muestra el tipo de espectador y las tres filas de carátulas. Calificar, importar y cada mensaje del chat pasan por el Limitador. Corrí la suite completa una vez: 451 pruebas pasaron y falló 1, test_red_seguridad::test_tarjeta_de_la_app_muestra_condiciones. Es una prueba de texto que buscaba la tarjeta del chat en app/app.py, y la tarjeta ahora está en app/vistas/chat.py. La ajusté para que lea los dos archivos y ese archivo pasa (8 passed), pero no volví a correr la suite completa después del cambio. tests/test_app_letterboxd.py da 9 passed y tests/test_app.py, 10 passed.
+ - 2026-11-16T03:22 ronda 3 [revisor paquete 8]: aprobado (pruebas que fallan 0, requisitos verificados 7): General: El constructor no volvió a correr la suite completa en esta ronda. Delegado sí la corrió antes y pasa: 442 passed (PRUEBAS.txt l.59 y l.123). El cambio solo toca tarjeta_para_ti, así que el riesgo de regresión es bajo. | General: La parte de los requisitos 37, 39 y 48 que se ve en pantalla (botones de calificar y reseñar, atribución al pie, reproductor) no tiene captura. Se debe verificar con capturas en el paquete 9 (app CineRuta). | General: Menor: tarjeta_para_ti accede a fichas[m]['
+ - 2026-11-16T03:21 ronda - [delegado]: pruebas automáticas 40/40 ✅; 2 prueba(s) nueva(s); version ac27fe6
+ - 2026-11-16T02:59 ronda 3 [constructor paquete 8]: Corregí la causa de fondo del requisito 38 en `Catalogo.tarjeta_para_ti` (recomendador/catalogo_app.py). Antes, la película improbable salía de las 50 de mayor afinidad. Ahora se calcula la misma mediana de afinidad que usa explicar() (sobre las películas no vistas del catálogo). De las no vistas que quedan bajo esa mediana se toma el grupo de las `candidatas` de menor afinidad, y dentro de ese grupo se elige la más votada, para que sea una película reconocible. Así explicar() siempre le da el veredicto «Puede que no», cualquiera sea el tamaño del catálogo. Agregué 5 pruebas: candidatas = 1, 2, 3 y 5, con un catálogo mayor que candidatas, y un usuario nuevo con gustos marcados. Corrí test_catalogo_app.py y test_tmdb.py y pasan las 20 pruebas. No volví a correr la suite completa: el cambio solo toca tarjeta_para_ti, que no se usa en ningún otro módulo.
  - 2026-11-16T02:58 ronda 2 [revisor paquete 8]: corregir (pruebas que fallan 0, requisitos verificados 6): Requisito 38: explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos de 50 películas no vistas, por eso la prueba pasa. En 25M esa película casi seguro su
- - 2026-11-16T02:57 ronda - [delegado]: pruebas automáticas 40/40 ✅; 3 prueba(s) nueva(s); version f478cd7
- - 2026-11-16T02:35 ronda 2 [constructor paquete 8]: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y fecha de modificación. Incluye buscar (título, director o actor, sin tildes ni mayúsculas, con respaldo difflib), ficha (con reseñas visibles), filas_inicio ('Para ti' por fold-in, 'Populares entre espectadores como tú' según el tipo vigente, 'Porque te gustó X' con vecinos LSH), explicar y tarjeta_para_ti. Creé también recomendador/tmdb.py: póster y sinopsis reutilizando ClienteTMDb, tráiler de YouTube desde /videos con caché tmdb_videos.json y, sin clave o sin red, una carátula SVG con el título y el color del género. Las pruebas de aceptación pasan: test_catalogo_app.py (9 pruebas, unos 35 s) y test_tmdb.py (6 pruebas). No modifiqué ningún módulo existente. Dos permisos de comandos me fueron denegados (un filtro con Select-String/ForEach y un archivo temporal fuera del proyecto); los reemplacé por comandos equivalentes permitidos.
- - 2026-11-16T02:27 ronda 1 [revisor paquete 7]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: El texto de ESPEC para los req. 41 y 46 dice 'topic ratings' para las reseñas, mientras que el req. 49 y ARQUITECTURA piden el topic 'resenas'. Conviene actualizar ESPEC para que no quede la contradicción. | General: Los reqs 44 y 46 quedan parciales: hay que completar en el paquete de la app el login obligatorio, el formulario de reseña, mostrar el aviso de respaldo y conectar el Limitador a las 4 acciones. | General: Regresión: la suite completa pasa (422 passed, PRUEBAS.txt:73 y :130
+-- 2026-11-16T02:57 ronda - [delegado]: pruebas automáticas 40/40 ✅; 3 prueba(s) nueva(s); version f478cd7
+-- 2026-11-16T02:35 ronda 2 [constructor paquete 8]: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y fecha de modificación. Incluye buscar (título, director o actor, sin tildes ni mayúsculas, con respaldo difflib), ficha (con reseñas visibles), filas_inicio ('Para ti' por fold-in, 'Populares entre espectadores como tú' según el tipo vigente, 'Porque te gustó X' con vecinos LSH), explicar y tarjeta_para_ti. Creé también recomendador/tmdb.py: póster y sinopsis reutilizando ClienteTMDb, tráiler de YouTube desde /videos con caché tmdb_videos.json y, sin clave o sin red, una carátula SVG con el título y el color del género. Las pruebas de aceptación pasan: test_catalogo_app.py (9 pruebas, unos 35 s) y test_tmdb.py (6 pruebas). No modifiqué ningún módulo existente. Dos permisos de comandos me fueron denegados (un filtro con Select-String/ForEach y un archivo temporal fuera del proyecto); los reemplacé por comandos equivalentes permitidos.
+-- 2026-11-16T02:27 ronda 1 [revisor paquete 7]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: El texto de ESPEC para los req. 41 y 46 dice 'topic ratings' para las reseñas, mientras que el req. 49 y ARQUITECTURA piden el topic 'resenas'. Conviene actualizar ESPEC para que no quede la contradicción. | General: Los reqs 44 y 46 quedan parciales: hay que completar en el paquete de la app el login obligatorio, el formulario de reseña, mostrar el aviso de respaldo y conectar el Limitador a las 4 acciones. | General: Regresión: la suite completa pasa (422 passed, PRUEBAS.txt:73 y :130
 -- 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
--- 2026-11-16T02:04 ronda 1 [constructor paquete 7]: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minuto), moderacion.py con palabras_ofensivas.txt, eventos.py (topic 'ratings' sin cambios y topic 'resenas', key=str(userId), respaldo directo con aviso), la tabla resenas en estado.db, el streaming del topic 'resenas', scripts/moderar_resenas.py y vector_crudo/tipo_usuario en perfiles.py. Solo fallaba test_tipo_cambia_al_calificar_mas. El código estaba bien (reproduce las features de Spark y el centroide calculado a mano); los datos de la prueba no bastaban para mover el vector, porque ml-mini solo tiene 25 películas. Comparé las 2^15 combinaciones posibles y reemplacé las calificaciones extra por las 15 películas restantes: romance/drama altas y acción baja. Ahora el usuario pasa al cluster de romance/drama y la prueba sigue exigiendo que el tipo cambie. También agregué bcrypt==4.2.1 y segno==1.6.1 a requirements.txt; son las versiones ya instaladas en .venv. La suite completa pasa: 422 pruebas en 210 s.
--- 2026-11-16T01:33 ronda 2 [revisor paquete 6]: corregir (pruebas que fallan 2, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | Prueba automatica fallida: Regresión tanda 1: las pruebas que no usan Spark (331, unos 48 s) — codigo 4: no tests ran in 1.60s
-
--
--ERROR: Wrong expression passed to '-m': "not spark": at column 1: expected not OR left parenthesis OR identifier; got string literal | General: La tanda 1 de regresión ('-m "not spark"') aparece como FALLA en PRUEBAS.txt con código 4. Es un error de comi
--- 2026-11-16T01:33 ronda - [delegado]: pruebas automáticas 33/35 ❌; 5 prueba(s) nueva(s); version ba685d3
 \ No newline at end of file
-+- 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
++- 2026-11-16T02:57 ronda - [delegado]: pruebas automáticas 40/40 ✅; 3 prueba(s) nueva(s); version f478cd7
 \ No newline at end of file
 diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
-index a7b74a4..f7ce10e 100644
+index f7ce10e..c87a510 100644
 --- a/_capturas/CAMBIOS.diff
 +++ b/_capturas/CAMBIOS.diff
-@@ -1,327 +1,330 @@
--f478cd7 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 1: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y f
-+ac27fe6 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 2: Corregí la causa de fondo del requisito 38 en `Catalogo.tarjeta_para_ti` (recomendador/catalogo_app.py). Antes, la película improbable salía de las 50
+@@ -1,330 +1,353 @@
+-ac27fe6 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 2: Corregí la causa de fondo del requisito 38 en `Catalogo.tarjeta_para_ti` (recomendador/catalogo_app.py). Antes, la película improbable salía de las 50
++f5be735 Paquete 9 (4. App CineRuta: estilo propio, login, onboarding e Inicio), intento 1: Rehíce app/app.py como CineRuta. La paleta propia y el CSS están en app/estilo.py, y las vistas en app/vistas/ (comun.py, login.py, onboarding.py, ini
  
-- ESPEC.md                     |  24 +-
-- _capturas/CAMBIOS.diff       | 611 ++++++++++++++++++++++---------------------
-- _capturas/PRUEBAS.txt        |  95 +++----
-- recomendador/catalogo_app.py | 587 +++++++++++++++++++++++++++++++++++++++++
-- recomendador/tmdb.py         | 234 +++++++++++++++++
-- tests/test_catalogo_app.py   | 222 ++++++++++++++++
-- tests/test_tmdb.py           | 118 +++++++++
-- 7 files changed, 1538 insertions(+), 353 deletions(-)
-+ ESPEC.md                     |  14 +-
-+ _capturas/CAMBIOS.diff       | 617 +++++++++++++++++++++----------------------
-+ _capturas/PRUEBAS.txt        |  92 +++----
-+ recomendador/catalogo_app.py |  18 +-
-+ tests/test_catalogo_app.py   |  45 ++++
-+ 5 files changed, 417 insertions(+), 369 deletions(-)
+- ESPEC.md                     |  14 +-
+- _capturas/CAMBIOS.diff       | 617 +++++++++++++++++++++----------------------
+- _capturas/PRUEBAS.txt        |  92 +++----
+- recomendador/catalogo_app.py |  18 +-
+- tests/test_catalogo_app.py   |  45 ++++
+- 5 files changed, 417 insertions(+), 369 deletions(-)
++ ESPEC.md                         |  12 +-
++ _capturas/CAMBIOS.diff           | 581 ++++++++++++++++++++-------------------
++ _capturas/INDICE.txt             |   5 +-
++ _capturas/PRUEBAS.txt            | 103 ++++---
++ _capturas/verif_1.png            | Bin 255946 -> 396936 bytes
++ _capturas/verif_1_texto.txt      | 216 ++++++---------
++ _capturas/verif_2.png            | Bin 256585 -> 253725 bytes
++ _capturas/verif_2_texto.txt      | 216 ++++++---------
++ _capturas/verif_3.png            | Bin 0 -> 26029 bytes
++ _capturas/verif_3_texto.txt      |   6 +
++ app/app.py                       | 341 +++++++++++------------
++ app/estilo.py                    | 159 +++++++++++
++ app/vistas/__init__.py           |   1 +
++ app/vistas/chat.py               |  93 +++++++
++ app/vistas/comun.py              | 153 +++++++++++
++ app/vistas/inicio.py             |  33 +++
++ app/vistas/login.py              |  55 ++++
++ app/vistas/onboarding.py         | 133 +++++++++
++ muestras/letterboxd_mini.csv     |  11 +
++ scripts/vista_previa_cineruta.py |  58 ++++
++ tests/base_mini.py               |  11 +
++ tests/test_app.py                | 448 ++++++++++++++++--------------
++ tests/test_app_letterboxd.py     | 267 ++++++++++++++++++
++ tests/test_red_seguridad.py      |   8 +-
++ 24 files changed, 1882 insertions(+), 1028 deletions(-)
  
  diff --git a/ESPEC.md b/ESPEC.md
--index a450210..91e9352 100644
-+index 91e9352..f0f00df 100644
+-index 91e9352..f0f00df 100644
++index f0f00df..9d7f3ef 100644
  --- a/ESPEC.md
  +++ b/ESPEC.md
--@@ -48,7 +48,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-- - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
-- - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
-- - [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
---- [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
--+- [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
-+@@ -51,10 +51,10 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-+ - [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
-  - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
+-@@ -51,10 +51,10 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+- - [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+- - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
++@@ -53,7 +53,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
   - [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
-- - [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
--@@ -56,28 +56,28 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-- - [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
-- - [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
-+-- [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
-++- [verificado] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
-+ - [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
-+-- [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
-+-- [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
-++- [observado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común — explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos
-++- [verificado] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
+--- [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
+-+- [verificado] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
++ - [verificado] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
+  - [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
+--- [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
+--- [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
+-+- [observado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común — explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos
+-+- [verificado] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
++-- [observado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común — explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos
+++- [verificado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
++ - [verificado] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
   - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
---- [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
--+- [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
-+ - [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
-  - [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
-- - [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
---- [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
--+- [verificado] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
-- - [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
---- [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
--+- [verificado] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
-- - [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
-- - [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
---- [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
---- [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
---- [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
---- [pendiente] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
--+- [verificado] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
--+- [verificado] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
--+- [verificado] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
--+- [verificado] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
-+@@ -71,13 +71,13 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+  - [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
+- - [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
+-@@ -71,13 +71,13 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
++@@ -71,13 +71,11 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
   - [pendiente] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
   
   ## Bitacora (lo mas reciente primero)
--+- 2026-11-16T02:27 ronda 1 [revisor paquete 7]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: El texto de ESPEC para los req. 41 y 46 dice 'topic ratings' para las reseñas, mientras que el req. 49 y ARQUITECTURA piden el topic 'resenas'. Conviene actualizar ESPEC para que no quede la contradicción. | General: Los reqs 44 y 46 quedan parciales: hay que completar en el paquete de la app el login obligatorio, el formulario de reseña, mostrar el aviso de respaldo y conectar el Limitador a las 4 acciones. | General: Regresión: la suite completa pasa (422 passed, PRUEBAS.txt:73 y :130
--+- 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
--+- 2026-11-16T02:04 ronda 1 [constructor paquete 7]: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minuto), moderacion.py con palabras_ofensivas.txt, eventos.py (topic 'ratings' sin cambios y topic 'resenas', key=str(userId), respaldo directo con aviso), la tabla resenas en estado.db, el streaming del topic 'resenas', scripts/moderar_resenas.py y vector_crudo/tipo_usuario en perfiles.py. Solo fallaba test_tipo_cambia_al_calificar_mas. El código estaba bien (reproduce las features de Spark y el centroide calculado a mano); los datos de la prueba no bastaban para mover el vector, porque ml-mini solo tiene 25 películas. Comparé las 2^15 combinaciones posibles y reemplacé las calificaciones extra por las 15 películas restantes: romance/drama altas y acción baja. Ahora el usuario pasa al cluster de romance/drama y la prueba sigue exigiendo que el tipo cambie. También agregué bcrypt==4.2.1 y segno==1.6.1 a requirements.txt; son las versiones ya instaladas en .venv. La suite completa pasa: 422 pruebas en 210 s.
-++- 2026-11-16T02:58 ronda 2 [revisor paquete 8]: corregir (pruebas que fallan 0, requisitos verificados 6): Requisito 38: explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos de 50 películas no vistas, por eso la prueba pasa. En 25M esa película casi seguro su
-++- 2026-11-16T02:57 ronda - [delegado]: pruebas automáticas 40/40 ✅; 3 prueba(s) nueva(s); version f478cd7
-++- 2026-11-16T02:35 ronda 2 [constructor paquete 8]: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y fecha de modificación. Incluye buscar (título, director o actor, sin tildes ni mayúsculas, con respaldo difflib), ficha (con reseñas visibles), filas_inicio ('Para ti' por fold-in, 'Populares entre espectadores como tú' según el tipo vigente, 'Porque te gustó X' con vecinos LSH), explicar y tarjeta_para_ti. Creé también recomendador/tmdb.py: póster y sinopsis reutilizando ClienteTMDb, tráiler de YouTube desde /videos con caché tmdb_videos.json y, sin clave o sin red, una carátula SVG con el título y el color del género. Las pruebas de aceptación pasan: test_catalogo_app.py (9 pruebas, unos 35 s) y test_tmdb.py (6 pruebas). No modifiqué ningún módulo existente. Dos permisos de comandos me fueron denegados (un filtro con Select-String/ForEach y un archivo temporal fuera del proyecto); los reemplacé por comandos equivalentes permitidos.
-+ - 2026-11-16T02:27 ronda 1 [revisor paquete 7]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: El texto de ESPEC para los req. 41 y 46 dice 'topic ratings' para las reseñas, mientras que el req. 49 y ARQUITECTURA piden el topic 'resenas'. Conviene actualizar ESPEC para que no quede la contradicción. | General: Los reqs 44 y 46 quedan parciales: hay que completar en el paquete de la app el login obligatorio, el formulario de reseña, mostrar el aviso de respaldo y conectar el Limitador a las 4 acciones. | General: Regresión: la suite completa pasa (422 passed, PRUEBAS.txt:73 y :130
-+ - 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
-+ - 2026-11-16T02:04 ronda 1 [constructor paquete 7]: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minuto), moderacion.py con palabras_ofensivas.txt, eventos.py (topic 'ratings' sin cambios y topic 'resenas', key=str(userId), respaldo directo con aviso), la tabla resenas en estado.db, el streaming del topic 'resenas', scripts/moderar_resenas.py y vector_crudo/tipo_usuario en perfiles.py. Solo fallaba test_tipo_cambia_al_calificar_mas. El código estaba bien (reproduce las features de Spark y el centroide calculado a mano); los datos de la prueba no bastaban para mover el vector, porque ml-mini solo tiene 25 películas. Comparé las 2^15 combinaciones posibles y reemplacé las calificaciones extra por las 15 películas restantes: romance/drama altas y acción baja. Ahora el usuario pasa al cluster de romance/drama y la prueba sigue exigiendo que el tipo cambie. También agregué bcrypt==4.2.1 y segno==1.6.1 a requirements.txt; son las versiones ya instaladas en .venv. La suite completa pasa: 422 pruebas en 210 s.
-  - 2026-11-16T01:33 ronda 2 [revisor paquete 6]: corregir (pruebas que fallan 2, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | Prueba automatica fallida: Regresión tanda 1: las pruebas que no usan Spark (331, unos 48 s) — codigo 4: no tests ran in 1.60s
+-+- 2026-11-16T02:58 ronda 2 [revisor paquete 8]: corregir (pruebas que fallan 0, requisitos verificados 6): Requisito 38: explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos de 50 películas no vistas, por eso la prueba pasa. En 25M esa película casi seguro su
+-+- 2026-11-16T02:57 ronda - [delegado]: pruebas automáticas 40/40 ✅; 3 prueba(s) nueva(s); version f478cd7
+-+- 2026-11-16T02:35 ronda 2 [constructor paquete 8]: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y fecha de modificación. Incluye buscar (título, director o actor, sin tildes ni mayúsculas, con respaldo difflib), ficha (con reseñas visibles), filas_inicio ('Para ti' por fold-in, 'Populares entre espectadores como tú' según el tipo vigente, 'Porque te gustó X' con vecinos LSH), explicar y tarjeta_para_ti. Creé también recomendador/tmdb.py: póster y sinopsis reutilizando ClienteTMDb, tráiler de YouTube desde /videos con caché tmdb_videos.json y, sin clave o sin red, una carátula SVG con el título y el color del género. Las pruebas de aceptación pasan: test_catalogo_app.py (9 pruebas, unos 35 s) y test_tmdb.py (6 pruebas). No modifiqué ningún módulo existente. Dos permisos de comandos me fueron denegados (un filtro con Select-String/ForEach y un archivo temporal fuera del proyecto); los reemplacé por comandos equivalentes permitidos.
+++- 2026-11-16T03:22 ronda 3 [revisor paquete 8]: aprobado (pruebas que fallan 0, requisitos verificados 7): General: El constructor no volvió a correr la suite completa en esta ronda. Delegado sí la corrió antes y pasa: 442 passed (PRUEBAS.txt l.59 y l.123). El cambio solo toca tarjeta_para_ti, así que el riesgo de regresión es bajo. | General: La parte de los requisitos 37, 39 y 48 que se ve en pantalla (botones de calificar y reseñar, atribución al pie, reproductor) no tiene captura. Se debe verificar con capturas en el paquete 9 (app CineRuta). | General: Menor: tarjeta_para_ti accede a fichas[m]['
+++- 2026-11-16T03:21 ronda - [delegado]: pruebas automáticas 40/40 ✅; 2 prueba(s) nueva(s); version ac27fe6
+++- 2026-11-16T02:59 ronda 3 [constructor paquete 8]: Corregí la causa de fondo del requisito 38 en `Catalogo.tarjeta_para_ti` (recomendador/catalogo_app.py). Antes, la película improbable salía de las 50 de mayor afinidad. Ahora se calcula la misma mediana de afinidad que usa explicar() (sobre las películas no vistas del catálogo). De las no vistas que quedan bajo esa mediana se toma el grupo de las `candidatas` de menor afinidad, y dentro de ese grupo se elige la más votada, para que sea una película reconocible. Así explicar() siempre le da el veredicto «Puede que no», cualquiera sea el tamaño del catálogo. Agregué 5 pruebas: candidatas = 1, 2, 3 y 5, con un catálogo mayor que candidatas, y un usuario nuevo con gustos marcados. Corrí test_catalogo_app.py y test_tmdb.py y pasan las 20 pruebas. No volví a correr la suite completa: el cambio solo toca tarjeta_para_ti, que no se usa en ningún otro módulo.
++ - 2026-11-16T02:58 ronda 2 [revisor paquete 8]: corregir (pruebas que fallan 0, requisitos verificados 6): Requisito 38: explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos de 50 películas no vistas, por eso la prueba pasa. En 25M esa película casi seguro su
++ - 2026-11-16T02:57 ronda - [delegado]: pruebas automáticas 40/40 ✅; 3 prueba(s) nueva(s); version f478cd7
++ - 2026-11-16T02:35 ronda 2 [constructor paquete 8]: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y fecha de modificación. Incluye buscar (título, director o actor, sin tildes ni mayúsculas, con respaldo difflib), ficha (con reseñas visibles), filas_inicio ('Para ti' por fold-in, 'Populares entre espectadores como tú' según el tipo vigente, 'Porque te gustó X' con vecinos LSH), explicar y tarjeta_para_ti. Creé también recomendador/tmdb.py: póster y sinopsis reutilizando ClienteTMDb, tráiler de YouTube desde /videos con caché tmdb_videos.json y, sin clave o sin red, una carátula SVG con el título y el color del género. Las pruebas de aceptación pasan: test_catalogo_app.py (9 pruebas, unos 35 s) y test_tmdb.py (6 pruebas). No modifiqué ningún módulo existente. Dos permisos de comandos me fueron denegados (un filtro con Select-String/ForEach y un archivo temporal fuera del proyecto); los reemplacé por comandos equivalentes permitidos.
+  - 2026-11-16T02:27 ronda 1 [revisor paquete 7]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: El texto de ESPEC para los req. 41 y 46 dice 'topic ratings' para las reseñas, mientras que el req. 49 y ARQUITECTURA piden el topic 'resenas'. Conviene actualizar ESPEC para que no quede la contradicción. | General: Los reqs 44 y 46 quedan parciales: hay que completar en el paquete de la app el login obligatorio, el formulario de reseña, mostrar el aviso de respaldo y conectar el Limitador a las 4 acciones. | General: Regresión: la suite completa pasa (422 passed, PRUEBAS.txt:73 y :130
+- - 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
+- - 2026-11-16T02:04 ronda 1 [constructor paquete 7]: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minuto), moderacion.py con palabras_ofensivas.txt, eventos.py (topic 'ratings' sin cambios y topic 'resenas', key=str(userId), respaldo directo con aviso), la tabla resenas en estado.db, el streaming del topic 'resenas', scripts/moderar_resenas.py y vector_crudo/tipo_usuario en perfiles.py. Solo fallaba test_tipo_cambia_al_calificar_mas. El código estaba bien (reproduce las features de Spark y el centroide calculado a mano); los datos de la prueba no bastaban para mover el vector, porque ml-mini solo tiene 25 películas. Comparé las 2^15 combinaciones posibles y reemplacé las calificaciones extra por las 15 películas restantes: romance/drama altas y acción baja. Ahora el usuario pasa al cluster de romance/drama y la prueba sigue exigiendo que el tipo cambie. También agregué bcrypt==4.2.1 y segno==1.6.1 a requirements.txt; son las versiones ya instaladas en .venv. La suite completa pasa: 422 pruebas en 210 s.
+- - 2026-11-16T01:33 ronda 2 [revisor paquete 6]: corregir (pruebas que fallan 2, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | Prueba automatica fallida: Regresión tanda 1: las pruebas que no usan Spark (331, unos 48 s) — codigo 4: no tests ran in 1.60s
++-- 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
++-- 2026-11-16T02:04 ronda 1 [constructor paquete 7]: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minuto), moderacion.py con palabras_ofensivas.txt, eventos.py (topic 'ratings' sin cambios y topic 'resenas', key=str(userId), respaldo directo con aviso), la tabla resenas en estado.db, el streaming del topic 'resenas', scripts/moderar_resenas.py y vector_crudo/tipo_usuario en perfiles.py. Solo fallaba test_tipo_cambia_al_calificar_mas. El código estaba bien (reproduce las features de Spark y el centroide calculado a mano); los datos de la prueba no bastaban para mover el vector, porque ml-mini solo tiene 25 películas. Comparé las 2^15 combinaciones posibles y reemplacé las calificaciones extra por las 15 películas restantes: romance/drama altas y acción baja. Ahora el usuario pasa al cluster de romance/drama y la prueba sigue exigiendo que el tipo cambie. También agregué bcrypt==4.2.1 y segno==1.6.1 a requirements.txt; son las versiones ya instaladas en .venv. La suite completa pasa: 422 pruebas en 210 s.
++-- 2026-11-16T01:33 ronda 2 [revisor paquete 6]: corregir (pruebas que fallan 2, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | Prueba automatica fallida: Regresión tanda 1: las pruebas que no usan Spark (331, unos 48 s) — codigo 4: no tests ran in 1.60s
  
-  
-  ERROR: Wrong expression passed to '-m': "not spark": at column 1: expected not OR left parenthesis OR identifier; got string literal | General: La tanda 1 de regresión ('-m "not spark"') aparece como FALLA en PRUEBAS.txt con código 4. Es un error de comi
-- - 2026-11-16T01:33 ronda - [delegado]: pruebas automáticas 33/35 ❌; 5 prueba(s) nueva(s); version ba685d3
-- - 2026-11-16T01:17 ronda 2 [constructor paquete 6]: El problema del intento anterior era que la suite completa pasaba de 3 minutos. Ahora sigue pasando como un solo comando (385 pruebas pasan en 198 s), así que agregué en tests/conftest.py dos markers: 'spark' (se pone solo en toda prueba que usa la fixture spark) y 'lento' (a mano, en la prueba del script), para correr la regresión en tandas. También agregué a construir_vecinos un respaldo exacto en Spark SQL, sin UDF: completa a las películas que el LSH deja con menos de 20 vecinos o sin ninguno, y una columna 'metodo' dice el origen de cada fila. El script imprime la cobertura con cobertura_vecinos. Verificado con el código final: tests/test_precalculo.py pasa (12 pruebas, 66 s, incluida la nueva del respaldo) y la tanda -m "not spark" pasa (331 pruebas, 48 s). Sin verificar: las tandas Spark no las corrí por separado y la prueba del chat no la corrí aparte. La suite de 385 empezó antes de mis cambios y mis ediciones le llegaron a medio camino.
-- - 2026-11-16T01:11 ronda 1 [revisor paquete 6]: corregir (pruebas que fallan 1, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: El constructor dice que la suite completa (385 pruebas) pasa, pero Delegado no pudo confirmarlo por el límite de 3 minutos. Conviene marcar las pruebas lentas de Spark (test_precalculo tarda unos 65 s) con un marker de pytest y correr la regresión en tandas. | General: Para 25M, vecinos usa bucketLength=0.05 y umbral 1.0 (coseno >= 0,5). Algunas películas podrían quedar c
-+-- 2026-11-16T01:33 ronda - [delegado]: pruebas automáticas 33/35 ❌; 5 prueba(s) nueva(s); version ba685d3
-+-- 2026-11-16T01:17 ronda 2 [constructor paquete 6]: El problema del intento anterior era que la suite completa pasaba de 3 minutos. Ahora sigue pasando como un solo comando (385 pruebas pasan en 198 s), así que agregué en tests/conftest.py dos markers: 'spark' (se pone solo en toda prueba que usa la fixture spark) y 'lento' (a mano, en la prueba del script), para correr la regresión en tandas. También agregué a construir_vecinos un respaldo exacto en Spark SQL, sin UDF: completa a las películas que el LSH deja con menos de 20 vecinos o sin ninguno, y una columna 'metodo' dice el origen de cada fila. El script imprime la cobertura con cobertura_vecinos. Verificado con el código final: tests/test_precalculo.py pasa (12 pruebas, 66 s, incluida la nueva del respaldo) y la tanda -m "not spark" pasa (331 pruebas, 48 s). Sin verificar: las tandas Spark no las corrí por separado y la prueba del chat no la corrí aparte. La suite de 385 empezó antes de mis cambios y mis ediciones le llegaron a medio camino.
-+-- 2026-11-16T01:11 ronda 1 [revisor paquete 6]: corregir (pruebas que fallan 1, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: El constructor dice que la suite completa (385 pruebas) pasa, pero Delegado no pudo confirmarlo por el límite de 3 minutos. Conviene marcar las pruebas lentas de Spark (test_precalculo tarda unos 65 s) con un marker de pytest y correr la regresión en tandas. | General: Para 25M, vecinos usa bucketLength=0.05 y umbral 1.0 (coseno >= 0,5). Algunas películas podrían quedar c
- -- 2026-11-16T01:11 ronda 1 [revisor]: Pruebas de aceptacion anuladas por mal definidas: [aceptación] Regresión completa: No falló ninguna aserción. Delegado cortó la ejecución porque superó su límite de 3 minutos. En el mismo PRUEBAS.txt la 'Suite completa (regresión)' de una ronda anterior ya se pasaba de 3 minutos antes de este paquete: la suite entrenaba ALS con Spark en varias pruebas. Con ese límite la prueba no puede pasar, sea correcto o no el código. Todos los subconjuntos de regresión ejecutados por separado pasan: chat 135 y 146, batería 129, herramientas 34, póster 24, n
---- 2026-11-16T01:10 ronda - [delegado]: pruebas automáticas 30/32 ❌; 2 prueba(s) nueva(s); version 13867cf
---- 2026-11-16T00:56 ronda 1 [constructor paquete 6]: Creé recomendador/precalculo.py, que no usa pandas: todo se calcula con pyspark.sql y pyspark.ml. También creé scripts/precalcular_app.py. Juntos generan en artefactos/<perfil>/app/ cuatro parquets: peliculas (votos, promedio e histograma de 10 casillas solo antes del corte, datos de IMDb y tags), personas (directores y reparto), populares_por_tipo (agrupado por la columna cluster de perfiles.parquet) y vecinos (BucketedRandomProjectionLSH sobre los itemFactors normalizados, top-20 sin la propia película). En personas, crew y principals se filtran primero por los tconst de links.csv con un semi join; recién después se cruzan con name.basics, ya filtrado por nconst. En muestras/imdb-mini agregué title.crew, title.principals y name.basics. Traen a Christopher Nolan en The Dark Knight, Breaking Bad como serie que no está en links.csv (comprueba el filtro) y una fila ficticia con tildes («Penélope Cruz Sánchez») para probar la normalización; todo queda documentado en el LEEME. Agregué el paso 8 a correr_25m.ps1 y quité de llm.py _validar, completar_args, _como_dict y MAX_RONDAS_HERRAMIENTAS. La suite completa pasa: 385 pruebas, que son las 374 previas más 11 nuevas. Sobre la muestra mi
---- 2026-11-16T00:43 ronda - [arquitecto]: Plan v4: CineRuta: una app Streamlit de estética oscura, inspirada en Letterboxd pero con paleta propia, montada sobre el recomendador MovieLens 25M ya verificado (ALS híbrido, pedido.py, chat; 31 requisitos). Tiene cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha, reseñas públ
+- 
+- ERROR: Wrong expression passed to '-m': "not spark": at column 1: expected not OR left parenthesis OR identifier; got string literal | General: La tanda 1 de regresión ('-m "not spark"') aparece como FALLA en PRUEBAS.txt con código 4. Es un error de comi
++-
++-ERROR: Wrong expression passed to '-m': "not spark": at column 1: expected not OR left parenthesis OR identifier; got string literal | General: La tanda 1 de regresión ('-m "not spark"') aparece como FALLA en PRUEBAS.txt con código 4. Es un error de comi
+ -- 2026-11-16T01:33 ronda - [delegado]: pruebas automáticas 33/35 ❌; 5 prueba(s) nueva(s); version ba685d3
+--- 2026-11-16T01:17 ronda 2 [constructor paquete 6]: El problema del intento anterior era que la suite completa pasaba de 3 minutos. Ahora sigue pasando como un solo comando (385 pruebas pasan en 198 s), así que agregué en tests/conftest.py dos markers: 'spark' (se pone solo en toda prueba que usa la fixture spark) y 'lento' (a mano, en la prueba del script), para correr la regresión en tandas. También agregué a construir_vecinos un respaldo exacto en Spark SQL, sin UDF: completa a las películas que el LSH deja con menos de 20 vecinos o sin ninguno, y una columna 'metodo' dice el origen de cada fila. El script imprime la cobertura con cobertura_vecinos. Verificado con el código final: tests/test_precalculo.py pasa (12 pruebas, 66 s, incluida la nueva del respaldo) y la tanda -m "not spark" pasa (331 pruebas, 48 s). Sin verificar: las tandas Spark no las corrí por separado y la prueba del chat no la corrí aparte. La suite de 385 empezó antes de mis cambios y mis ediciones le llegaron a medio camino.
+--- 2026-11-16T01:11 ronda 1 [revisor paquete 6]: corregir (pruebas que fallan 1, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: El constructor dice que la suite completa (385 pruebas) pasa, pero Delegado no pudo confirmarlo por el límite de 3 minutos. Conviene marcar las pruebas lentas de Spark (test_precalculo tarda unos 65 s) con un marker de pytest y correr la regresión en tandas. | General: Para 25M, vecinos usa bucketLength=0.05 y umbral 1.0 (coseno >= 0,5). Algunas películas podrían quedar c
+--- 2026-11-16T01:11 ronda 1 [revisor]: Pruebas de aceptacion anuladas por mal definidas: [aceptación] Regresión completa: No falló ninguna aserción. Delegado cortó la ejecución porque superó su límite de 3 minutos. En el mismo PRUEBAS.txt la 'Suite completa (regresión)' de una ronda anterior ya se pasaba de 3 minutos antes de este paquete: la suite entrenaba ALS con Spark en varias pruebas. Con ese límite la prueba no puede pasar, sea correcto o no el código. Todos los subconjuntos de regresión ejecutados por separado pasan: chat 135 y 146, batería 129, herramientas 34, póster 24, n
  \ No newline at end of file
--+- 2026-11-16T01:11 ronda 1 [revisor]: Pruebas de aceptacion anuladas por mal definidas: [aceptación] Regresión completa: No falló ninguna aserción. Delegado cortó la ejecución porque superó su límite de 3 minutos. En el mismo PRUEBAS.txt la 'Suite completa (regresión)' de una ronda anterior ya se pasaba de 3 minutos antes de este paquete: la suite entrenaba ALS con Spark en varias pruebas. Con ese límite la prueba no puede pasar, sea correcto o no el código. Todos los subconjuntos de regresión ejecutados por separado pasan: chat 135 y 146, batería 129, herramientas 34, póster 24, n
-++- 2026-11-16T01:33 ronda - [delegado]: pruebas automáticas 33/35 ❌; 5 prueba(s) nueva(s); version ba685d3
+-+- 2026-11-16T01:33 ronda - [delegado]: pruebas automáticas 33/35 ❌; 5 prueba(s) nueva(s); version ba685d3
+++- 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
  \ No newline at end of file
  diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
--index 725a548..82ec070 100644
-+index 82ec070..a7b74a4 100644
+-index 82ec070..a7b74a4 100644
++index a7b74a4..f7ce10e 100644
  --- a/_capturas/CAMBIOS.diff
  +++ b/_capturas/CAMBIOS.diff
--@@ -1,317 +1,334 @@
---ba685d3 Paquete 6 (1. Capa batch Spark para la app (parquets) + limpieza de llm.py), intento 2: El problema del intento anterior era que la suite completa pasaba de 3 minutos. Ahora sigue pasando como un solo comando (385 pruebas pasan en 198 s),
--+57348a6 Paquete 7 (2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos), intento 1: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minut
-+@@ -1,334 +1,327 @@
-+-57348a6 Paquete 7 (2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos), intento 1: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minut
-++f478cd7 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 1: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y f
+-@@ -1,334 +1,327 @@
+--57348a6 Paquete 7 (2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos), intento 1: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minut
+-+f478cd7 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 1: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y f
++@@ -1,327 +1,330 @@
++-f478cd7 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 1: Creé recomendador/catalogo_app.py, la capa de lectura sin pyspark. Lee los parquets de artefactos/<perfil>/app y estado.db, con caché lru por ruta y f
+++ac27fe6 Paquete 8 (3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb), intento 2: Corregí la causa de fondo del requisito 38 en `Catalogo.tarjeta_para_ti` (recomendador/catalogo_app.py). Antes, la película improbable salía de las 50
   
--- ESPEC.md                   |  22 +-
--- _capturas/CAMBIOS.diff     | 591 ++++++++++++++++++++++-----------------------
--- _capturas/PRUEBAS.txt      |  87 ++++---
--- recomendador/precalculo.py |  64 ++++-
--- scripts/precalcular_app.py |   6 +
--- tests/conftest.py          |  23 ++
--- tests/test_precalculo.py   |  33 +++
--- 7 files changed, 468 insertions(+), 358 deletions(-)
--+ ARQUITECTURA.md                     |   3 +-
--+ ESPEC.md                            |  13 +-
--+ _capturas/CAMBIOS.diff              | 593 ++++++++++++++++++------------------
--+ _capturas/PRUEBAS.txt               |  96 +++---
--+ recomendador/cuentas.py             | 184 +++++++++++
--+ recomendador/estado.py              |  75 ++++-
--+ recomendador/eventos.py             | 175 +++++++++++
--+ recomendador/moderacion.py          |  84 +++++
--+ recomendador/palabras_ofensivas.txt |  80 +++++
--+ recomendador/perfiles.py            | 117 ++++++-
--+ recomendador/streaming.py           | 104 +++++++
--+ requirements.txt                    |   2 +
--+ scripts/moderar_resenas.py          |  78 +++++
--+ scripts/streaming.py                |  27 +-
--+ tests/test_cuentas.py               | 100 ++++++
--+ tests/test_eventos.py               | 233 ++++++++++++++
--+ tests/test_streaming.py             |  66 ++++
--+ tests/test_tipo_nuevo.py            | 135 ++++++++
--+ 18 files changed, 1817 insertions(+), 348 deletions(-)
-+- ARQUITECTURA.md                     |   3 +-
-+- ESPEC.md                            |  13 +-
-+- _capturas/CAMBIOS.diff              | 593 ++++++++++++++++++------------------
-+- _capturas/PRUEBAS.txt               |  96 +++---
-+- recomendador/cuentas.py             | 184 +++++++++++
-+- recomendador/estado.py              |  75 ++++-
-+- recomendador/eventos.py             | 175 +++++++++++
-+- recomendador/moderacion.py          |  84 +++++
-+- recomendador/palabras_ofensivas.txt |  80 +++++
-+- recomendador/perfiles.py            | 117 ++++++-
-+- recomendador/streaming.py           | 104 +++++++
-+- requirements.txt                    |   2 +
-+- scripts/moderar_resenas.py          |  78 +++++
-+- scripts/streaming.py                |  27 +-
-+- tests/test_cuentas.py               | 100 ++++++
-+- tests/test_eventos.py               | 233 ++++++++++++++
-+- tests/test_streaming.py             |  66 ++++
-+- tests/test_tipo_nuevo.py            | 135 ++++++++
-+- 18 files changed, 1817 insertions(+), 348 deletions(-)
-++ ESPEC.md                     |  24 +-
-++ _capturas/CAMBIOS.diff       | 611 ++++++++++++++++++++++---------------------
-++ _capturas/PRUEBAS.txt        |  95 +++----
-++ recomendador/catalogo_app.py | 587 +++++++++++++++++++++++++++++++++++++++++
-++ recomendador/tmdb.py         | 234 +++++++++++++++++
-++ tests/test_catalogo_app.py   | 222 ++++++++++++++++
-++ tests/test_tmdb.py           | 118 +++++++++
-++ 7 files changed, 1538 insertions(+), 353 deletions(-)
+-- ARQUITECTURA.md                     |   3 +-
+-- ESPEC.md                            |  13 +-
+-- _capturas/CAMBIOS.diff              | 593 ++++++++++++++++++------------------
+-- _capturas/PRUEBAS.txt               |  96 +++---
+-- recomendador/cuentas.py             | 184 +++++++++++
+-- recomendador/estado.py              |  75 ++++-
+-- recomendador/eventos.py             | 175 +++++++++++
+-- recomendador/moderacion.py          |  84 +++++
+-- recomendador/palabras_ofensivas.txt |  80 +++++
+-- recomendador/perfiles.py            | 117 ++++++-
+-- recomendador/streaming.py           | 104 +++++++
+-- requirements.txt                    |   2 +
+-- scripts/moderar_resenas.py          |  78 +++++
+-- scripts/streaming.py                |  27 +-
+-- tests/test_cuentas.py               | 100 ++++++
+-- tests/test_eventos.py               | 233 ++++++++++++++
+-- tests/test_streaming.py             |  66 ++++
+-- tests/test_tipo_nuevo.py            | 135 ++++++++
+-- 18 files changed, 1817 insertions(+), 348 deletions(-)
+-+ ESPEC.md                     |  24 +-
+-+ _capturas/CAMBIOS.diff       | 611 ++++++++++++++++++++++---------------------
+-+ _capturas/PRUEBAS.txt        |  95 +++----
+-+ recomendador/catalogo_app.py | 587 +++++++++++++++++++++++++++++++++++++++++
+-+ recomendador/tmdb.py         | 234 +++++++++++++++++
+-+ tests/test_catalogo_app.py   | 222 ++++++++++++++++
+-+ tests/test_tmdb.py           | 118 +++++++++
+-+ 7 files changed, 1538 insertions(+), 353 deletions(-)
++- ESPEC.md                     |  24 +-
++- _capturas/CAMBIOS.diff       | 611 ++++++++++++++++++++++---------------------
++- _capturas/PRUEBAS.txt        |  95 +++----
++- recomendador/catalogo_app.py | 587 +++++++++++++++++++++++++++++++++++++++++
++- recomendador/tmdb.py         | 234 +++++++++++++++++
++- tests/test_catalogo_app.py   | 222 ++++++++++++++++
++- tests/test_tmdb.py           | 118 +++++++++
++- 7 files changed, 1538 insertions(+), 353 deletions(-)
+++ ESPEC.md                     |  14 +-
+++ _capturas/CAMBIOS.diff       | 617 +++++++++++++++++++++----------------------
+++ _capturas/PRUEBAS.txt        |  92 +++----
+++ recomendador/catalogo_app.py |  18 +-
+++ tests/test_catalogo_app.py   |  45 ++++
+++ 5 files changed, 417 insertions(+), 369 deletions(-)
   
--+diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
--+index 75c339a..540b81e 100644
--+--- a/ARQUITECTURA.md
--++++ b/ARQUITECTURA.md
--+@@ -35,7 +35,6 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
--+ - Criterio: tests/test_corte.py prueba el corte con y sin modo demo sobre la muestra mini (por ejemplo, los ratings de 2017 de los usuarios 12 y 15 no aparecen)
--+ - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
--+ - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
--+-- Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
--+ ### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
--+ Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
--+ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
--+@@ -81,7 +80,7 @@ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py
--+ - Criterio: El README explica el corte en todos los modos, que TMDB_API_KEY es opcional para los títulos en español, y que la regeneración sobre los 25M se hace a mano con correr_25m.ps1 y scripts/figuras_poster.
--+ - Criterio: test_readme.py y test_poster.py siguen pasando
--+ - Prueba de aceptacion: La figura no tiene etiquetas superpuestas: el comando «.venv/Scripts/python -m pytest -q tests/test_poster_tipos.py» debe terminar sin error
--+-### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [pendiente]
--++### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [verificado]
--+ Objetivo: Crear recomendador/precalculo.py y scripts/precalcular_app.py, que con Spark generen en artefactos/<perfil>/app/ cuatro parquets: peliculas (id, título, año, géneros, duración, nota IMDb, votos y promedio antes del corte, histograma 0,5–5, tags principales), personas (directores/actores por movieId vía links.csv + title.crew/principals/name.basics, con nombre normalizado sin tildes), populares_por_tipo (agregación por cluster de perfiles.parquet, antes del corte) y vecinos (LSH sobre itemFactors, top-20). Agregar el paso a correr_25m.ps1. Quitar de llm.py _validar, completar_args, como_dict y 
--+ Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scripts/precalcular_app.py, correr_25m.ps1, recomendador/llm.py, tests/test_precalculo.py · Depende de: -
--+ - Criterio: scripts/precalcular_app.py --perfil mini termina en menos de 3 minutos y crea los 4 parquets
-+-diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
-+-index 75c339a..540b81e 100644
-+---- a/ARQUITECTURA.md
-+-+++ b/ARQUITECTURA.md
-+-@@ -35,7 +35,6 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
-+- - Criterio: tests/test_corte.py prueba el corte con y sin modo demo sobre la muestra mini (por ejemplo, los ratings de 2017 de los usuarios 12 y 15 no aparecen)
-+- - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
-+- - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
-+--- Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
-+- ### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
-+- Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
-+- Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
-+-@@ -81,7 +80,7 @@ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py
-+- - Criterio: El README explica el corte en todos los modos, que TMDB_API_KEY es opcional para los títulos en español, y que la regeneración sobre los 25M se hace a mano con correr_25m.ps1 y scripts/figuras_poster.
-+- - Criterio: test_readme.py y test_poster.py siguen pasando
-+- - Prueba de aceptacion: La figura no tiene etiquetas superpuestas: el comando «.venv/Scripts/python -m pytest -q tests/test_poster_tipos.py» debe terminar sin error
-+--### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [pendiente]
-+-+### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [verificado]
-+- Objetivo: Crear recomendador/precalculo.py y scripts/precalcular_app.py, que con Spark generen en artefactos/<perfil>/app/ cuatro parquets: peliculas (id, título, año, géneros, duración, nota IMDb, votos y promedio antes del corte, histograma 0,5–5, tags principales), personas (directores/actores por movieId vía links.csv + title.crew/principals/name.basics, con nombre normalizado sin tildes), populares_por_tipo (agregación por cluster de perfiles.parquet, antes del corte) y vecinos (LSH sobre itemFactors, top-20). Agregar el paso a correr_25m.ps1. Quitar de llm.py _validar, completar_args, como_dict y 
-+- Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scripts/precalcular_app.py, correr_25m.ps1, recomendador/llm.py, tests/test_precalculo.py · Depende de: -
-+- - Criterio: scripts/precalcular_app.py --perfil mini termina en menos de 3 minutos y crea los 4 parquets
+--diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+--index 75c339a..540b81e 100644
+----- a/ARQUITECTURA.md
+--+++ b/ARQUITECTURA.md
+--@@ -35,7 +35,6 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
+-- - Criterio: tests/test_corte.py prueba el corte con y sin modo demo sobre la muestra mini (por ejemplo, los ratings de 2017 de los usuarios 12 y 15 no aparecen)
+-- - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
+-- - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
+---- Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
+-- ### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
+-- Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
+-- Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
+--@@ -81,7 +80,7 @@ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py
+-- - Criterio: El README explica el corte en todos los modos, que TMDB_API_KEY es opcional para los títulos en español, y que la regeneración sobre los 25M se hace a mano con correr_25m.ps1 y scripts/figuras_poster.
+-- - Criterio: test_readme.py y test_poster.py siguen pasando
+-- - Prueba de aceptacion: La figura no tiene etiquetas superpuestas: el comando «.venv/Scripts/python -m pytest -q tests/test_poster_tipos.py» debe terminar sin error
+---### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [pendiente]
+--+### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [verificado]
+-- Objetivo: Crear recomendador/precalculo.py y scripts/precalcular_app.py, que con Spark generen en artefactos/<perfil>/app/ cuatro parquets: peliculas (id, título, año, géneros, duración, nota IMDb, votos y promedio antes del corte, histograma 0,5–5, tags principales), personas (directores/actores por movieId vía links.csv + title.crew/principals/name.basics, con nombre normalizado sin tildes), populares_por_tipo (agregación por cluster de perfiles.parquet, antes del corte) y vecinos (LSH sobre itemFactors, top-20). Agregar el paso a correr_25m.ps1. Quitar de llm.py _validar, completar_args, como_dict y 
+-- Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scripts/precalcular_app.py, correr_25m.ps1, recomendador/llm.py, tests/test_precalculo.py · Depende de: -
+-- - Criterio: scripts/precalcular_app.py --perfil mini termina en menos de 3 minutos y crea los 4 parquets
   diff --git a/ESPEC.md b/ESPEC.md
---index 0b9f52a..461d72f 100644
--+index 461d72f..a450210 100644
-+-index 461d72f..a450210 100644
-++index a450210..91e9352 100644
+--index 461d72f..a450210 100644
+-+index a450210..91e9352 100644
++-index a450210..91e9352 100644
+++index 91e9352..f0f00df 100644
   --- a/ESPEC.md
   +++ b/ESPEC.md
---@@ -47,23 +47,23 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
--- - [verificado] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
--- - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
--- - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
----- [pendiente] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
---+- [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
--- - [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
--- - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
----- [pendiente] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
---+- [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
--- - [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
----- [pendiente] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
---+- [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
--- - [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
--- - [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
--- - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
--- - [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
----- [pendiente] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
---+- [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
--- - [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
--- - [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
--- - [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
--- - [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
----- [pendiente] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
----- [pendiente] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
---+- [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
---+- [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
--- - [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
--- - [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
--- - [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
---@@ -71,14 +71,14 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
--+@@ -71,14 +71,13 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-+-@@ -71,14 +71,13 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-++@@ -48,7 +48,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-++ - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
-++ - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
-++ - [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
-++-- [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
-+++- [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
-++ - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
-++ - [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
-++ - [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
-++@@ -56,28 +56,28 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-++ - [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
-++ - [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
-++ - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
-++-- [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
-+++- [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
-++ - [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
-++ - [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
-++-- [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
-+++- [verificado] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
-++ - [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
-++-- [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
-+++- [verificado] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
-++ - [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
-++ - [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
-++-- [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
-++-- [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
-++-- [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
-++-- [pendiente] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
-+++- [verificado] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
-+++- [verificado] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
-+++- [verificado] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
-+++- [verificado] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
+--@@ -71,14 +71,13 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+-+@@ -48,7 +48,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+-+ - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
+-+ - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
+-+ - [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
+-+-- [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+-++- [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+-+ - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
+-+ - [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
+-+ - [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
+-+@@ -56,28 +56,28 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+-+ - [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
+-+ - [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
+-+ - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
+-+-- [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
+-++- [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
+-+ - [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
+-+ - [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
+-+-- [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
+-++- [verificado] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
+-+ - [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
+-+-- [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
+-++- [verificado] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
+-+ - [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
+-+ - [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
+-+-- [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
+-+-- [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
+-+-- [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
+-+-- [pendiente] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
+-++- [verificado] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
+-++- [verificado] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
+-++- [verificado] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
+-++- [verificado] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
++-@@ -48,7 +48,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
++- - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
++- - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
++- - [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
++--- [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
++-+- [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+++@@ -51,10 +51,10 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+++ - [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
++  - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
++  - [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
++- - [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
++-@@ -56,28 +56,28 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
++- - [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
++- - [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
+++-- [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
++++- [verificado] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
+++ - [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
+++-- [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
+++-- [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
++++- [observado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común — explicar() está bien: veredicto contra la mediana del usuario, parecida alta y baja por coseno ALS, tags a favor y en contra, persona en común, y un texto sin números (código l.428-548, C5 pasa). El problema está en tarjeta_para_ti (l.565-571): elige la 'improbable' como la última de cand[1:50], es decir, la película número 50 entre las de MAYOR afinidad. En la muestra mini el catálogo tiene menos
++++- [verificado] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
++  - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
++--- [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
++-+- [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
+++ - [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
++  - [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
++- - [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
++--- [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
++-+- [verificado] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
++- - [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
++--- [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
++-+- [verificado] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
++- - [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
++- - [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
++--- [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
++--- [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
++--- [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
++--- [pendiente] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
++-+- [verificado] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
++-+- [verificado] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
++-+- [verificado] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
++-+- [verificado] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
+++@@ -71,13 +71,13 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
    - [pendiente] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
    
    ## Bitacora (lo mas reciente primero)
---+- 2026-11-16T01:11 ronda 1 [revisor paquete 6]: corregir (pruebas que fallan 1, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: El constructor dice que la suite completa (385 pruebas) pasa, pero Delegado no pudo confirmarlo por el límite de 3 minutos. Conviene marcar las pruebas lentas de Spark (test_precalculo tarda unos 65 s) con un marker de pytest y correr la regresión en tandas. | General: Para 25M, vecinos usa bucketLength=0.05 y umbral 1.0 (coseno >= 0,5). Algunas películas podrían quedar c
---+- 2026-11-16T01:11 ronda 1 [revisor]: Pruebas de aceptacion anuladas por mal definidas: [aceptación] Regresión completa: No falló ninguna aserción. Delegado cortó la ejecución porque superó su límite de 3 minutos. En el mismo PRUEBAS.txt la 'Suite completa (regresión)' de una ronda anterior ya se pasaba de 3 minutos antes de este paquete: la suite entrenaba ALS con Spark en varias pruebas. Con ese límite la prueba no puede pasar, sea correcto o no el código. Todos los subconjuntos de regresión ejecutados por separado pasan: chat 135 y 146, batería 129, herramientas 34, póster 24, n
---+- 2026-11-16T01:10 ronda - [delegado]: pruebas automáticas 30/32 ❌; 2 prueba(s) nueva(s); version 13867cf
---+- 2026-11-16T00:56 ronda 1 [constructor paquete 6]: Creé recomendador/precalculo.py, que no usa pandas: todo se calcula con pyspark.sql y pyspark.ml. También creé scripts/precalcular_app.py. Juntos generan en artefactos/<perfil>/app/ cuatro parquets: peliculas (votos, promedio e histograma de 10 casillas solo antes del corte, datos de IMDb y tags), personas (directores y reparto), populares_por_tipo (agrupado por la columna cluster de perfiles.parquet) y vecinos (BucketedRandomProjectionLSH sobre los itemFactors normalizados, top-20 sin la propia película). En personas, crew y principals se filtran primero por los tconst de links.csv con un semi join; recién después se cruzan con name.basics, ya filtrado por nconst. En muestras/imdb-mini agregué title.crew, title.principals y name.basics. Traen a Christopher Nolan en The Dark Knight, Breaking Bad como serie que no está en links.csv (comprueba el filtro) y una fila ficticia con tildes («Penélope Cruz Sánchez») para probar la normalización; todo queda documentado en el LEEME. Agregué el paso 8 a correr_25m.ps1 y quité de llm.py _validar, completar_args, _como_dict y MAX_RONDAS_HERRAMIENTAS. La suite completa pasa: 385 pruebas, que son las 374 previas más 11 nuevas. Sobre la muestra mi
--- - 2026-11-16T00:43 ronda - [arquitecto]: Plan v4: CineRuta: una app Streamlit de estética oscura, inspirada en Letterboxd pero con paleta propia, montada sobre el recomendador MovieLens 25M ya verificado (ALS híbrido, pedido.py, chat; 31 requisitos). Tiene cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha, res
+--+- 2026-11-16T01:33 ronda 2 [revisor paquete 6]: corregir (pruebas que fallan 2, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | Prueba automatica fallida: Regresión tanda 1: las pruebas que no usan Spark (331, unos 48 s) — codigo 4: no tests ran in 1.60s
+-++- 2026-11-16T02:27 ronda 1 [revisor paquete 7]: aprobado (pruebas que fallan 0, requisitos verificados 8): General: El texto de ESPEC para los req. 41 y 46 dice 'topic ratings' para las reseñas, mientras que el req. 49 y ARQUITECTURA piden el topic 'resenas'. Conviene actualizar ESPEC para que no quede la contradicción. | General: Los reqs 44 y 46 quedan parciales: hay que completar en el paquete de la app el login obligatorio, el formulario de reseña, mostrar el aviso de respaldo y conectar el Limitador a las 4 acciones. | General: Regresión: la suite completa pasa (422 passed, PRUEBAS.txt:73 y :130
+-++- 2026-11-16T02:26 ronda - [delegado]: pruebas automáticas 38/38 ✅; 2 prueba(s) nueva(s); version 57348a6
+-++- 2026-11-16T02:04 ronda 1 [constructor paquete 7]: Un intento anterior sin commit ya traía casi todo el backend del paquete: cuentas.py (bcrypt + SQLite, userIds desde 162542, Limitador de 20 por minuto), moderacion.py con palabras_ofensivas.txt, eventos.py (topic 'ratings' sin cambios y topic 'resenas', key=str(userId), respaldo directo con aviso), la tabla resenas en estado.db, el streaming del topic 'resenas', scripts/moderar_resenas.py y vector_crudo/tipo_usuario en perfiles.py. Solo fallaba test_tipo_cambia_al_calificar_mas. El código estaba bien (reproduce las features de Spark y el centroide calculado a mano); los datos de la prueba no bastaban para mover el vector, porque ml-mini solo tiene 25 películas. Comparé las 2^15 combinaciones posibles y reemplacé las calificaciones extra por las 15 películas restantes: romance/drama altas y acción baja. Ahora el usuario pasa al cluster de romance/drama y la prueba sigue exigiendo que el tipo cambie. También agregué bcrypt==4.2.1 y segno==1.6.1 a requirements.txt; son las versiones ya instaladas en .venv. La suite completa pasa: 422 pruebas en 210 s.
+-+ - 2026-11-16T01:33 ronda 2 [revisor paquete 6]: corregir (pruebas que fallan 2, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto
 …(diff recortado)
