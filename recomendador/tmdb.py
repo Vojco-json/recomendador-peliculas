@@ -29,7 +29,7 @@ URL_YOUTUBE = "https://www.youtube.com/watch?v={clave}"
 CACHE_VIDEOS = config.ARTEFACTOS / "tmdb_videos.json"
 IDIOMAS_VIDEOS = ("es-ES", "en-US")
 
-# Paleta de CineRuta por género (fondo de la carátula generada).
+# Paleta de MoviePredict por género (fondo de la carátula generada).
 COLORES_GENERO = {
     "Action": "#C2412D", "Adventure": "#D9822B", "Animation": "#E3B23C",
     "Children": "#7FB069", "Comedy": "#F2C14E", "Crime": "#5B4B8A",

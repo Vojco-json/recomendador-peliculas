@@ -1,4 +1,4 @@
-"""Pestaña Chat: el mismo chat LLM con herramientas, ahora dentro de CineRuta.
+"""Pestaña Chat: el mismo chat LLM con herramientas, ahora dentro de MoviePredict.
 
 La lógica no cambia (llm.responder). Lo nuevo: cada mensaje es una acción del
 Limitador; el mensaje 21 dentro del minuto se rechaza con aviso y no se guarda.

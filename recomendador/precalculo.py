@@ -1,4 +1,4 @@
-"""Capa batch (arquitectura Lambda) para la app CineRuta: todo con Spark, sin pandas.
+"""Capa batch (arquitectura Lambda) para la app MoviePredict: todo con Spark, sin pandas.
 
 Escribe en ``artefactos/<perfil>/app/`` cuatro parquets que la app solo lee:
 

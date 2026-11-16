@@ -1,11 +1,11 @@
-"""Vista previa estática de CineRuta (login, Inicio, Ficha y Explorar) para revisar el aspecto.
+"""Vista previa estática de MoviePredict (login, Inicio, Ficha y Explorar) para revisar el aspecto.
 
-Uso:  .venv/Scripts/python scripts/vista_previa_cineruta.py
+Uso:  .venv/Scripts/python scripts/vista_previa_moviepredict.py
 Ejecuta la app REAL con AppTest sobre artefactos/mini (muestra ml-mini): registra una
 cuenta, importa muestras/letterboxd_mini.csv y guarda el HTML que pintó la app en
-artefactos/vista_previa/cineruta_login.html y cineruta_inicio.html. Luego busca
+artefactos/vista_previa/moviepredict_login.html y moviepredict_inicio.html. Luego busca
 «nolan», abre la ficha, publica una reseña de ejemplo y la califica
-(cineruta_ficha.html), y avanza una película en Explorar (cineruta_explorar.html).
+(moviepredict_ficha.html), y avanza una película en Explorar (moviepredict_explorar.html).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
-tmp = Path(tempfile.mkdtemp(prefix="cineruta_"))
+tmp = Path(tempfile.mkdtemp(prefix="moviepredict_"))
 os.environ.update(MODO="completo", DATOS=str(RAIZ / "muestras" / "ml-mini"),
                   ARTEFACTOS_BASE=str(RAIZ / "artefactos" / "mini"),
                   ESTADO_DB=str(tmp / "estado.db"), LLM_PROVIDER="reglas", TMDB_API_KEY="")
@@ -33,7 +33,7 @@ SALIDA = RAIZ / "artefactos" / "vista_previa"
 
 PLANTILLA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CineRuta · vista previa</title></head>
+<title>MoviePredict · vista previa</title></head>
 <body class="stApp" style="margin:0"><main class="block-container" style="margin:0 auto;
 padding:1.6rem 1rem">{cuerpo}</main></body></html>"""
 
@@ -52,14 +52,14 @@ def guardar(at, nombre: str, bloque=None) -> None:
 
 at = AppTest.from_file(str(RAIZ / "app" / "app.py"), default_timeout=120)
 at.run()
-guardar(at, "cineruta_login.html")
+guardar(at, "moviepredict_login.html")
 at.text_input(key="reg_nombre").input(f"expo_{int(time.time())}")
 at.text_input(key="reg_clave").input("secreta123")
 at.text_input(key="reg_clave2").input("secreta123")
 next(b for b in at.button if b.label == "Crear cuenta").click().run()
 next(b for b in at.button if b.label == "Probar con un CSV de ejemplo").click().run()
 assert not at.exception, at.exception
-guardar(at, "cineruta_inicio.html")
+guardar(at, "moviepredict_inicio.html")
 
 # Ficha (pestaña Buscar): datos, histograma, reseña publicada y calificación.
 at.text_input(key="buscar_q").input("nolan").run()
@@ -72,9 +72,9 @@ next(b for b in at.button if b.label == "Publicar reseña").click().run()
 at.selectbox(key=f"bus_nota_{movieId}").set_value(4.5)
 next(b for b in at.button if b.label == "Guardar calificación").click().run()
 assert not at.exception, at.exception
-guardar(at, "cineruta_ficha.html", at.tabs[1])
+guardar(at, "moviepredict_ficha.html", at.tabs[1])
 
 # Explorar: segunda película de la cola (tras «Siguiente»).
 next(b for b in at.button if b.label == "Siguiente →").click().run()
 assert not at.exception, at.exception
-guardar(at, "cineruta_explorar.html", at.tabs[2])
+guardar(at, "moviepredict_explorar.html", at.tabs[2])

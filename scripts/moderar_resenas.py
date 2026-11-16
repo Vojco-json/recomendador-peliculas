@@ -26,7 +26,7 @@ from recomendador import config, estado  # noqa: E402
 
 
 def construir_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Moderación local de las reseñas de CineRuta.")
+    p = argparse.ArgumentParser(description="Moderación local de las reseñas de MoviePredict.")
     accion = p.add_mutually_exclusive_group(required=True)
     accion.add_argument("--listar", action="store_true", help="lista las reseñas")
     accion.add_argument("--ocultar", type=int, metavar="ID", help="oculta la reseña ID")

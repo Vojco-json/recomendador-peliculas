@@ -16,7 +16,7 @@ import time
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import crear_artefactos_cineruta
+from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, eventos
 
 APP = config.RAIZ / "app" / "app.py"
@@ -25,7 +25,7 @@ LIMITE_S = 2.0
 
 @pytest.fixture(scope="module")
 def artefactos(spark, ruta_mini, tmp_path_factory):
-    return crear_artefactos_cineruta(spark, ruta_mini, tmp_path_factory.mktemp("rendimiento"))
+    return crear_artefactos_moviepredict(spark, ruta_mini, tmp_path_factory.mktemp("rendimiento"))
 
 
 @pytest.fixture

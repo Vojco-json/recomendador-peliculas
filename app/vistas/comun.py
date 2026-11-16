@@ -1,4 +1,4 @@
-"""Piezas compartidas por las vistas de CineRuta: contexto, carátulas y acciones.
+"""Piezas compartidas por las vistas de MoviePredict: contexto, carátulas y acciones.
 
 La lógica que escribe (calificar, importar) vive aquí como funciones normales para
 poder probarla sin Streamlit. Ninguna de estas funciones importa pyspark.

@@ -1,4 +1,4 @@
-"""CineRuta: app Streamlit del recomendador (login, onboarding, Inicio, Buscar, Explorar, Chat).
+"""MoviePredict: app Streamlit del recomendador (login, onboarding, Inicio, Buscar, Explorar, Chat).
 
 Uso (desde la raíz del proyecto, con el .venv activo):
     .venv/Scripts/python -m streamlit run app/app.py

@@ -1,5 +1,3 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Ficha de la primera película de 'nolan' (vista estática con la app real y la muestra mini, sin TMDb): carátula generada, Director, Reparto, histograma, tags, explicación, reseña publicada y atribución | pagina artefactos/vista_previa/cineruta_ficha.html | ancho 1280 px
-- verif_2: La misma ficha en pantalla angosta | pagina artefactos/vista_previa/cineruta_ficha.html | ancho 700 px
-- verif_3: Explorar tras 'Siguiente': 'Película 2 de n', carátula, datos y explicación 'Probablemente te guste' o 'Puede que no' con sus chips | pagina artefactos/vista_previa/cineruta_explorar.html | ancho 1280 px
-- verif_4: Inicio con la tarjeta 'Para ti' (probable e improbable lado a lado) al final | pagina artefactos/vista_previa/cineruta_inicio.html | ancho 1280 px | acciones: scroll .cr-para-ti
+- verif_1: Login con el nombre MoviePredict (vista previa estática) | pagina artefactos/vista_previa/moviepredict_login.html | ancho 1280 px
+- verif_2: Inicio con la cabecera y el pie MoviePredict | pagina artefactos/vista_previa/moviepredict_inicio.html | ancho 1280 px

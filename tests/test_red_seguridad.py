@@ -80,7 +80,7 @@ def test_saludo_no_recomienda(herr):
 def test_tarjeta_de_la_app_muestra_condiciones():
     """La app pinta el resumen de condiciones dentro de la tarjeta.
 
-    Desde CineRuta (paquete 9) la tarjeta del chat vive en app/vistas/chat.py.
+    Desde MoviePredict (paquete 9) la tarjeta del chat vive en app/vistas/chat.py.
     """
     fuente = "".join((config.RAIZ / "app" / r).read_text(encoding="utf-8")
                      for r in ("app.py", "vistas/chat.py"))

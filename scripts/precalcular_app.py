@@ -1,4 +1,4 @@
-"""Capa batch de la app: genera con Spark los parquets que lee CineRuta.
+"""Capa batch de la app: genera con Spark los parquets que lee MoviePredict.
 
     .venv/Scripts/python scripts/precalcular_app.py --perfil mini    # muestra (segundos)
     .venv/Scripts/python scripts/precalcular_app.py --perfil 25m     # datos completos

@@ -1,4 +1,4 @@
-"""App CineRuta (AppTest): login → onboarding → Inicio, Letterboxd, límite y paleta.
+"""App MoviePredict (AppTest): login → onboarding → Inicio, Letterboxd, límite y paleta.
 
 Artefactos de la muestra mini (ALS + perfiles + app/*.parquet) en una carpeta temporal;
 Kafka se simula caído (respaldo directo a estado.db) y el chat usa el proveedor 'reglas'.
@@ -14,7 +14,7 @@ import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import crear_artefactos_cineruta
+from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, estado, eventos, perfiles
 
 APP = config.RAIZ / "app" / "app.py"
@@ -31,7 +31,7 @@ FILAS = {"para_ti": "Para ti",
 
 @pytest.fixture(scope="module")
 def artefactos(spark, ruta_mini, tmp_path_factory):
-    return crear_artefactos_cineruta(spark, ruta_mini, tmp_path_factory.mktemp("cineruta"))
+    return crear_artefactos_moviepredict(spark, ruta_mini, tmp_path_factory.mktemp("moviepredict"))
 
 
 @pytest.fixture
@@ -106,7 +106,7 @@ def _comprobar_inicio(at, artefactos, ruta_mini, notas: dict) -> None:
     # Tipo de espectador: el mismo que calcula perfiles.tipo_usuario con esas notas.
     tipo = perfiles.tipo_usuario(0, artefactos, ratings=notas, datos=ruta_mini)
     assert tipo and f'<span class="cr-tipo">{tipo["tipo"]}</span>' in html
-    assert "CineRuta" in html
+    assert "MoviePredict" in html
 
 
 # --------------------------------------------------------------------------- #
@@ -123,7 +123,7 @@ def test_sin_sesion_solo_login(entorno):
     assert not at.chat_input and not at.selectbox            # ni chat ni onboarding
     assert not at.sidebar.markdown and not at.sidebar.button   # sin barra lateral
     html = _html(at)
-    assert "CineRuta" in html and '<section class="cr-fila"' not in html
+    assert "MoviePredict" in html and '<section class="cr-fila"' not in html
     assert "usuario" not in at.session_state
 
 
@@ -218,20 +218,20 @@ def test_calificacion_21_no_se_registra(entorno):
 # C5 y C7: paleta propia y sin pyspark
 # --------------------------------------------------------------------------- #
 
-def test_paleta_cineruta_sin_colores_de_letterboxd():
+def test_paleta_moviepredict_sin_colores_de_letterboxd():
     fuente = ESTILO.read_text(encoding="utf-8").lower()
     for color in PROHIBIDOS:
         assert color not in fuente, color
     sys.path.insert(0, str(config.RAIZ / "app"))
     import estilo
 
-    assert estilo.NOMBRE_APP == "CineRuta"
+    assert estilo.NOMBRE_APP == "MoviePredict"
     assert estilo.PALETA == {"fondo": "#0e1216", "superficie": "#1f2730", "borde": "#34404c",
                              "texto": "#aab4be", "titulo": "#f3f5f7", "ambar": "#f0b23a",
                              "turquesa": "#3cb4a8", "coral": "#e5675c"}
     for color in estilo.PALETA.values():
         assert color in estilo.CSS
-    assert "CineRuta" in estilo.pie_html()
+    assert "MoviePredict" in estilo.pie_html()
 
 
 SCRIPT_SIN_PYSPARK = r"""

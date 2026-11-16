@@ -1,1 +1,1 @@
-"""Vistas de la app CineRuta (login, onboarding, inicio, chat)."""
+"""Vistas de la app MoviePredict (login, onboarding, inicio, chat)."""

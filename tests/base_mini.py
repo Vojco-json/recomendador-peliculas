@@ -40,8 +40,8 @@ def crear_artefactos_app(spark, ruta_mini, salida) -> Path:
     return salida
 
 
-def crear_artefactos_cineruta(spark, ruta_mini, salida) -> Path:
-    """Artefactos de la app CineRuta: los de crear_artefactos_app + app/*.parquet
+def crear_artefactos_moviepredict(spark, ruta_mini, salida) -> Path:
+    """Artefactos de la app MoviePredict: los de crear_artefactos_app + app/*.parquet
     (precalculo.ejecutar con IMDb mini), como los deja scripts/precalcular_app.py."""
     from recomendador import precalculo
 

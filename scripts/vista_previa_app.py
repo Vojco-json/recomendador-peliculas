@@ -1,4 +1,4 @@
-"""Vista previa estática de CineRuta en MODO PÚBLICO, con la pestaña Chat.
+"""Vista previa estática de MoviePredict en MODO PÚBLICO, con la pestaña Chat.
 
 Uso (desde la raíz del proyecto):
     .venv/Scripts/python scripts/vista_previa_app.py
@@ -10,7 +10,7 @@ proveedor 'reglas'. Guarda en artefactos/vista_previa/:
 - app_chat.html: tras registrar una cuenta e importar el CSV de ejemplo, el chat
   responde «algo de Nolan» (pedido por persona) y «una comedia con Tom Hanks».
 - app_barra_lateral.txt: lo que muestra la barra lateral (sin controles de admin).
-Para login, Inicio, Ficha y Explorar está scripts/vista_previa_cineruta.py.
+Para login, Inicio, Ficha y Explorar está scripts/vista_previa_moviepredict.py.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
-tmp = Path(tempfile.mkdtemp(prefix="cineruta_publico_"))
+tmp = Path(tempfile.mkdtemp(prefix="moviepredict_publico_"))
 os.environ.update(MODO="completo", MODO_PUBLICO="1", DATOS=str(RAIZ / "muestras" / "ml-mini"),
                   ARTEFACTOS_BASE=str(RAIZ / "artefactos" / "mini"),
                   ESTADO_DB=str(tmp / "estado.db"), LLM_PROVIDER="reglas", TMDB_API_KEY="")
@@ -38,7 +38,7 @@ SALIDA = RAIZ / "artefactos" / "vista_previa"
 
 PLANTILLA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CineRuta · vista previa (modo público)</title></head>
+<title>MoviePredict · vista previa (modo público)</title></head>
 <body class="stApp" style="margin:0"><main class="block-container" style="margin:0 auto;
 padding:1.6rem 1rem">{cuerpo}</main></body></html>"""
 

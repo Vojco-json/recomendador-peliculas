@@ -16,7 +16,7 @@ def _entrar(userId: int, nombre: str) -> None:
 
 def mostrar(ctx: Contexto) -> None:
     """Formularios de login y registro. Solo esto se ve sin sesión."""
-    st.markdown('<div class="cr-bienvenida"><h2>Bienvenido a CineRuta</h2>'
+    st.markdown('<div class="cr-bienvenida"><h2>Bienvenido a MoviePredict</h2>'
                 'Califica lo que has visto y te armamos una ruta de películas a tu medida, '
                 'con un modelo entrenado sobre 25 millones de calificaciones.</div>',
                 unsafe_allow_html=True)

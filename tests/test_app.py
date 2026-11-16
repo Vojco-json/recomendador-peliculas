@@ -12,7 +12,7 @@ import json
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import crear_artefactos_cineruta
+from base_mini import crear_artefactos_moviepredict
 from recomendador import config, llm
 from recomendador.herramientas import Herramientas
 
@@ -24,7 +24,7 @@ PEDIDO = "algo corto y liviano para hoy"
 
 @pytest.fixture(scope="module")
 def artefactos(spark, ruta_mini, tmp_path_factory):
-    return crear_artefactos_cineruta(spark, ruta_mini, tmp_path_factory.mktemp("art_app"))
+    return crear_artefactos_moviepredict(spark, ruta_mini, tmp_path_factory.mktemp("art_app"))
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def entorno(monkeypatch, artefactos, ruta_mini, tmp_path):
 
 
 def _app_usuario_1() -> AppTest:
-    """App CineRuta con la sesión del usuario 1 de MovieLens ya iniciada (sin login)."""
+    """App MoviePredict con la sesión del usuario 1 de MovieLens ya iniciada (sin login)."""
     at = AppTest.from_file(str(APP), default_timeout=60)
     at.session_state["usuario"] = {"userId": 1, "nombre": "usuario1"}
     return at

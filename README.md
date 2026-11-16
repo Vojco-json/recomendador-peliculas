@@ -179,9 +179,9 @@ $env:MODO = "demo"
 - El reentrenamiento tarda → bajar `DEMO_DESDE` a una fecha más reciente
   (p. ej. 2018-01-01) y volver a correr `preparar_demo.py`.
 
-## CineRuta: la app para la expo
+## MoviePredict: la app para la expo
 
-CineRuta es la app Streamlit (`app/app.py`): cuentas locales, onboarding, Inicio con
+MoviePredict es la app Streamlit (`app/app.py`): cuentas locales, onboarding, Inicio con
 filas de carátulas personalizadas, Buscar, Ficha con reseñas, Explorar y Chat. Sigue una
 arquitectura Lambda: Spark batch escribe parquets, Kafka + Structured Streaming manejan
 los eventos y la app **solo lee** lo precalculado (nunca importa pyspark; cada página

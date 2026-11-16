@@ -1,4 +1,4 @@
-"""Piezas HTML de CineRuta: tarjeta «Para ti», histograma de notas y datos de la ficha.
+"""Piezas HTML de MoviePredict: tarjeta «Para ti», histograma de notas y datos de la ficha.
 
 La explicación SIEMPRE sale de ``Catalogo.explicar`` (títulos, tags y personas
 concretas). El LLM, si está configurado y responde, solo REDACTA esos mismos datos
@@ -25,7 +25,7 @@ MAX_REDACCION = 420           # caracteres máximos aceptados de la redacción
 ETIQUETAS_HISTO = ["½", "1", "1½", "2", "2½", "3", "3½", "4", "4½", "5"]
 
 SISTEMA_REDACCION = (
-    "Eres el redactor de CineRuta. Recibes en JSON por qué a una persona podría gustarle "
+    "Eres el redactor de MoviePredict. Recibes en JSON por qué a una persona podría gustarle "
     "(o no) una película. Escribe en español de Chile, en 1 o 2 frases y en segunda persona, "
     "una explicación natural usando SOLO esos datos: no inventes títulos, personas ni tags, "
     "no uses números, notas ni estrellas. Responde solo con el texto.")

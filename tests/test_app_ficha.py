@@ -1,4 +1,4 @@
-"""App CineRuta (AppTest): Buscar, Ficha, calificar/reseñar con filtro y respaldo, Explorar.
+"""App MoviePredict (AppTest): Buscar, Ficha, calificar/reseñar con filtro y respaldo, Explorar.
 
 Usa los artefactos de la muestra mini (ALS + perfiles + app/*.parquet con IMDb mini)
 en una carpeta temporal. Kafka se simula caído (respaldo directo a estado.db), no hay
@@ -13,7 +13,7 @@ import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import crear_artefactos_cineruta
+from base_mini import crear_artefactos_moviepredict
 from recomendador import config, estado, eventos
 from recomendador.catalogo_app import IMPROBABLE, PROBABLE
 from recomendador.enriquecimiento import ATRIBUCION_TMDB
@@ -25,7 +25,7 @@ AVISO_KAFKA = "No pudimos conectar con el servidor de eventos (Kafka)"
 
 @pytest.fixture(scope="module")
 def artefactos(spark, ruta_mini, tmp_path_factory):
-    return crear_artefactos_cineruta(spark, ruta_mini, tmp_path_factory.mktemp("ficha"))
+    return crear_artefactos_moviepredict(spark, ruta_mini, tmp_path_factory.mktemp("ficha"))
 
 
 @pytest.fixture

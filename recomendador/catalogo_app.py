@@ -1,4 +1,4 @@
-"""Capa de lectura de la app CineRuta (solo lectura, con caché, SIN pyspark).
+"""Capa de lectura de la app MoviePredict (solo lectura, con caché, SIN pyspark).
 
 Lee lo que dejó la capa batch (``<artefactos>/app/*.parquet``, ver precalculo.py) y el
 estado en vivo (``estado.db``: eventos y reseñas). Nunca importa pyspark: así cada

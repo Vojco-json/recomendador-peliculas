@@ -1,4 +1,4 @@
-"""Estilo visual de CineRuta: paleta oscura propia, tipografía y CSS de la app.
+"""Estilo visual de MoviePredict: paleta oscura propia, tipografía y CSS de la app.
 
 La paleta se inspira en el ambiente oscuro de las apps de cine, pero NO usa los colores
 de marca de Letterboxd (eso lo revisa tests/test_app_letterboxd.py con una prueba de
@@ -7,11 +7,11 @@ texto sobre este archivo). El CSS se inyecta una sola vez por ejecución con ``i
 
 from __future__ import annotations
 
-NOMBRE_APP = "CineRuta"
+NOMBRE_APP = "MoviePredict"
 LEMA = "Tu ruta por el cine, guiada por tus gustos"
 
 # --------------------------------------------------------------------------- #
-# Paleta CineRuta
+# Paleta MoviePredict
 # --------------------------------------------------------------------------- #
 PALETA = {
     "fondo": "#0e1216",          # fondo general
@@ -200,7 +200,7 @@ CSS = _css()
 
 
 def inyectar(st) -> None:
-    """Inserta el CSS de CineRuta (una vez por ejecución del script)."""
+    """Inserta el CSS de MoviePredict (una vez por ejecución del script)."""
     st.markdown(CSS, unsafe_allow_html=True)
 
 

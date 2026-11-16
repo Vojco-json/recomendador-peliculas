@@ -131,7 +131,7 @@ Requisitos: 32, 33, 34, 35, 51, 52, 53 · Archivos: app/app.py, app/estilo.py, a
 - Criterio: La app no importa pyspark al navegar
 - Prueba de aceptacion: Flujo login → onboarding → Inicio con tres filas, tipo de espectador, límite y paleta CineRuta: el comando «.venv/Scripts/python -m pytest -q tests/test_app_letterboxd.py» debe terminar sin error
 - Prueba de aceptacion: Regresión del chat dentro de la app: el comando «.venv/Scripts/python -m pytest -q tests/test_app.py» debe terminar sin error
-### 10. 5. Buscar, Ficha con reseñas, tarjeta 'Para ti' y Explorar [pendiente]
+### 10. 5. Buscar, Ficha con reseñas, tarjeta 'Para ti' y Explorar [verificado]
 Objetivo: Implementar las vistas Buscar (título o persona); Ficha (póster/sinopsis TMDb o carátula generada, datos IMDb, histograma, promedio, tags, reseñas públicas, botones para calificar y reseñar con el contador de 500 caracteres, el filtro y el aviso si Kafka falla, tráiler si existe, atribución TMDb); y Explorar (una película a la vez con la explicación personalizada y el botón Siguiente). La tarjeta 'Para ti' usa explicar(); el LLM solo redacta, con la plantilla como respaldo. Al calificar se recalcula el tipo de espectador.
 Requisitos: 36, 37, 38, 39, 40, 41, 46, 48, 49, 52 · Archivos: app/vistas/buscar.py, app/vistas/ficha.py, app/vistas/explorar.py, app/vistas/tarjetas.py, tests/test_app_ficha.py · Depende de: 9
 - Criterio: AppTest: buscar 'nolan' muestra al menos un resultado; la ficha muestra 'Director', 'Reparto', el histograma y la atribución a TMDb
@@ -141,7 +141,7 @@ Requisitos: 36, 37, 38, 39, 40, 41, 46, 48, 49, 52 · Archivos: app/vistas/busca
 - Criterio: No hay en la app ningún botón ni control para ocultar reseñas
 - Criterio: Explorar: 'Siguiente' cambia a otra película y muestra 'probablemente te guste' o 'puede que no'
 - Prueba de aceptacion: Buscar, ficha sin clave TMDb, calificar y reseñar con filtro y respaldo, explorar: el comando «.venv/Scripts/python -m pytest -q tests/test_app_ficha.py» debe terminar sin error
-### 11. 6. Chat por persona, modo público, QR, rendimiento y cierre [pendiente]
+### 11. 6. Chat por persona, modo público, QR, rendimiento y cierre [verificado]
 Objetivo: Extender pedido.py para detectar personas ('algo de Nolan', 'con Tom Hanks') con personas.parquet, como condición del orden por niveles. Agregar el modo público (MODO_PUBLICO=1): login obligatorio, límite de 20/min, LLM de a una solicitud (si está ocupado, plantilla) y sin controles de administración. Agregar la figura QR hacia URL_PUBLICA. Medir los tiempos por página. Actualizar el README: orden de scripts (precalcular_app, streaming, cloudflared), moderar_resenas.py y CineRuta. Regenerar scripts/vista_previa_app.py.
 Requisitos: 43, 44, 45, 50, 51 · Archivos: recomendador/pedido.py, recomendador/herramientas.py, recomendador/llm.py, app/app.py, scripts/figuras_poster.py, scripts/vista_previa_app.py, README.md, tests/test_personas_chat.py, tests/test_modo_publico.py, tests/test_rendimiento_app.py · Depende de: 10
 - Criterio: pedido.analizar('algo de Nolan') produce una condición de persona; el chat devuelve películas de Nolan de la muestra y 'Entendí:' lo menciona

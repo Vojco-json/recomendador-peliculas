@@ -67,7 +67,7 @@ def test_sin_sesion_solo_login(publico):
     etiquetas = {t.label for t in at.tabs}
     assert not etiquetas & PESTANAS_APP, f"pestañas visibles sin sesión: {etiquetas}"
     assert {"Entrar", "Crear cuenta"} <= etiquetas
-    assert "Bienvenido a CineRuta" in _visible(at)
+    assert "Bienvenido a MoviePredict" in _visible(at)
     _sin_admin(at)
 
 
@@ -162,12 +162,12 @@ def _figuras():
 
 
 def test_qr_con_url_publica(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(config, "URL_PUBLICA", "https://cineruta.example.com")
+    monkeypatch.setattr(config, "URL_PUBLICA", "https://moviepredict.example.com")
     fp = _figuras()
     assert fp.main(["--artefactos", str(tmp_path / "nada"), "--figuras", str(tmp_path)]) == 0
     png = tmp_path / "qr_publico.png"
     assert png.exists() and png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
-    assert "https://cineruta.example.com" in capsys.readouterr().out
+    assert "https://moviepredict.example.com" in capsys.readouterr().out
 
 
 def test_qr_sin_url_avisa(monkeypatch, tmp_path, capsys):
@@ -189,7 +189,7 @@ def test_readme_documenta_moderacion_y_modo_publico():
         assert opcion in texto
     assert "único camino de moderación" in texto
     for palabra in ("MODO_PUBLICO", "URL_PUBLICA", "cloudflared", "precalcular_app.py",
-                    "CineRuta"):
+                    "MoviePredict"):
         assert palabra in texto, palabra
 
 

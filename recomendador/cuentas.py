@@ -1,4 +1,4 @@
-"""Cuentas locales de CineRuta (registro y login) y límite de acciones por sesión.
+"""Cuentas locales de MoviePredict (registro y login) y límite de acciones por sesión.
 
 Cuentas
 -------
