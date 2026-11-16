@@ -1,3 +1,4 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Vista previa del chat (app real con AppTest, muestra mini): tarjetas con 'afinidad alta/media' en texto y el resumen de condiciones de cada recomendación, para 'algo corto y liviano' y 'drama policial | pagina artefactos/vista_previa/app.html | ancho 1280 px
-- verif_2: La misma vista previa en pantalla angosta | pagina artefactos/vista_previa/app.html | ancho 700 px | acciones: scroll .principal
+- verif_1: Inicio de CineRuta (vista previa estática con la app real y la muestra mini): cabecera, tipo de espectador, las tres filas de carátulas y pie con CineRuta y TMDb | pagina artefactos/vista_previa/cineruta_inicio.html | ancho 1280 px
+- verif_2: La misma Inicio en pantalla angosta (las filas se desplazan en horizontal) | pagina artefactos/vista_previa/cineruta_inicio.html | ancho 700 px
+- verif_3: Pantalla de bienvenida sin sesión (solo el HTML: los formularios de Streamlit no aparecen en la vista estática) | pagina artefactos/vista_previa/cineruta_login.html | ancho 1280 px

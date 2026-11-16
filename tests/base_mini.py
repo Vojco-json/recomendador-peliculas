@@ -38,3 +38,14 @@ def crear_artefactos_app(spark, ruta_mini, salida) -> Path:
     salida = crear_base_mini(spark, ruta_mini, salida)
     enriquecer_imdb(ruta_mini, config.RAIZ / "muestras" / "imdb-mini", salida)
     return salida
+
+
+def crear_artefactos_cineruta(spark, ruta_mini, salida) -> Path:
+    """Artefactos de la app CineRuta: los de crear_artefactos_app + app/*.parquet
+    (precalculo.ejecutar con IMDb mini), como los deja scripts/precalcular_app.py."""
+    from recomendador import precalculo
+
+    salida = crear_artefactos_app(spark, ruta_mini, salida)
+    precalculo.ejecutar(spark, ruta_mini, salida, CORTE,
+                        imdb_dir=config.RAIZ / "muestras" / "imdb-mini", log=lambda *_: None)
+    return salida

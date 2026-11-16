@@ -78,8 +78,12 @@ def test_saludo_no_recomienda(herr):
 
 
 def test_tarjeta_de_la_app_muestra_condiciones():
-    """app/app.py pinta el resumen de condiciones dentro de la tarjeta."""
-    fuente = (config.RAIZ / "app" / "app.py").read_text(encoding="utf-8")
+    """La app pinta el resumen de condiciones dentro de la tarjeta.
+
+    Desde CineRuta (paquete 9) la tarjeta del chat vive en app/vistas/chat.py.
+    """
+    fuente = "".join((config.RAIZ / "app" / r).read_text(encoding="utf-8")
+                     for r in ("app.py", "vistas/chat.py"))
     assert "condiciones_texto" in fuente and 'class="cond"' in fuente
     assert "No pude obtener" not in (config.RAIZ / "recomendador" / "llm.py").read_text(
         encoding="utf-8")

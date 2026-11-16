@@ -1,0 +1,6 @@
+CineRuta
+Tu ruta por el cine, guiada por tus gustos
+Bienvenido a CineRuta
+Califica lo que has visto y te armamos una ruta de películas a tu medida, con un modelo entrenado sobre 25 millones de calificaciones.
+CineRuta · recomendaciones con MovieLens 25M, Spark y Kafka
+Este producto usa la API de TMDB, pero no está avalado ni certificado por TMDB.

@@ -12,7 +12,7 @@ import json
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import crear_artefactos_app
+from base_mini import crear_artefactos_cineruta
 from recomendador import config, llm
 from recomendador.herramientas import Herramientas
 
@@ -24,7 +24,7 @@ PEDIDO = "algo corto y liviano para hoy"
 
 @pytest.fixture(scope="module")
 def artefactos(spark, ruta_mini, tmp_path_factory):
-    return crear_artefactos_app(spark, ruta_mini, tmp_path_factory.mktemp("art_app"))
+    return crear_artefactos_cineruta(spark, ruta_mini, tmp_path_factory.mktemp("art_app"))
 
 
 @pytest.fixture
@@ -41,7 +41,15 @@ def entorno(monkeypatch, artefactos, ruta_mini, tmp_path):
     # todos sus datos (lo usan esta Herramientas y la de la app). El corte real
     # (FECHA_CORTE_MINI = 2016-01-01) se prueba en tests/test_corte.py.
     monkeypatch.setattr(config, "FECHA_CORTE_MINI", "2100-01-01")
+    monkeypatch.delenv("TMDB_API_KEY", raising=False)   # carátulas SVG, sin red
     return Herramientas(ruta_mini, artefactos, tmp_path / "estado.db")
+
+
+def _app_usuario_1() -> AppTest:
+    """App CineRuta con la sesión del usuario 1 de MovieLens ya iniciada (sin login)."""
+    at = AppTest.from_file(str(APP), default_timeout=60)
+    at.session_state["usuario"] = {"userId": 1, "nombre": "usuario1"}
+    return at
 
 
 def _textos(at) -> str:
@@ -55,7 +63,7 @@ def _textos(at) -> str:
 
 def test_app_reglas_usuario_1(entorno):
     tipo = entorno.perfil_gustos(1)["tipo"]
-    at = AppTest.from_file(str(APP), default_timeout=60)
+    at = _app_usuario_1()
     at.run()
     assert not at.exception, at.exception
     texto = _textos(at)
@@ -63,7 +71,8 @@ def test_app_reglas_usuario_1(entorno):
     assert "LLM_PROVIDER:** `reglas`" in texto and "qwen3.5:9b" in texto
     assert "think:** `false`" in texto
     assert "Sin actualizaciones en vivo" in texto
-    assert 'class="tarjeta"' in texto                     # tarjetas de recomendaciones
+    assert 'class="cr-caratula"' in texto                 # filas de carátulas de Inicio
+    assert [t.label for t in at.tabs] == ["Inicio", "Buscar", "Explorar", "Chat"]
 
     at.chat_input[0].set_value(PEDIDO).run()
     assert not at.exception, at.exception
@@ -81,7 +90,7 @@ def test_app_reglas_usuario_1(entorno):
 def test_app_aviso_si_ollama_no_responde(entorno, monkeypatch):
     monkeypatch.setattr(config, "LLM_PROVIDER", "ollama")
     monkeypatch.setattr(config, "OLLAMA_HOST", "http://127.0.0.1:9")   # puerto cerrado
-    at = AppTest.from_file(str(APP), default_timeout=60)
+    at = _app_usuario_1()
     at.run()
     assert not at.exception, at.exception
     # El aviso aparece en la barra lateral al cargar, antes de escribir en el chat.
@@ -90,6 +99,19 @@ def test_app_aviso_si_ollama_no_responde(entorno, monkeypatch):
     assert not at.exception, at.exception
     assert llm.AVISO_REGLAS in [w.value for w in at.main.warning]
     assert at.session_state["chat_1"][-1]["recomendaciones"]
+
+
+def test_pestana_chat_drama_policial_entendi(entorno):
+    """C6: la pestaña Chat responde el pedido con la línea «Entendí:» y tarjetas."""
+    at = _app_usuario_1()
+    at.run()
+    at.chat_input[0].set_value("drama policial con un twist final").run()
+    assert not at.exception, at.exception
+    respuesta = at.session_state["chat_1"][-1]
+    assert respuesta["role"] == "assistant"
+    assert "Entendí:" in respuesta["content"]
+    assert "Entendí:" in _textos(at)
+    assert respuesta["recomendaciones"] and 'class="tarjeta"' in _textos(at)
 
 
 def test_estado_ollama_con_clientes_simulados(monkeypatch):
