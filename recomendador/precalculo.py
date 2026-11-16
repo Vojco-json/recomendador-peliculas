@@ -352,7 +352,7 @@ def construir_populares_por_tipo(spark: SparkSession, ratings: DataFrame, ruta_p
 def construir_vecinos(spark: SparkSession, ruta_items, n: int = N_VECINOS,
                       bucket_length: float | None = None, umbral: float | None = None,
                       num_tablas: int = 4, permitidos: DataFrame | None = None,
-                      seed: int = 42) -> DataFrame:
+                      seed: int = 42, respaldo: bool = True) -> DataFrame:
     """Hasta ``n`` vecinos por película con BucketedRandomProjectionLSH.
 
     Los factores se normalizan a norma 1, así la distancia euclídea d cumple
@@ -361,10 +361,16 @@ def construir_vecinos(spark: SparkSession, ruta_items, n: int = N_VECINOS,
     Por defecto, con pocas películas (<= 5000) el balde es grande y el umbral 2
     (equivale a la búsqueda exacta); con muchas, baldes finos y umbral 1 (coseno >= 0,5)
     para no comparar todos los pares.
-    Columnas: movieId, vecino, distancia, similitud, rank.
+
+    Respaldo: el LSH es aproximado y con umbral 1 algunas películas «raras» pueden
+    quedar con menos de ``n`` vecinos (o sin ninguno). Con ``respaldo=True`` esas
+    películas (y solo esas) se completan con una búsqueda exacta por producto punto
+    contra todas las demás, en Spark SQL (sin UDF de Python). Así cada película tiene
+    min(n, total - 1) vecinos y la fila «Porque te gustó X» nunca queda vacía.
+    Columnas: movieId, vecino, distancia, similitud, rank, metodo ('lsh' o 'exacto').
     """
     from pyspark.ml.feature import BucketedRandomProjectionLSH, Normalizer
-    from pyspark.ml.functions import array_to_vector
+    from pyspark.ml.functions import array_to_vector, vector_to_array
 
     items = spark.read.parquet(str(ruta_items)).select(
         F.col("movieId").cast("long").alias("movieId"),
@@ -386,14 +392,62 @@ def construir_vecinos(spark: SparkSession, ruta_items, n: int = N_VECINOS,
              .select(F.col("datasetA.movieId").alias("movieId"),
                      F.col("datasetB.movieId").alias("vecino"), "distancia")
              .where(F.col("movieId") != F.col("vecino"))           # nunca la propia película
-             .dropDuplicates(["movieId", "vecino"]))
+             .dropDuplicates(["movieId", "vecino"])
+             .withColumn("metodo", F.lit("lsh")))
+
+    if respaldo:
+        pares = pares.cache()
+        objetivo = min(n, total - 1)
+        cuenta = pares.groupBy("movieId").agg(F.count("*").alias("k"))
+        # Películas con menos vecinos LSH que el objetivo (incluidas las que no tienen).
+        faltantes = (items.select("movieId").join(cuenta, "movieId", "left")
+                     .where(F.coalesce(F.col("k"), F.lit(0)) < objetivo)
+                     .select("movieId").cache())
+        if faltantes.count() > 0:
+            arr = items.select("movieId", vector_to_array("features").alias("v"))
+            izq = arr.join(faltantes, "movieId", "left_semi").select(
+                F.col("movieId"), F.col("v").alias("va"))
+            der = arr.select(F.col("movieId").alias("vecino"), F.col("v").alias("vb"))
+            # Coseno = producto punto de vectores unitarios; d = sqrt(2 - 2·coseno).
+            punto = F.aggregate(F.zip_with("va", "vb", lambda x, y: x * y),
+                                F.lit(0.0), lambda acc, z: acc + z)
+            exactos = (izq.crossJoin(der).where(F.col("movieId") != F.col("vecino"))
+                       .select("movieId", "vecino",
+                               F.sqrt(F.greatest(F.lit(0.0), 2 - 2 * punto)).alias("distancia"),
+                               F.lit("exacto").alias("metodo")))
+            # Para las faltantes se usa solo la búsqueda exacta (es mejor que el LSH).
+            pares = (pares.join(faltantes, "movieId", "left_anti")
+                     .unionByName(exactos))
+
     v = Window.partitionBy("movieId").orderBy(F.asc("distancia"), F.asc("vecino"))
     resultado = (pares.withColumn("rank", F.row_number().over(v)).where(F.col("rank") <= n)
                  .select("movieId", "vecino", F.round("distancia", 5).alias("distancia"),
                          F.round(1 - F.col("distancia") ** 2 / 2, 5).alias("similitud"),
-                         F.col("rank").cast("int").alias("rank"))
+                         F.col("rank").cast("int").alias("rank"), "metodo")
                  .orderBy("movieId", "rank"))
     return resultado
+
+
+def cobertura_vecinos(spark: SparkSession, ruta_vecinos, ruta_items,
+                      n: int = N_VECINOS) -> dict:
+    """Resumen de vecinos.parquet para revisar el resultado (p. ej. tras correr 25M).
+
+    Devuelve {'peliculas': con al menos un vecino, 'completas': con n vecinos,
+    'incompletas': con 1..n-1, 'sin_vecinos': películas de item_factors sin ninguno
+    (las excluidas por votos mínimos cuentan aquí), 'exactos': filas del respaldo}.
+    """
+    v = spark.read.parquet(str(ruta_vecinos))
+    por_peli = v.groupBy("movieId").agg(F.count("*").alias("k"))
+    fila = por_peli.agg(F.count("*").alias("peliculas"),
+                        F.sum(F.when(F.col("k") >= n, 1).otherwise(0)).alias("completas"),
+                        F.sum(F.when(F.col("k") < n, 1).otherwise(0)).alias("incompletas")
+                        ).first()
+    items = spark.read.parquet(str(ruta_items)).select(F.col("movieId").cast("long"))
+    sin = items.join(por_peli, "movieId", "left_anti").count()
+    exactos = v.where(F.col("metodo") == "exacto").count() if "metodo" in v.columns else 0
+    return {"peliculas": int(fila["peliculas"] or 0), "completas": int(fila["completas"] or 0),
+            "incompletas": int(fila["incompletas"] or 0), "sin_vecinos": int(sin),
+            "exactos": int(exactos)}
 
 
 # --------------------------------------------------------------------------- #

@@ -132,6 +132,38 @@ def test_vecinos_lsh(base, spark):
     assert v3.groupby("movieId").size().max() <= 3 and (v3["movieId"] != v3["vecino"]).all()
 
 
+def test_vecinos_respaldo_exacto_cuando_lsh_no_alcanza(base, spark):
+    """Con baldes y umbral diminutos el LSH casi no encuentra pares (como puede pasar en
+    25M con umbral 1): el respaldo exacto completa a todas las películas."""
+    salida, _ = base
+    ruta = salida / "item_factors.parquet"
+    total = len(pd.read_parquet(ruta))
+    sin = precalculo.construir_vecinos(spark, ruta, n=5, bucket_length=1e-4, umbral=1e-3,
+                                       respaldo=False).toPandas()
+    con = precalculo.construir_vecinos(spark, ruta, n=5, bucket_length=1e-4, umbral=1e-3).toPandas()
+    assert sin["movieId"].nunique() < total                   # el LSH solo deja huecos
+    por_peli = con.groupby("movieId").size()
+    assert len(por_peli) == total and (por_peli == min(5, total - 1)).all()
+    assert (con["movieId"] != con["vecino"]).all()
+    assert not con.duplicated(["movieId", "vecino"]).any()
+    assert set(con["metodo"]) <= {"lsh", "exacto"} and (con["metodo"] == "exacto").any()
+    # El respaldo es exacto: coincide con el top-5 por coseno calculado con numpy.
+    items = pd.read_parquet(ruta).set_index("movieId")
+    m = np.stack([np.asarray(f, dtype=float) for f in items["features"]])
+    m /= np.linalg.norm(m, axis=1, keepdims=True)
+    sim = m @ m.T
+    ids = list(items.index)
+    i0 = 0
+    orden = [ids[j] for j in np.argsort(-sim[i0]) if j != i0][:5]
+    obtenido = con[con["movieId"] == ids[i0]].sort_values("rank")
+    assert set(obtenido["vecino"]) == set(orden)
+    # Resumen de cobertura que imprime el script.
+    destino = salida / "vecinos_respaldo.parquet"
+    spark.createDataFrame(con).write.mode("overwrite").parquet(str(destino))
+    c = precalculo.cobertura_vecinos(spark, destino, ruta, n=5)
+    assert c["peliculas"] == total and c["completas"] == total and c["sin_vecinos"] == 0
+
+
 def test_personas_nolan_y_filtro_por_links(base, spark, ruta_mini):
     _, rutas = base
     pe = _leer(rutas, "personas")
@@ -176,6 +208,7 @@ def test_llm_sin_codigo_muerto():
         assert simbolo not in fuente, simbolo
 
 
+@pytest.mark.lento
 def test_script_mini_menos_de_3_minutos(base, tmp_path):
     """C1: scripts/precalcular_app.py --perfil mini termina en < 3 min y crea los 4 parquets."""
     import conftest

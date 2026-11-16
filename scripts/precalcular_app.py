@@ -94,6 +94,12 @@ def main(argv: list[str] | None = None) -> int:
         for nombre, ruta in rutas.items():
             filas = spark.read.parquet(str(ruta)).count()
             print(f"  {nombre:<20} {filas:>10,} filas  ->  {ruta}")
+        # Revisión de 'Porque te gustó X': cuántas películas quedaron con 20 vecinos.
+        c = precalculo.cobertura_vecinos(spark, rutas["vecinos"],
+                                         artefactos / "item_factors.parquet")
+        print(f"  vecinos: {c['peliculas']:,} películas con vecinos, {c['completas']:,} con "
+              f"{precalculo.N_VECINOS}, {c['incompletas']:,} con menos, {c['sin_vecinos']:,} "
+              f"sin vecinos (fuera por votos mínimos), {c['exactos']:,} filas del respaldo exacto")
     finally:
         spark_utils.detener_spark(spark)
     print(f"Listo en {time.monotonic() - inicio:.1f} s")
