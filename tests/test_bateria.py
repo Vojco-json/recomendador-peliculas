@@ -46,8 +46,15 @@ PEDIDOS = [
     "una peli de crimen policial",
 ]
 NO_PEDIDOS = ["hola", "gracias!", "¿cómo funcionas?", "buenos días", "ok perfecto"]
-MENSAJES = [(m, True) for m in PEDIDOS] + [(m, False) for m in NO_PEDIDOS]
-assert len(MENSAJES) == 30
+# Casos agregados en la corrección por niveles (pedido 3 del usuario): se suman a
+# los 30 originales y se prueban en los mismos 4 modos.
+PEDIDOS_NIVELES = [
+    "drama policial con un twist épico",
+    "algo como de drama policial con un twist épico",
+]
+MENSAJES = ([(m, True) for m in PEDIDOS] + [(m, False) for m in NO_PEDIDOS]
+            + [(m, True) for m in PEDIDOS_NIVELES])
+assert len(PEDIDOS) + len(NO_PEDIDOS) == 30 and len(MENSAJES) == 32
 
 
 class SesionProhibida:

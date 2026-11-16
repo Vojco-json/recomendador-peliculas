@@ -1,350 +1,377 @@
-86d18bb Paquete 5 (5. Figura tipos_espectador legible y cierre (README)), intento 1: Rehice la figura tipos_espectador en recomendador/poster.py. Ahora tiene un panel principal de barras horizontales (barh), ordenadas de mayor a menor.
+0886a39 Ronda 1: Rehice Herramientas.recomendar. Ahora cada género pedido es una condición aparte (Family/Children y el grupo «liviano» cuentan como una sola). Un tag
 
- ESPEC.md                   |  12 +-
- README.md                  |  55 ++++
- _capturas/CAMBIOS.diff     | 615 ++++++++++++++++++++++-----------------------
- _capturas/PRUEBAS.txt      |  46 +++-
- recomendador/poster.py     | 109 ++++++--
- tests/test_poster_tipos.py | 185 ++++++++++++++
- 6 files changed, 667 insertions(+), 355 deletions(-)
+ ARQUITECTURA.md                     |     4 +-
+ ESPEC.md                            |    23 +-
+ _capturas/CAMBIOS.diff              |   609 +-
+ _capturas/PRUEBAS.txt               |    42 +-
+ app/app.py                          |     6 +-
+ poster/figuras/arquitectura.svg     |    72 +-
+ poster/figuras/metricas.svg         |   136 +-
+ poster/figuras/speedup.svg          |   142 +-
+ poster/figuras/tipos_espectador.png |   Bin 877202 -> 1220610 bytes
+ poster/figuras/tipos_espectador.svg | 24992 +++++++++++++++++-----------------
+ recomendador/herramientas.py        |   149 +-
+ recomendador/llm.py                 |  1021 +-
+ recomendador/pedido.py              |    15 +-
+ recomendador/spark_utils.py         |     3 +
+ scripts/probar_pedidos.py           |    48 +
+ tests/test_niveles_v2.py            |    52 +
+ 16 files changed, 13859 insertions(+), 13455 deletions(-)
 
+diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+index d367cc0..4541f85 100644
+--- a/ARQUITECTURA.md
++++ b/ARQUITECTURA.md
+@@ -46,7 +46,7 @@ Requisitos: 4, 5, 11 · Archivos: recomendador/herramientas.py, tests/test_punta
+ - Criterio: Las pruebas usan la muestra mini y un cliente TMDb falso o ninguno
+ - Prueba de aceptacion: Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía: el comando «.venv/Scripts/python -m pytest -q tests/test_puntaje.py» debe terminar sin error
+ - Prueba de aceptacion: buscar_pelicula como herramienta y caso inexistente: el comando «.venv/Scripts/python -m pytest -q tests/test_buscar.py» debe terminar sin error
+-### 4. 4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos [pendiente]
++### 4. 4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos [verificado]
+ Objetivo: Integrar pedido.py, la recomendación por niveles y buscar_pelicula en responder_reglas y responder_ollama, agregar la red de seguridad y la batería de 30 pedidos con LLM simulados.
+ Requisitos: 6, 8 · Archivos: recomendador/llm.py, app/app.py, tests/test_bateria.py, tests/test_red_seguridad.py · Depende de: 3
+ - Criterio: SISTEMA incluye una regla sobre ánimos, ocasiones y buscar_pelicula, y el modo Ollama completa con pedido.py los filtros que el modelo omitió
+@@ -58,7 +58,7 @@ Requisitos: 6, 8 · Archivos: recomendador/llm.py, app/app.py, tests/test_bateri
+ - Criterio: La batería completa tarda menos de 2 minutos (Herramientas se crea una vez por módulo)
+ - Prueba de aceptacion: Batería de 30 pedidos en modo reglas y con LLM simulado: el comando «.venv/Scripts/python -m pytest -q tests/test_bateria.py» debe terminar sin error
+ - Prueba de aceptacion: Red de seguridad y mensaje de título inexistente: el comando «.venv/Scripts/python -m pytest -q tests/test_red_seguridad.py» debe terminar sin error
+-### 5. 5. Figura tipos_espectador legible y cierre (README) [pendiente]
++### 5. 5. Figura tipos_espectador legible y cierre (README) [verificado]
+ Objetivo: Rehacer la figura tipos_espectador con barras horizontales sin etiquetas superpuestas y documentar en el README el corte en todos los modos, los niveles de coincidencia, buscar_pelicula con TMDb opcional y los pasos manuales sobre los 25M.
+ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py, README.md · Depende de: 1
+ - Criterio: poster.py genera tipos_espectador con barh, ordenada y con las etiquetas a la izquierda
 diff --git a/ESPEC.md b/ESPEC.md
-index b656a62..459f79f 100644
+index 459f79f..26ddd06 100644
 --- a/ESPEC.md
 +++ b/ESPEC.md
-@@ -14,19 +14,19 @@ El resto del plan está aprobado.
+@@ -7,26 +7,37 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+ 2. Coincidencia primero, pero agrupada en niveles (número de condiciones que cumple la película); dentro de cada nivel se ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es el del híbrido actual.
+ 3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
+ El resto del plan está aprobado.
++3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, tags y condiciones. 5. Las explicaciones no repiten la misma película de referencia en todas las tarjetas, y el puntaje ALS se muestra como "afinidad alta/media" y no como un número tipo estrellas. 6. En recomendador/spark_utils.py, en modo local: spark.executor.heartbeatInterval=60s y spark.network.timeout=600s. 7. Script scripts/probar_pedidos.py que, con los artefactos reales, imprime el top-5 de una lista de pedidos (entre ellos "drama policial con un twist épico" y "algo como de drama policial con un twist épico"), para que yo lo revise. Agregar los casos a la batería con datos de la muestra mini.
+ 
+-## Requisitos (estado actual, 11 en total)
++## Requisitos (estado actual, 21 en total)
+ - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+ - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
  - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
  - [verificado] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
  - [verificado] 5. Herramienta buscar_pelicula(titulo) registrada en ESQUEMAS: ignora tildes y mayúsculas, acepta títulos en español o inglés y hace coincidencia aproximada. Si no encuentra nada razonable, devuelve encontrada=false con un mensaje de una frase
--- [pendiente] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
-+- [verificado] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
- - [pendiente] 7. Figura tipos_espectador del póster rehecha con barras horizontales y etiquetas que no se superponen; una prueba comprueba que las cajas de las etiquetas no se intersectan
--- [pendiente] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
-+- [verificado] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
+ - [verificado] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
+-- [pendiente] 7. Figura tipos_espectador del póster rehecha con barras horizontales y etiquetas que no se superponen; una prueba comprueba que las cajas de las etiquetas no se intersectan
++- [verificado] 7. Figura tipos_espectador del póster rehecha con barras horizontales y etiquetas que no se superponen; una prueba comprueba que las cajas de las etiquetas no se intersectan
+ - [verificado] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
  - [verificado] 9. El corte temporal se aplica en todos los modos, no solo en demo. El historial, los ratings calificados, los tags y la popularidad que usa Herramientas excluyen siempre los timestamps >= FECHA_CORTE (FECHA_CORTE_MINI con la muestra mini). Los eventos en vivo de estado.db se incluyen siempre. Una prue
  - [verificado] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
  - [verificado] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
++- [pendiente] 12. El algoritmo de recomendación debe exigir el cumplimiento de TODOS los géneros especificados (ej. Drama Y Crime) para alcanzar el nivel máximo, no solo uno parcial
++- [pendiente] 13. Los candidatos salen del orden híbrido original (afinidad ALS + popularidad, el mismo de recs_hibrido), no del ALS fold-in solo, y solo con películas de 50 votos o más antes del corte. Las de menos de 50 votos solo aparecen como último respaldo, después de todas las demás.
++- [pendiente] 14. Para ordenar, un tag pedido sin datos en genome cuenta como NO cumplido (baja el nivel igual que un tag con relevancia baja). En la tarjeta se sigue informando como 'sin datos'. Así una película sin datos de genome nunca queda por encima de una que sí cumple el tag.
++- [pendiente] 15. La duración sin dato IMDb debe tratarse como condición neutral, sin penalizar la puntuación del candidato
++- [pendiente] 16. El sistema debe interpretar frases ambiguas (ej. 'algo como X') como descripciones de contenido si contienen palabras clave de género/ánimo, no como títulos de película
++- [pendiente] 17. En caso de error de búsqueda de título, el sistema debe extraer automáticamente los géneros y tags asociados a la cadena de texto proporcionada para generar recomendaciones
++- [pendiente] 18. Las explicaciones de las tarjetas de recomendación deben rotar las películas de referencia y evitar repetir la misma en todas las respuestas
++- [pendiente] 19. La interfaz de usuario debe mostrar la afinidad ALS como etiquetas textuales ('afinidad alta/media') en lugar de una escala numérica tipo estrellas
++- [pendiente] 20. El script local spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos en modo local
++- [pendiente] 21. Script scripts/probar_pedidos.py que usa los artefactos REALES de 25M (no la muestra mini) e imprime el top-5, con géneros, votos y tags cumplidos, para una lista de pedidos que incluya 'drama policial con un twist épico' y 'algo como de drama policial con un twist épico'. Lo ejecuta el usuario a mano; en las pruebas automáticas se verifica con la muestra mini que el script corre.
  
  ## Bitacora (lo mas reciente primero)
-+- 2026-11-15T21:00 ronda 4 [revisor paquete 4]: aprobado (pruebas que fallan 0, requisitos verificados 2): General: Ninguna captura de verificación muestra una tarjeta del chat con el resumen de condiciones (C4) ni el texto de la red de seguridad. La implementación (app.py:92-93, CSS .cond) es correcta, pero conviene capturar el chat con un pedido como 'algo corto y liviano' para respaldar lo visual. | General: Detalle menor: si un mensaje que no es pedido recibe del LLM un JSON con IDs inventados, responder_ollama devuelve solo '(Descarté N película(s)…)' sin el texto de AYUDA. No lo cubre la baterí
-+- 2026-11-15T21:00 ronda - [delegado]: pruebas automáticas 17/17 ✅; 3 prueba(s) nueva(s); version 9c6d8cb
-+- 2026-11-15T20:54 ronda 4 [constructor paquete 4]: Conecté pedido.py, la recomendación por niveles y buscar_pelicula al modo reglas y al modo Ollama de recomendador/llm.py. Agregué al prompt SISTEMA una regla sobre ánimos, ocasiones y buscar_pelicula. En modo Ollama, los filtros que el modelo no pasa a recomendar se completan con lo que detecta pedido.py. Si se pidieron películas y no queda ninguna válida, una red de seguridad llama a recomendar con lo detectado y muestra esas tarjetas. Cada recomendación trae ahora un resumen de las condiciones que cumple, las que no cumple y las que no se pudieron evaluar, y app/app.py lo muestra en la tarjeta. Si el pedido nombra una película que no está en el catálogo, la respuesta lo dice en una frase y recomienda igual. Escribí tests/test_bateria.py (30 mensajes × 4 modos, más una prueba de que se completan los filtros) y tests/test_red_seguridad.py. Las dos pruebas de aceptación pasan: 129 pruebas en 2,1 s. La suite completa también pasa: 339 aprobadas y 4 omitidas, en 2 min 30 s.
++- 2026-11-15T21:13 ronda 5 [revisor paquete 5]: aprobado (pruebas que fallan 0, requisitos verificados 2): General: C1: cumple. Usa barh, está ordenada y las etiquetas van a la izquierda (código, poster.py:411-416). | General: C2: cumple. Renderiza con ml-mini y verifica con get_window_extent que no hay intersecciones (código del test + PRUEBAS.txt: 4 passed). | General: C3: cumple. El README tiene una sección «Corte temporal en todos los modos» (l.208-218), otra de niveles de coincidencia (l.220-230), dice que TMDB_API_KEY es opcional (l.238) y da los pasos manuales con correr_25m.ps1 y scripts/figu
++- 2026-11-15T21:13 ronda - [delegado]: pruebas automáticas 20/20 ✅; 2 prueba(s) nueva(s); version 86d18bb
++- 2026-11-15T21:07 ronda 5 [constructor paquete 5]: Rehice la figura tipos_espectador en recomendador/poster.py. Ahora tiene un panel principal de barras horizontales (barh), ordenadas de mayor a menor. El nombre de cada tipo va a la izquierda, partido en varias líneas si es largo, y al final de cada barra se lee «N usuarios · X %». A la derecha hay un mapa PCA sin texto, con los mismos colores que las barras. El alto de la figura crece con el número de tipos. Separé el dibujo (dibujar_tipos, que devuelve la figura) del guardado (figura_tipos), para poder medir las etiquetas. Creé tests/test_poster_tipos.py: arma tipos y perfiles con pandas desde muestras/ml-mini y comprueba con get_window_extent que ninguna etiqueta se cruza con otra. Lo hace con 4 tipos y también con 10 tipos de nombres largos. En el README agregué cuatro secciones: el corte en todos los modos, los niveles de coincidencia, buscar_pelicula con TMDB_API_KEY opcional y la regeneración manual sobre los 25M.
+ - 2026-11-15T21:00 ronda 4 [revisor paquete 4]: aprobado (pruebas que fallan 0, requisitos verificados 2): General: Ninguna captura de verificación muestra una tarjeta del chat con el resumen de condiciones (C4) ni el texto de la red de seguridad. La implementación (app.py:92-93, CSS .cond) es correcta, pero conviene capturar el chat con un pedido como 'algo corto y liviano' para respaldar lo visual. | General: Detalle menor: si un mensaje que no es pedido recibe del LLM un JSON con IDs inventados, responder_ollama devuelve solo '(Descarté N película(s)…)' sin el texto de AYUDA. No lo cubre la baterí
+ - 2026-11-15T21:00 ronda - [delegado]: pruebas automáticas 17/17 ✅; 3 prueba(s) nueva(s); version 9c6d8cb
+ - 2026-11-15T20:54 ronda 4 [constructor paquete 4]: Conecté pedido.py, la recomendación por niveles y buscar_pelicula al modo reglas y al modo Ollama de recomendador/llm.py. Agregué al prompt SISTEMA una regla sobre ánimos, ocasiones y buscar_pelicula. En modo Ollama, los filtros que el modelo no pasa a recomendar se completan con lo que detecta pedido.py. Si se pidieron películas y no queda ninguna válida, una red de seguridad llama a recomendar con lo detectado y muestra esas tarjetas. Cada recomendación trae ahora un resumen de las condiciones que cumple, las que no cumple y las que no se pudieron evaluar, y app/app.py lo muestra en la tarjeta. Si el pedido nombra una película que no está en el catálogo, la respuesta lo dice en una frase y recomienda igual. Escribí tests/test_bateria.py (30 mensajes × 4 modos, más una prueba de que se completan los filtros) y tests/test_red_seguridad.py. Las dos pruebas de aceptación pasan: 129 pruebas en 2,1 s. La suite completa también pasa: 339 aprobadas y 4 omitidas, en 2 min 30 s.
  - 2026-11-15T20:49 ronda - [arquitecto (punto de control)]: El proyecto avanza bien. Los paquetes 1 a 3 están construidos y la regresión completa da 210 pasadas, 4 omitidas y ninguna falla. Ya existen el corte en todos los modos, pedido.py, titulos.py con TMDb opcional, la recomendación por niveles y buscar_pelicula en ESQUEMAS. Lo que falta coincide con los Cambios: ninguno. Integracion: recomendador/llm.py:302 todavía tiene el texto 'No pude obtener recomendaciones verificadas con las herramientas.' en responder_ollama. El paquete 4 debe eliminarlo con la red de seguridad, porque si no queda un camino que el usuario prohibió. | llm.responder_reglas (llm.py:143) sigue usando interpr
- - 2026-11-15T20:48 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: La regresión completa que ejecutó Delegado (PRUEBAS.txt) da 210 pasadas y 4 omitidas, sin fallas. Así queda resuelta la duda del constructor, que no volvió a correr la suite completa después de su último ajuste. | General: Menor: las recomendaciones que vienen de la popularidad o del catálogo llevan score=None. Conviene que la capa de presentación (paquete 4) tolere ese valor. | General: Menor: si un género pedido es solo 'Family', el texto de no_cumple puede quedar como 'género: ' más 
- - 2026-11-15T20:48 ronda - [delegado]: pruebas automáticas 12/12 ✅; 3 prueba(s) nueva(s); version 7575a51
- - 2026-11-15T20:43 ronda 3 [constructor paquete 3]: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min) ya no descartan películas: solo ordenan. nivel = condiciones pedidas − incumplidas, así que una condición no evaluable no lo baja. El orden es nivel de mayor a menor y, dentro de cada nivel, el orden híbrido (estado en vivo y luego ALS fold-in). Si el híbrido no alcanza, siguen la popularidad y el catálogo, y la lista nunca queda vacía. Cada película trae nivel, cumple, no_cumple, no_evaluables y coincidencia, con avisos cuando falta la duración o el tag genome. Agregué buscar_pelicula a Herramientas, a ejecutar y a ESQUEMAS (parámetro titulo). Usa recomendador/titulos.py y devuelve titulo_es si hay clave TMDb y el título está en caché; para eso titulos.py ahora también devuelve el tmdbId, un cambio solo aditivo. También agregué el parámetro tags al esquema de recomendar. Pruebas nuevas: tests/test_puntaje.py (5) y tests/test_buscar.py (10). Ajusté pruebas antiguas que suponían el filtro duro: test_herramientas (ahora 6 esquemas; 1307 en el nivel máximo en vez de lista [1307]) y 3 de test_app (1307 primero en vez de ser la única). La 
+-- 2026-11-15T20:48 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: La regresión completa que ejecutó Delegado (PRUEBAS.txt) da 210 pasadas y 4 omitidas, sin fallas. Así queda resuelta la duda del constructor, que no volvió a correr la suite completa después de su último ajuste. | General: Menor: las recomendaciones que vienen de la popularidad o del catálogo llevan score=None. Conviene que la capa de presentación (paquete 4) tolere ese valor. | General: Menor: si un género pedido es solo 'Family', el texto de no_cumple puede quedar como 'género: ' más 
+-- 2026-11-15T20:48 ronda - [delegado]: pruebas automáticas 12/12 ✅; 3 prueba(s) nueva(s); version 7575a51
+-- 2026-11-15T20:43 ronda 3 [constructor paquete 3]: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min) ya no descartan películas: solo ordenan. nivel = condiciones pedidas − incumplidas, así que una condición no evaluable no lo baja. El orden es nivel de mayor a menor y, dentro de cada nivel, el orden híbrido (estado en vivo y luego ALS fold-in). Si el híbrido no alcanza, siguen la popularidad y el catálogo, y la lista nunca queda vacía. Cada película trae nivel, cumple, no_cumple, no_evaluables y coincidencia, con avisos cuando falta la duración o el tag genome. Agregué buscar_pelicula a Herramientas, a ejecutar y a ESQUEMAS (parámetro titulo). Usa recomendador/titulos.py y devuelve titulo_es si hay clave TMDb y el título está en caché; para eso titulos.py ahora también devuelve el tmdbId, un cambio solo aditivo. También agregué el parámetro tags al esquema de recomendar. Pruebas nuevas: tests/test_puntaje.py (5) y tests/test_buscar.py (10). Ajusté pruebas antiguas que suponían el filtro duro: test_herramientas (ahora 6 esquemas; 1307 en el nivel máximo en vez de lista [1307]) y 3 de test_app (1307 primero en vez de ser la única). La 
 -- 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
--- 2026-11-15T20:34 ronda - [delegado]: pruebas automáticas 7/7 ✅; 3 prueba(s) nueva(s); version ee04cbb
--- 2026-11-15T20:31 ronda 2 [constructor paquete 2]: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título mencionado, pide_recomendacion y n, y tolera errores de tipeo con difflib. Los tags se filtran contra genome-tags.csv y las condiciones salen como textos en español. llm.interpretar ahora delega en pedido.py y conserva su forma {max_duracion_min, generos, n}. Creé recomendador/titulos.py (BuscadorTitulos y buscar): busca de forma aproximada en MovieLens con un umbral de 0.8 y, solo si hay clave de TMDb, también en los títulos en español de tmdb_cache.json y con ClienteTMDb.buscar, un método nuevo que llama a /search/movie con language=es-ES y guarda el resultado en la caché bajo '_busquedas'. Las dos pruebas de aceptación pasan (61 pruebas nuevas). La suite completa da 195 aprobadas y 4 omitidas.
--- 2026-11-15T20:24 ronda 1 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: El archivo artefactos/demo/demo.json que existe en disco todavía contiene rutas absolutas ('C:\\Users\\vicen\\...\\artefactos\\25m' y '...\\data\\ml-25m'). El generador (demo.preparar_demo + ruta_relativa) ya está corregido y la prueba lo verifica sobre una carpeta temporal, pero el archivo real no se regeneró. Como artefactos/ está en .gitignore y leer_demo_json también acepta rutas absolutas, la app sigue funcionando. Aun así, hay que regenerar la demo (paso de preparar_demo en correr
 \ No newline at end of file
-+- 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
++- 2026-11-15T20:48 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: La regresión completa que ejecutó Delegado (PRUEBAS.txt) da 210 pasadas y 4 omitidas, sin fallas. Así queda resuelta la duda del constructor, que no volvió a correr la suite completa después de su último ajuste. | General: Menor: las recomendaciones que vienen de la popularidad o del catálogo llevan score=None. Conviene que la capa de presentación (paquete 4) tolere ese valor. | General: Menor: si un género pedido es solo 'Family', el texto de no_cumple puede quedar como 'género: ' más 
 \ No newline at end of file
-diff --git a/README.md b/README.md
-index 4ffba5a..ad1cd70 100644
---- a/README.md
-+++ b/README.md
-@@ -205,6 +205,61 @@ $env:MODO = "demo"
- Si Ollama no responde, la app muestra «Ollama no responde: usando modo reglas» y sigue
- funcionando con el proveedor `reglas`.
- 
-+### Corte temporal en todos los modos
-+
-+El ALS se entrena con los ratings anteriores a `FECHA_CORTE`. Por eso, en **todos** los
-+modos (completo, demo, reglas y Ollama) el historial de un usuario es: sus ratings
-+anteriores al corte más los eventos que llegaron en vivo (`artefactos/estado.db`). Lo
-+posterior al corte nunca se usa para recomendar ni para excluir «ya vistas».
-+
-+| Datos | Corte usado |
-+|---|---|
-+| MovieLens 25M | `FECHA_CORTE` (por defecto 2018-01-01, configurable por variable de entorno) |
-+| Muestra `ml-mini` (pruebas) | `FECHA_CORTE_MINI` = 2016-01-01 |
-+
-+### Cómo se ordenan las recomendaciones: niveles de coincidencia
-+
-+El pedido («algo corto y de terror», «a funny movie», «comedia ligera de menos de 100
-+min»…) se interpreta en `recomendador/pedido.py` (español e inglés, tolera tildes y
-+errores de tipeo) y se convierte en condiciones: géneros, tags del genome (relevancia
-+≥ 0,5) y duración máxima. La herramienta `recomendar` **no descarta** películas:
-+
-+1. calcula el nivel de cada candidata = condiciones pedidas − condiciones incumplidas
-+   (un dato que falta, como una duración desconocida, no baja el nivel);
-+2. ordena por nivel, de mayor a menor;
-+3. dentro de cada nivel, ordena por afinidad ALS (top-N en vivo y luego fold-in).
-+
-+Así, si nada cumple todo, aparecen primero las que cumplen más condiciones, y el chat
-+nunca termina sin películas.
-+
-+### Buscar una película por título (`buscar_pelicula`)
-+
-+`buscar_pelicula` busca de forma aproximada (difflib, sin tildes ni mayúsculas) en los
-+títulos de MovieLens. **`TMDB_API_KEY` es opcional**: si está definida, además busca
-+títulos en español en TMDb (`/search/movie` con `language=es-ES`, p. ej. «El padrino»)
-+y guarda las respuestas en `artefactos/tmdb_cache.json`; sin clave, todo funciona igual
-+usando solo MovieLens y no se hace ninguna llamada a la red. Las pruebas usan un cliente
-+TMDb falso.
-+
-+### Regenerar sobre los 25M (paso manual)
-+
-+Las pruebas solo usan la muestra `ml-mini` y ningún paso automático corre sobre los 25M
-+(tardaría mucho más de 10 minutos). Para actualizar artefactos y figuras con los datos
-+completos, hazlo a mano en PowerShell desde la raíz del proyecto:
-+
-+```powershell
-+.\correr_25m.ps1                                 # corrida completa (descarga, ALS, perfiles, escalabilidad y figuras)
-+.venv\Scripts\python scripts/figuras_poster.py   # solo rehace las figuras con los artefactos ya generados
-+```
-+
-+Si ya corriste `correr_25m.ps1` antes de este cambio, basta con el segundo comando para
-+obtener la nueva figura `tipos_espectador`.
-+
-+La figura `tipos_espectador` usa barras horizontales ordenadas de mayor a menor, con el
-+nombre de cada tipo a la izquierda y «N usuarios · X %» al final de la barra, más un mapa
-+PCA sin rótulos con los mismos colores. `tests/test_poster_tipos.py` comprueba que las
-+etiquetas no se superponen.
-+
- ## Pruebas
- 
- Usan la muestra pequeña `muestras/ml-mini`, tardan menos de 2 minutos por suite y se
 diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
-index a87238d..f07d586 100644
+index f07d586..02a06f2 100644
 --- a/_capturas/CAMBIOS.diff
 +++ b/_capturas/CAMBIOS.diff
-@@ -1,338 +1,327 @@
--7575a51 Paquete 3 (3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula), intento 1: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min)
-+9c6d8cb Paquete 4 (4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos), intento 1: Conecté pedido.py, la recomendación por niveles y buscar_pelicula al modo reglas y al modo Ollama de recomendador/llm.py. Agregué al prompt SISTEMA un
+@@ -1,327 +1,350 @@
+-9c6d8cb Paquete 4 (4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos), intento 1: Conecté pedido.py, la recomendación por niveles y buscar_pelicula al modo reglas y al modo Ollama de recomendador/llm.py. Agregué al prompt SISTEMA un
++86d18bb Paquete 5 (5. Figura tipos_espectador legible y cierre (README)), intento 1: Rehice la figura tipos_espectador en recomendador/poster.py. Ahora tiene un panel principal de barras horizontales (barh), ordenadas de mayor a menor.
  
-- ESPEC.md                     |  12 +-
-- _capturas/CAMBIOS.diff       | 607 ++++++++++++++++++++++---------------------
-- _capturas/PRUEBAS.txt        |  25 +-
-- recomendador/herramientas.py | 205 ++++++++++++---
-- recomendador/titulos.py      |   4 +-
-- tests/test_app.py            |  12 +-
-- tests/test_buscar.py         |  74 ++++++
-- tests/test_herramientas.py   |  10 +-
-- tests/test_puntaje.py        | 120 +++++++++
-- 9 files changed, 723 insertions(+), 346 deletions(-)
-+ ARQUITECTURA.md             |   6 +-
-+ ESPEC.md                    |  17 +-
-+ _capturas/CAMBIOS.diff      | 608 +++++++++++++++++++++++---------------------
-+ _capturas/PRUEBAS.txt       |  33 ++-
-+ app/app.py                  |   7 +-
-+ recomendador/llm.py         | 202 ++++++++++++---
-+ tests/test_bateria.py       | 147 +++++++++++
-+ tests/test_red_seguridad.py |  86 +++++++
-+ 8 files changed, 752 insertions(+), 354 deletions(-)
+- ARQUITECTURA.md             |   6 +-
+- ESPEC.md                    |  17 +-
+- _capturas/CAMBIOS.diff      | 608 +++++++++++++++++++++++---------------------
+- _capturas/PRUEBAS.txt       |  33 ++-
+- app/app.py                  |   7 +-
+- recomendador/llm.py         | 202 ++++++++++++---
+- tests/test_bateria.py       | 147 +++++++++++
+- tests/test_red_seguridad.py |  86 +++++++
+- 8 files changed, 752 insertions(+), 354 deletions(-)
++ ESPEC.md                   |  12 +-
++ README.md                  |  55 ++++
++ _capturas/CAMBIOS.diff     | 615 ++++++++++++++++++++++-----------------------
++ _capturas/PRUEBAS.txt      |  46 +++-
++ recomendador/poster.py     | 109 ++++++--
++ tests/test_poster_tipos.py | 185 ++++++++++++++
++ 6 files changed, 667 insertions(+), 355 deletions(-)
  
-+diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
-+index dae00f2..d367cc0 100644
-+--- a/ARQUITECTURA.md
-++++ b/ARQUITECTURA.md
-+@@ -8,7 +8,7 @@ Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea
-+ Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
-+ 
-+ ## Paquetes de trabajo
-+-### 1. 1. Corte temporal en todos los modos y demo.json relativo [pendiente]
-++### 1. 1. Corte temporal en todos los modos y demo.json relativo [verificado]
-+ Objetivo: Que en todos los modos (demo o no) Herramientas y la app solo vean ratings y tags anteriores a FECHA_CORTE, más los eventos en vivo de estado.db. Que los scripts de los 25M respeten el corte por defecto y que demo.json use rutas relativas.
-+ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/config.py, recomendador/demo.py, app/app.py, scripts/productor_kafka.py, correr_25m.ps1, tests/test_corte.py · Depende de: -
-+ - Criterio: Herramientas aplica siempre un corte: por defecto config.FECHA_CORTE; con la muestra mini, FECHA_CORTE_MINI; se puede pasar explícito con el parámetro 'corte'. No hay ningún camino sin corte.
-+@@ -21,7 +21,7 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
-+ - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
-+ - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
-+ - Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
-+-### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [pendiente]
-++### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
-+ Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
-+ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
-+ - Criterio: Ánimos y ocasiones mapeados a géneros y tags: 'para llorar' -> Drama + sad/tearjerker; 'en familia' -> Children/Animation + family; 'liviano' -> Comedy; 'que me haga pensar' -> thought-provoking; 'con
-+@@ -34,7 +34,7 @@ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.p
-+ - Criterio: Con clave, usa los títulos en español de tmdb_cache.json y ClienteTMDb.buscar (/search/movie con language=es-ES), cuyo resultado queda en caché; tmdbId se mapea a movieId con links.csv
-+ - Prueba de aceptacion: Interpretación ES/EN, errores de tipeo, ánimos y ocasiones: el comando «.venv/Scripts/python -m pytest -q tests/test_pedido.py» debe terminar sin error
-+ - Prueba de aceptacion: Búsqueda de títulos con y sin TMDb (cliente falso, caché): el comando «.venv/Scripts/python -m pytest -q tests/test_titulos.py» debe terminar sin error
-+-### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [pendiente]
-++### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [verificado]
-+ Objetivo: Reemplazar los filtros duros de Herramientas.recomendar por grupos según el número de condiciones cumplidas, ordenar por afinidad ALS dentro de cada grupo y registrar buscar_pelicula en ESQUEMAS.
-+ Requisitos: 4, 5, 11 · Archivos: recomendador/herramientas.py, tests/test_puntaje.py, tests/test_buscar.py · Depende de: 1, 2
-+ - Criterio: recomendar acepta generos, tags y max_duracion_min y nunca devuelve una lista vacía si el catálogo tiene películas
+-diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+-index dae00f2..d367cc0 100644
+---- a/ARQUITECTURA.md
+-+++ b/ARQUITECTURA.md
+-@@ -8,7 +8,7 @@ Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea
+- Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
+- 
+- ## Paquetes de trabajo
+--### 1. 1. Corte temporal en todos los modos y demo.json relativo [pendiente]
+-+### 1. 1. Corte temporal en todos los modos y demo.json relativo [verificado]
+- Objetivo: Que en todos los modos (demo o no) Herramientas y la app solo vean ratings y tags anteriores a FECHA_CORTE, más los eventos en vivo de estado.db. Que los scripts de los 25M respeten el corte por defecto y que demo.json use rutas relativas.
+- Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/config.py, recomendador/demo.py, app/app.py, scripts/productor_kafka.py, correr_25m.ps1, tests/test_corte.py · Depende de: -
+- - Criterio: Herramientas aplica siempre un corte: por defecto config.FECHA_CORTE; con la muestra mini, FECHA_CORTE_MINI; se puede pasar explícito con el parámetro 'corte'. No hay ningún camino sin corte.
+-@@ -21,7 +21,7 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
+- - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
+- - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
+- - Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
+--### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [pendiente]
+-+### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
+- Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
+- Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
+- - Criterio: Ánimos y ocasiones mapeados a géneros y tags: 'para llorar' -> Drama + sad/tearjerker; 'en familia' -> Children/Animation + family; 'liviano' -> Comedy; 'que me haga pensar' -> thought-provoking; 'con
+-@@ -34,7 +34,7 @@ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.p
+- - Criterio: Con clave, usa los títulos en español de tmdb_cache.json y ClienteTMDb.buscar (/search/movie con language=es-ES), cuyo resultado queda en caché; tmdbId se mapea a movieId con links.csv
+- - Prueba de aceptacion: Interpretación ES/EN, errores de tipeo, ánimos y ocasiones: el comando «.venv/Scripts/python -m pytest -q tests/test_pedido.py» debe terminar sin error
+- - Prueba de aceptacion: Búsqueda de títulos con y sin TMDb (cliente falso, caché): el comando «.venv/Scripts/python -m pytest -q tests/test_titulos.py» debe terminar sin error
+--### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [pendiente]
+-+### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [verificado]
+- Objetivo: Reemplazar los filtros duros de Herramientas.recomendar por grupos según el número de condiciones cumplidas, ordenar por afinidad ALS dentro de cada grupo y registrar buscar_pelicula en ESQUEMAS.
+- Requisitos: 4, 5, 11 · Archivos: recomendador/herramientas.py, tests/test_puntaje.py, tests/test_buscar.py · Depende de: 1, 2
+- - Criterio: recomendar acepta generos, tags y max_duracion_min y nunca devuelve una lista vacía si el catálogo tiene películas
  diff --git a/ESPEC.md b/ESPEC.md
--index b0baefb..2f5b5e6 100644
-+index 2f5b5e6..b656a62 100644
+-index 2f5b5e6..b656a62 100644
++index b656a62..459f79f 100644
  --- a/ESPEC.md
  +++ b/ESPEC.md
--@@ -11,17 +11,20 @@ El resto del plan está aprobado.
-- ## Requisitos (estado actual, 11 en total)
-+@@ -12,24 +12,21 @@ El resto del plan está aprobado.
-  - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
-  - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
---- [pendiente] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
--+- [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
-- - [pendiente] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
---- [pendiente] 5. Herramienta buscar_pelicula(titulo) registrada en ESQUEMAS: ignora tildes y mayúsculas, acepta títulos en español o inglés y hace coincidencia aproximada. Si no encuentra nada razonable, devuelve encontrada=false con un mensaje de una frase
--+- [verificado] 5. Herramienta buscar_pelicula(titulo) registrada en ESQUEMAS: ignora tildes y mayúsculas, acepta títulos en español o inglés y hace coincidencia aproximada. Si no encuentra nada razonable, devuelve encontrada=false con un mensaje de una frase
-+ - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
-+-- [pendiente] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
-++- [verificado] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
-+ - [verificado] 5. Herramienta buscar_pelicula(titulo) registrada en ESQUEMAS: ignora tildes y mayúsculas, acepta títulos en español o inglés y hace coincidencia aproximada. Si no encuentra nada razonable, devuelve encontrada=false con un mensaje de una frase
-  - [pendiente] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
+-@@ -12,24 +12,21 @@ El resto del plan está aprobado.
+- - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+- - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
++@@ -14,19 +14,19 @@ El resto del plan está aprobado.
+  - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
+--- [pendiente] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
+-+- [verificado] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
++ - [verificado] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada película devuelve 'cumple', 'no_cump
+  - [verificado] 5. Herramienta buscar_pelicula(titulo) registrada en ESQUEMAS: ignora tildes y mayúsculas, acepta títulos en español o inglés y hace coincidencia aproximada. Si no encuentra nada razonable, devuelve encontrada=false con un mensaje de una frase
+- - [pendiente] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
++-- [pendiente] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
+++- [verificado] 6. Chat robusto: en modo Ollama, la interpretación del pedido se aplica siempre (se completan los filtros que el modelo omitió) y el prompt de sistema incluye una regla sobre ánimos, ocasiones y buscar_pelicula. Red de seguridad: si se pidieron recomendaciones y el modelo no devuelve ninguna válida, se
   - [pendiente] 7. Figura tipos_espectador del póster rehecha con barras horizontales y etiquetas que no se superponen; una prueba comprueba que las cajas de las etiquetas no se intersectan
-  - [pendiente] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
+- - [pendiente] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
++-- [pendiente] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
+++- [verificado] 8. Batería de 30 pedidos variados (tests/test_bateria.py) en modo reglas y con un LLM simulado (uno que responde bien, uno que no devuelve películas y uno que inventa movieIds). Cada pedido de recomendación termina con al menos una recomendación válida del catálogo y cada mensaje que no es un pedido re
   - [verificado] 9. El corte temporal se aplica en todos los modos, no solo en demo. El historial, los ratings calificados, los tags y la popularidad que usa Herramientas excluyen siempre los timestamps >= FECHA_CORTE (FECHA_CORTE_MINI con la muestra mini). Los eventos en vivo de estado.db se incluyen siempre. Una prue
---- [pendiente] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
--+- [verificado] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
-- - [pendiente] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
-+ - [verificado] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
-+-- [pendiente] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
-++- [verificado] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
+  - [verificado] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
+--- [pendiente] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
+-+- [verificado] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
++ - [verificado] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
   
   ## Bitacora (lo mas reciente primero)
--+- 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
--+- 2026-11-15T20:34 ronda - [delegado]: pruebas automáticas 7/7 ✅; 3 prueba(s) nueva(s); version ee04cbb
--+- 2026-11-15T20:31 ronda 2 [constructor paquete 2]: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título mencionado, pide_recomendacion y n, y tolera errores de tipeo con difflib. Los tags se filtran contra genome-tags.csv y las condiciones salen como textos en español. llm.interpretar ahora delega en pedido.py y conserva su forma {max_duracion_min, generos, n}. Creé recomendador/titulos.py (BuscadorTitulos y buscar): busca de forma aproximada en MovieLens con un umbral de 0.8 y, solo si hay clave de TMDb, también en los títulos en español de tmdb_cache.json y con ClienteTMDb.buscar, un método nuevo que llama a /search/movie con language=es-ES y guarda el resultado en la caché bajo '_busquedas'. Las dos pruebas de aceptación pasan (61 pruebas nuevas). La suite completa da 195 aprobadas y 4 omitidas.
-- - 2026-11-15T20:24 ronda 1 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: El archivo artefactos/demo/demo.json que existe en disco todavía contiene rutas absolutas ('C:\\Users\\vicen\\...\\artefactos\\25m' y '...\\data\\ml-25m'). El generador (demo.preparar_demo + ruta_relativa) ya está corregido y la prueba lo verifica sobre una carpeta temporal, pero el archivo real no se regeneró. Como artefactos/ está en .gitignore y leer_demo_json también acepta rutas absolutas, la app sigue funcionando. Aun así, hay que regenerar la demo (paso de preparar_demo en correr
-- - 2026-11-15T20:24 ronda - [delegado]: pruebas automáticas 2/2 ✅; version 3ccc587
-- - 2026-11-15T20:21 ronda 1 [constructor paquete 1]: Herramientas ahora aplica siempre un corte temporal. Recibe el parámetro nuevo 'corte'; si no se pasa, usa config.FECHA_CORTE, o FECHA_CORTE_MINI cuando los datos son muestras/ml-mini. _historial, peliculas_calificadas, tags_usuario y _popularidad descartan los timestamps >= corte, y los eventos de estado.db se siguen sumando siempre. demo.json guarda ahora rutas relativas a la raíz. Agregué demo.ruta_relativa, demo.resolver_ruta y demo.leer_demo_json, y en modo demo app.py usa el 'datos' y el 'corte' de demo.json. productor_kafka.py usa por defecto --desde FECHA_CORTE, y correr_25m.ps1 le pasa --hasta <FECHA_CORTE> a perfilar_usuarios.py. tests/test_corte.py tiene 18 casos y la suite completa termina con 134 pasadas y 4 omitidas.
--@@ -29,5 +32,4 @@ El resto del plan está aprobado.
-- - 2026-11-15T20:11 ronda - [usuario]: Ajuste al plan: 1. El corte se aplica en todos los modos, no solo en demo: el historial del usuario siempre es ratings anteriores a FECHA_CORTE más los eventos en vivo, porque el modelo se entrenó solo hasta el corte.
-- 2. Coincidencia primero, pero agrupada en niveles (número de condiciones que cumple la película); dentro de cada nivel se ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es el del híbrido actual.
-- 3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
-++- 2026-11-15T20:49 ronda - [arquitecto (punto de control)]: El proyecto avanza bien. Los paquetes 1 a 3 están construidos y la regresión completa da 210 pasadas, 4 omitidas y ninguna falla. Ya existen el corte en todos los modos, pedido.py, titulos.py con TMDb opcional, la recomendación por niveles y buscar_pelicula en ESQUEMAS. Lo que falta coincide con los Cambios: ninguno. Integracion: recomendador/llm.py:302 todavía tiene el texto 'No pude obtener recomendaciones verificadas con las herramientas.' en responder_ollama. El paquete 4 debe eliminarlo con la red de seguridad, porque si no queda un camino que el usuario prohibió. | llm.responder_reglas (llm.py:143) sigue usando interpr
-++- 2026-11-15T20:48 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: La regresión completa que ejecutó Delegado (PRUEBAS.txt) da 210 pasadas y 4 omitidas, sin fallas. Así queda resuelta la duda del constructor, que no volvió a correr la suite completa después de su último ajuste. | General: Menor: las recomendaciones que vienen de la popularidad o del catálogo llevan score=None. Conviene que la capa de presentación (paquete 4) tolere ese valor. | General: Menor: si un género pedido es solo 'Family', el texto de no_cumple puede quedar como 'género: ' más 
-++- 2026-11-15T20:48 ronda - [delegado]: pruebas automáticas 12/12 ✅; 3 prueba(s) nueva(s); version 7575a51
-++- 2026-11-15T20:43 ronda 3 [constructor paquete 3]: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min) ya no descartan películas: solo ordenan. nivel = condiciones pedidas − incumplidas, así que una condición no evaluable no lo baja. El orden es nivel de mayor a menor y, dentro de cada nivel, el orden híbrido (estado en vivo y luego ALS fold-in). Si el híbrido no alcanza, siguen la popularidad y el catálogo, y la lista nunca queda vacía. Cada película trae nivel, cumple, no_cumple, no_evaluables y coincidencia, con avisos cuando falta la duración o el tag genome. Agregué buscar_pelicula a Herramientas, a ejecutar y a ESQUEMAS (parámetro titulo). Usa recomendador/titulos.py y devuelve titulo_es si hay clave TMDb y el título está en caché; para eso titulos.py ahora también devuelve el tmdbId, un cambio solo aditivo. También agregué el parámetro tags al esquema de recomendar. Pruebas nuevas: tests/test_puntaje.py (5) y tests/test_buscar.py (10). Ajusté pruebas antiguas que suponían el filtro duro: test_herramientas (ahora 6 esquemas; 1307 en el nivel máximo en vez de lista [1307]) y 3 de test_app (1307 primero en vez de ser la única). La 
-+ - 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
-+ - 2026-11-15T20:34 ronda - [delegado]: pruebas automáticas 7/7 ✅; 3 prueba(s) nueva(s); version ee04cbb
-+ - 2026-11-15T20:31 ronda 2 [constructor paquete 2]: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título mencionado, pide_recomendacion y n, y tolera errores de tipeo con difflib. Los tags se filtran contra genome-tags.csv y las condiciones salen como textos en español. llm.interpretar ahora delega en pedido.py y conserva su forma {max_duracion_min, generos, n}. Creé recomendador/titulos.py (BuscadorTitulos y buscar): busca de forma aproximada en MovieLens con un umbral de 0.8 y, solo si hay clave de TMDb, también en los títulos en español de tmdb_cache.json y con ClienteTMDb.buscar, un método nuevo que llama a /search/movie con language=es-ES y guarda el resultado en la caché bajo '_busquedas'. Las dos pruebas de aceptación pasan (61 pruebas nuevas). La suite completa da 195 aprobadas y 4 omitidas.
-+-- 2026-11-15T20:24 ronda 1 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: El archivo artefactos/demo/demo.json que existe en disco todavía contiene rutas absolutas ('C:\\Users\\vicen\\...\\artefactos\\25m' y '...\\data\\ml-25m'). El generador (demo.preparar_demo + ruta_relativa) ya está corregido y la prueba lo verifica sobre una carpeta temporal, pero el archivo real no se regeneró. Como artefactos/ está en .gitignore y leer_demo_json también acepta rutas absolutas, la app sigue funcionando. Aun así, hay que regenerar la demo (paso de preparar_demo en correr
-+-- 2026-11-15T20:24 ronda - [delegado]: pruebas automáticas 2/2 ✅; version 3ccc587
-+-- 2026-11-15T20:21 ronda 1 [constructor paquete 1]: Herramientas ahora aplica siempre un corte temporal. Recibe el parámetro nuevo 'corte'; si no se pasa, usa config.FECHA_CORTE, o FECHA_CORTE_MINI cuando los datos son muestras/ml-mini. _historial, peliculas_calificadas, tags_usuario y _popularidad descartan los timestamps >= corte, y los eventos de estado.db se siguen sumando siempre. demo.json guarda ahora rutas relativas a la raíz. Agregué demo.ruta_relativa, demo.resolver_ruta y demo.leer_demo_json, y en modo demo app.py usa el 'datos' y el 'corte' de demo.json. productor_kafka.py usa por defecto --desde FECHA_CORTE, y correr_25m.ps1 le pasa --hasta <FECHA_CORTE> a perfilar_usuarios.py. tests/test_corte.py tiene 18 casos y la suite completa termina con 134 pasadas y 4 omitidas.
-+-- 2026-11-15T20:12 ronda - [arquitecto]: Plan v2: Reparar y pulir el recomendador de películas que ya existe (MovieLens, ALS con Spark, perfiles, streaming Kafka, app Streamlit con chat por reglas u Ollama, póster) sin rehacer lo verificado. Hay cinco cambios: (1) en todos los modos, el historial del usuario son los ratings anteriores a FECHA_CORTE
-+-- 2026-11-15T20:11 ronda - [usuario]: Ajuste al plan: 1. El corte se aplica en todos los modos, no solo en demo: el historial del usuario siempre es ratings anteriores a FECHA_CORTE más los eventos en vivo, porque el modelo se entrenó solo hasta el corte.
-+-2. Coincidencia primero, pero agrupada en niveles (número de condiciones que cumple la película); dentro de cada nivel se ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es el del híbrido actual.
-+-3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
- -El resto del plan está aprobado.
---- 2026-11-15T20:09 ronda - [arquitecto]: Plan v1: Reparar y pulir el recomendador de películas que ya existe: MovieLens, ALS con Spark, perfiles, streaming Kafka, una app Streamlit con chat por reglas u Ollama y un póster. Los objetivos son cuatro: que el modo demo no use datos posteriores a FECHA_CORTE, que las recomendaciones salgan de un puntaje
+-+- 2026-11-15T20:49 ronda - [arquitecto (punto de control)]: El proyecto avanza bien. Los paquetes 1 a 3 están construidos y la regresión completa da 210 pasadas, 4 omitidas y ninguna falla. Ya existen el corte en todos los modos, pedido.py, titulos.py con TMDb opcional, la recomendación por niveles y buscar_pelicula en ESQUEMAS. Lo que falta coincide con los Cambios: ninguno. Integracion: recomendador/llm.py:302 todavía tiene el texto 'No pude obtener recomendaciones verificadas con las herramientas.' en responder_ollama. El paquete 4 debe eliminarlo con la red de seguridad, porque si no queda un camino que el usuario prohibió. | llm.responder_reglas (llm.py:143) sigue usando interpr
+-+- 2026-11-15T20:48 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: La regresión completa que ejecutó Delegado (PRUEBAS.txt) da 210 pasadas y 4 omitidas, sin fallas. Así queda resuelta la duda del constructor, que no volvió a correr la suite completa después de su último ajuste. | General: Menor: las recomendaciones que vienen de la popularidad o del catálogo llevan score=None. Conviene que la capa de presentación (paquete 4) tolere ese valor. | General: Menor: si un género pedido es solo 'Family', el texto de no_cumple puede quedar como 'género: ' más 
+-+- 2026-11-15T20:48 ronda - [delegado]: pruebas automáticas 12/12 ✅; 3 prueba(s) nueva(s); version 7575a51
+-+- 2026-11-15T20:43 ronda 3 [constructor paquete 3]: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min) ya no descartan películas: solo ordenan. nivel = condiciones pedidas − incumplidas, así que una condición no evaluable no lo baja. El orden es nivel de mayor a menor y, dentro de cada nivel, el orden híbrido (estado en vivo y luego ALS fold-in). Si el híbrido no alcanza, siguen la popularidad y el catálogo, y la lista nunca queda vacía. Cada película trae nivel, cumple, no_cumple, no_evaluables y coincidencia, con avisos cuando falta la duración o el tag genome. Agregué buscar_pelicula a Herramientas, a ejecutar y a ESQUEMAS (parámetro titulo). Usa recomendador/titulos.py y devuelve titulo_es si hay clave TMDb y el título está en caché; para eso titulos.py ahora también devuelve el tmdbId, un cambio solo aditivo. También agregué el parámetro tags al esquema de recomendar. Pruebas nuevas: tests/test_puntaje.py (5) y tests/test_buscar.py (10). Ajusté pruebas antiguas que suponían el filtro duro: test_herramientas (ahora 6 esquemas; 1307 en el nivel máximo en vez de lista [1307]) y 3 de test_app (1307 primero en vez de ser la única). La 
+- - 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
+- - 2026-11-15T20:34 ronda - [delegado]: pruebas automáticas 7/7 ✅; 3 prueba(s) nueva(s); version ee04cbb
+- - 2026-11-15T20:31 ronda 2 [constructor paquete 2]: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título mencionado, pide_recomendacion y n, y tolera errores de tipeo con difflib. Los tags se filtran contra genome-tags.csv y las condiciones salen como textos en español. llm.interpretar ahora delega en pedido.py y conserva su forma {max_duracion_min, generos, n}. Creé recomendador/titulos.py (BuscadorTitulos y buscar): busca de forma aproximada en MovieLens con un umbral de 0.8 y, solo si hay clave de TMDb, también en los títulos en español de tmdb_cache.json y con ClienteTMDb.buscar, un método nuevo que llama a /search/movie con language=es-ES y guarda el resultado en la caché bajo '_busquedas'. Las dos pruebas de aceptación pasan (61 pruebas nuevas). La suite completa da 195 aprobadas y 4 omitidas.
+++- 2026-11-15T21:00 ronda 4 [revisor paquete 4]: aprobado (pruebas que fallan 0, requisitos verificados 2): General: Ninguna captura de verificación muestra una tarjeta del chat con el resumen de condiciones (C4) ni el texto de la red de seguridad. La implementación (app.py:92-93, CSS .cond) es correcta, pero conviene capturar el chat con un pedido como 'algo corto y liviano' para respaldar lo visual. | General: Detalle menor: si un mensaje que no es pedido recibe del LLM un JSON con IDs inventados, responder_ollama devuelve solo '(Descarté N película(s)…)' sin el texto de AYUDA. No lo cubre la baterí
+++- 2026-11-15T21:00 ronda - [delegado]: pruebas automáticas 17/17 ✅; 3 prueba(s) nueva(s); version 9c6d8cb
+++- 2026-11-15T20:54 ronda 4 [constructor paquete 4]: Conecté pedido.py, la recomendación por niveles y buscar_pelicula al modo reglas y al modo Ollama de recomendador/llm.py. Agregué al prompt SISTEMA una regla sobre ánimos, ocasiones y buscar_pelicula. En modo Ollama, los filtros que el modelo no pasa a recomendar se completan con lo que detecta pedido.py. Si se pidieron películas y no queda ninguna válida, una red de seguridad llama a recomendar con lo detectado y muestra esas tarjetas. Cada recomendación trae ahora un resumen de las condiciones que cumple, las que no cumple y las que no se pudieron evaluar, y app/app.py lo muestra en la tarjeta. Si el pedido nombra una película que no está en el catálogo, la respuesta lo dice en una frase y recomienda igual. Escribí tests/test_bateria.py (30 mensajes × 4 modos, más una prueba de que se completan los filtros) y tests/test_red_seguridad.py. Las dos pruebas de aceptación pasan: 129 pruebas en 2,1 s. La suite completa también pasa: 339 aprobadas y 4 omitidas, en 2 min 30 s.
++ - 2026-11-15T20:49 ronda - [arquitecto (punto de control)]: El proyecto avanza bien. Los paquetes 1 a 3 están construidos y la regresión completa da 210 pasadas, 4 omitidas y ninguna falla. Ya existen el corte en todos los modos, pedido.py, titulos.py con TMDb opcional, la recomendación por niveles y buscar_pelicula en ESQUEMAS. Lo que falta coincide con los Cambios: ninguno. Integracion: recomendador/llm.py:302 todavía tiene el texto 'No pude obtener recomendaciones verificadas con las herramientas.' en responder_ollama. El paquete 4 debe eliminarlo con la red de seguridad, porque si no queda un camino que el usuario prohibió. | llm.responder_reglas (llm.py:143) sigue usando interpr
++ - 2026-11-15T20:48 ronda 3 [revisor paquete 3]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: La regresión completa que ejecutó Delegado (PRUEBAS.txt) da 210 pasadas y 4 omitidas, sin fallas. Así queda resuelta la duda del constructor, que no volvió a correr la suite completa después de su último ajuste. | General: Menor: las recomendaciones que vienen de la popularidad o del catálogo llevan score=None. Conviene que la capa de presentación (paquete 4) tolere ese valor. | General: Menor: si un género pedido es solo 'Family', el texto de no_cumple puede quedar como 'género: ' más 
++ - 2026-11-15T20:48 ronda - [delegado]: pruebas automáticas 12/12 ✅; 3 prueba(s) nueva(s); version 7575a51
++ - 2026-11-15T20:43 ronda 3 [constructor paquete 3]: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min) ya no descartan películas: solo ordenan. nivel = condiciones pedidas − incumplidas, así que una condición no evaluable no lo baja. El orden es nivel de mayor a menor y, dentro de cada nivel, el orden híbrido (estado en vivo y luego ALS fold-in). Si el híbrido no alcanza, siguen la popularidad y el catálogo, y la lista nunca queda vacía. Cada película trae nivel, cumple, no_cumple, no_evaluables y coincidencia, con avisos cuando falta la duración o el tag genome. Agregué buscar_pelicula a Herramientas, a ejecutar y a ESQUEMAS (parámetro titulo). Usa recomendador/titulos.py y devuelve titulo_es si hay clave TMDb y el título está en caché; para eso titulos.py ahora también devuelve el tmdbId, un cambio solo aditivo. También agregué el parámetro tags al esquema de recomendar. Pruebas nuevas: tests/test_puntaje.py (5) y tests/test_buscar.py (10). Ajusté pruebas antiguas que suponían el filtro duro: test_herramientas (ahora 6 esquemas; 1307 en el nivel máximo en vez de lista [1307]) y 3 de test_app (1307 primero en vez de ser la única). La 
++-- 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
++-- 2026-11-15T20:34 ronda - [delegado]: pruebas automáticas 7/7 ✅; 3 prueba(s) nueva(s); version ee04cbb
++-- 2026-11-15T20:31 ronda 2 [constructor paquete 2]: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título mencionado, pide_recomendacion y n, y tolera errores de tipeo con difflib. Los tags se filtran contra genome-tags.csv y las condiciones salen como textos en español. llm.interpretar ahora delega en pedido.py y conserva su forma {max_duracion_min, generos, n}. Creé recomendador/titulos.py (BuscadorTitulos y buscar): busca de forma aproximada en MovieLens con un umbral de 0.8 y, solo si hay clave de TMDb, también en los títulos en español de tmdb_cache.json y con ClienteTMDb.buscar, un método nuevo que llama a /search/movie con language=es-ES y guarda el resultado en la caché bajo '_busquedas'. Las dos pruebas de aceptación pasan (61 pruebas nuevas). La suite completa da 195 aprobadas y 4 omitidas.
+ -- 2026-11-15T20:24 ronda 1 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: El archivo artefactos/demo/demo.json que existe en disco todavía contiene rutas absolutas ('C:\\Users\\vicen\\...\\artefactos\\25m' y '...\\data\\ml-25m'). El generador (demo.preparar_demo + ruta_relativa) ya está corregido y la prueba lo verifica sobre una carpeta temporal, pero el archivo real no se regeneró. Como artefactos/ está en .gitignore y leer_demo_json también acepta rutas absolutas, la app sigue funcionando. Aun así, hay que regenerar la demo (paso de preparar_demo en correr
+--- 2026-11-15T20:24 ronda - [delegado]: pruebas automáticas 2/2 ✅; version 3ccc587
+--- 2026-11-15T20:21 ronda 1 [constructor paquete 1]: Herramientas ahora aplica siempre un corte temporal. Recibe el parámetro nuevo 'corte'; si no se pasa, usa config.FECHA_CORTE, o FECHA_CORTE_MINI cuando los datos son muestras/ml-mini. _historial, peliculas_calificadas, tags_usuario y _popularidad descartan los timestamps >= corte, y los eventos de estado.db se siguen sumando siempre. demo.json guarda ahora rutas relativas a la raíz. Agregué demo.ruta_relativa, demo.resolver_ruta y demo.leer_demo_json, y en modo demo app.py usa el 'datos' y el 'corte' de demo.json. productor_kafka.py usa por defecto --desde FECHA_CORTE, y correr_25m.ps1 le pasa --hasta <FECHA_CORTE> a perfilar_usuarios.py. tests/test_corte.py tiene 18 casos y la suite completa termina con 134 pasadas y 4 omitidas.
+--- 2026-11-15T20:12 ronda - [arquitecto]: Plan v2: Reparar y pulir el recomendador de películas que ya existe (MovieLens, ALS con Spark, perfiles, streaming Kafka, app Streamlit con chat por reglas u Ollama, póster) sin rehacer lo verificado. Hay cinco cambios: (1) en todos los modos, el historial del usuario son los ratings anteriores a FECHA_CORTE
+--- 2026-11-15T20:11 ronda - [usuario]: Ajuste al plan: 1. El corte se aplica en todos los modos, no solo en demo: el historial del usuario siempre es ratings anteriores a FECHA_CORTE más los eventos en vivo, porque el modelo se entrenó solo hasta el corte.
+--2. Coincidencia primero, pero agrupada en niveles (número de condiciones que cumple la película); dentro de cada nivel se ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es el del híbrido actual.
+--3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
+--El resto del plan está aprobado.
  \ No newline at end of file
--+El resto del plan está aprobado.
-++- 2026-11-15T20:24 ronda 1 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: El archivo artefactos/demo/demo.json que existe en disco todavía contiene rutas absolutas ('C:\\Users\\vicen\\...\\artefactos\\25m' y '...\\data\\ml-25m'). El generador (demo.preparar_demo + ruta_relativa) ya está corregido y la prueba lo verifica sobre una carpeta temporal, pero el archivo real no se regeneró. Como artefactos/ está en .gitignore y leer_demo_json también acepta rutas absolutas, la app sigue funcionando. Aun así, hay que regenerar la demo (paso de preparar_demo en correr
+-+- 2026-11-15T20:24 ronda 1 [revisor paquete 1]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: El archivo artefactos/demo/demo.json que existe en disco todavía contiene rutas absolutas ('C:\\Users\\vicen\\...\\artefactos\\25m' y '...\\data\\ml-25m'). El generador (demo.preparar_demo + ruta_relativa) ya está corregido y la prueba lo verifica sobre una carpeta temporal, pero el archivo real no se regeneró. Como artefactos/ está en .gitignore y leer_demo_json también acepta rutas absolutas, la app sigue funcionando. Aun así, hay que regenerar la demo (paso de preparar_demo en correr
+++- 2026-11-15T20:35 ronda 2 [revisor paquete 2]: aprobado (pruebas que fallan 0, requisitos verificados 3): General: Hay una incoherencia menor: el docstring de llm.interpretar dice que devuelve 'pide', pero la función no lo incluye. | General: No se hicieron capturas de pantalla porque este paquete es pura lógica. Las pruebas de regresión del chat por reglas y de la app pasan (9 aprobadas) y la suite completa da 195 aprobadas y 4 omitidas, así que no se ve ninguna regresión. | General: En la clave de caché de titulos.buscar(), id(cliente_tmdb) puede repetirse si se libera el cliente y se crea otro nu
  \ No newline at end of file
++diff --git a/README.md b/README.md
++index 4ffba5a..ad1cd70 100644
++--- a/README.md
+++++ b/README.md
++@@ -205,6 +205,61 @@ $env:MODO = "demo"
++ Si Ollama no responde, la app muestra «Ollama no responde: usando modo reglas» y sigue
++ funcionando con el proveedor `reglas`.
++ 
+++### Corte temporal en todos los modos
+++
+++El ALS se entrena con los ratings anteriores a `FECHA_CORTE`. Por eso, en **todos** los
+++modos (completo, demo, reglas y Ollama) el historial de un usuario es: sus ratings
+++anteriores al corte más los eventos que llegaron en vivo (`artefactos/estado.db`). Lo
+++posterior al corte nunca se usa para recomendar ni para excluir «ya vistas».
+++
+++| Datos | Corte usado |
+++|---|---|
+++| MovieLens 25M | `FECHA_CORTE` (por defecto 2018-01-01, configurable por variable de entorno) |
+++| Muestra `ml-mini` (pruebas) | `FECHA_CORTE_MINI` = 2016-01-01 |
+++
+++### Cómo se ordenan las recomendaciones: niveles de coincidencia
+++
+++El pedido («algo corto y de terror», «a funny movie», «comedia ligera de menos de 100
+++min»…) se interpreta en `recomendador/pedido.py` (español e inglés, tolera tildes y
+++errores de tipeo) y se convierte en condiciones: géneros, tags del genome (relevancia
+++≥ 0,5) y duración máxima. La herramienta `recomendar` **no descarta** películas:
+++
+++1. calcula el nivel de cada candidata = condiciones pedidas − condiciones incumplidas
+++   (un dato que falta, como una duración desconocida, no baja el nivel);
+++2. ordena por nivel, de mayor a menor;
+++3. dentro de cada nivel, ordena por afinidad ALS (top-N en vivo y luego fold-in).
+++
+++Así, si nada cumple todo, aparecen primero las que cumplen más condiciones, y el chat
+++nunca termina sin películas.
+++
+++### Buscar una película por título (`buscar_pelicula`)
+++
+++`buscar_pelicula` busca de forma aproximada (difflib, sin tildes ni mayúsculas) en los
+++títulos de MovieLens. **`TMDB_API_KEY` es opcional**: si está definida, además busca
+++títulos en español en TMDb (`/search/movie` con `language=es-ES`, p. ej. «El padrino»)
+++y guarda las respuestas en `artefactos/tmdb_cache.json`; sin clave, todo funciona igual
+++usando solo MovieLens y no se hace ninguna llamada a la red. Las pruebas usan un cliente
+++TMDb falso.
+++
+++### Regenerar sobre los 25M (paso manual)
+++
+++Las pruebas solo usan la muestra `ml-mini` y ningún paso automático corre sobre los 25M
+++(tardaría mucho más de 10 minutos). Para actualizar artefactos y figuras con los datos
+++completos, hazlo a mano en PowerShell desde la raíz del proyecto:
+++
+++```powershell
+++.\correr_25m.ps1                                 # corrida completa (descarga, ALS, perfiles, escalabilidad y figuras)
+++.venv\Scripts\python scripts/figuras_poster.py   # solo rehace las figuras con los artefactos ya generados
+++```
+++
+++Si ya corriste `correr_25m.ps1` antes de este cambio, basta con el segundo comando para
+++obtener la nueva figura `tipos_espectador`.
+++
+++La figura `tipos_espectador` usa barras horizontales ordenadas de mayor a menor, con el
+++nombre de cada tipo a la izquierda y «N usuarios · X %» al final de la barra, más un mapa
+++PCA sin rótulos con los mismos colores. `tests/test_poster_tipos.py` comprueba que las
+++etiquetas no se superponen.
+++
++ ## Pruebas
++ 
++ Usan la muestra pequeña `muestras/ml-mini`, tardan menos de 2 minutos por suite y se
  diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
--index 77c7737..65b4125 100644
-+index 65b4125..a87238d 100644
+-index 65b4125..a87238d 100644
++index a87238d..f07d586 100644
  --- a/_capturas/CAMBIOS.diff
  +++ b/_capturas/CAMBIOS.diff
--@@ -1,303 +1,320 @@
---3ccc587 Paquete 1 (1. Corte temporal en todos los modos y demo.json relativo), intento 1: Herramientas ahora aplica siempre un corte temporal. Recibe el parámetro nuevo 'corte'; si no se pasa, usa config.FECHA_CORTE, o FECHA_CORTE_MINI cuan
--+ee04cbb Paquete 2 (2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional)), intento 1: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título m
-+@@ -1,320 +1,338 @@
-+-ee04cbb Paquete 2 (2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional)), intento 1: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título m
-++7575a51 Paquete 3 (3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula), intento 1: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min)
+-@@ -1,320 +1,338 @@
+--ee04cbb Paquete 2 (2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional)), intento 1: Creé recomendador/pedido.py, que interpreta pedidos en español e inglés de forma determinista. Detecta géneros, duración, ánimos y ocasiones, título m
+-+7575a51 Paquete 3 (3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula), intento 1: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min)
++@@ -1,338 +1,327 @@
++-7575a51 Paquete 3 (3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula), intento 1: Reescribí Herramientas.recomendar en recomendador/herramientas.py. Las condiciones (géneros, cada tag genome con relevancia ≥ 0.5 y max_duracion_min)
+++9c6d8cb Paquete 4 (4. Chat robusto: red de seguridad, regla de sistema y batería de 30 pedidos), intento 1: Conecté pedido.py, la recomendación por niveles y buscar_pelicula al modo reglas y al modo Ollama de recomendador/llm.py. Agregué al prompt SISTEMA un
   
--- ARQUITECTURA.md              | 211 +++++++++++++++----------------------------
--- ESPEC.md                     |  56 ++++++------
--- _capturas/PRUEBAS.txt        | 195 +--------------------------------------
--- app/app.py                   |  20 +++-
--- correr_25m.ps1               |   7 +-
--- recomendador/demo.py         |  38 +++++++-
--- recomendador/herramientas.py |  45 ++++++---
--- scripts/productor_kafka.py   |   4 +-
--- tests/test_app.py            |   5 +
--- tests/test_corte.py          | 187 ++++++++++++++++++++++++++++++++++++++
--- tests/test_herramientas.py   |   7 +-
--- 11 files changed, 397 insertions(+), 378 deletions(-)
--+ ESPEC.md                        |   9 +-
--+ _capturas/CAMBIOS.diff          | 974 ++++++++++++----------------------------
--+ _capturas/PRUEBAS.txt           |  14 +-
--+ recomendador/enriquecimiento.py |  54 +++
--+ recomendador/llm.py             |  24 +-
--+ recomendador/pedido.py          | 280 ++++++++++++
--+ recomendador/titulos.py         | 139 ++++++
--+ tests/test_pedido.py            | 114 +++++
--+ tests/test_titulos.py           | 151 +++++++
--+ 9 files changed, 1057 insertions(+), 702 deletions(-)
-+- ESPEC.md                        |   9 +-
-+- _capturas/CAMBIOS.diff          | 974 ++++++++++++----------------------------
-+- _capturas/PRUEBAS.txt           |  14 +-
-+- recomendador/enriquecimiento.py |  54 +++
-+- recomendador/llm.py             |  24 +-
-+- recomendador/pedido.py          | 280 ++++++++++++
-+- recomendador/titulos.py         | 139 ++++++
-+- tests/test_pedido.py            | 114 +++++
-+- tests/test_titulos.py           | 151 +++++++
-+- 9 files changed, 1057 insertions(+), 702 deletions(-)
-++ ESPEC.md                     |  12 +-
-++ _capturas/CAMBIOS.diff       | 607 ++++++++++++++++++++++---------------------
-++ _capturas/PRUEBAS.txt        |  25 +-
-++ recomendador/herramientas.py | 205 ++++++++++++---
-++ recomendador/titulos.py      |   4 +-
-++ tests/test_app.py            |  12 +-
-++ tests/test_buscar.py         |  74 ++++++
-++ tests/test_herramientas.py   |  10 +-
-++ tests/test_puntaje.py        | 120 +++++++++
-++ 9 files changed, 723 insertions(+), 346 deletions(-)
+-- ESPEC.md                        |   9 +-
+-- _capturas/CAMBIOS.diff          | 974 ++++++++++++----------------------------
+-- _capturas/PRUEBAS.txt           |  14 +-
+-- recomendador/enriquecimiento.py |  54 +++
+-- recomendador/llm.py             |  24 +-
+-- recomendador/pedido.py          | 280 ++++++++++++
+-- recomendador/titulos.py         | 139 ++++++
+-- tests/test_pedido.py            | 114 +++++
+-- tests/test_titulos.py           | 151 +++++++
+-- 9 files changed, 1057 insertions(+), 702 deletions(-)
+-+ ESPEC.md                     |  12 +-
+-+ _capturas/CAMBIOS.diff       | 607 ++++++++++++++++++++++---------------------
+-+ _capturas/PRUEBAS.txt        |  25 +-
+-+ recomendador/herramientas.py | 205 ++++++++++++---
+-+ recomendador/titulos.py      |   4 +-
+-+ tests/test_app.py            |  12 +-
+-+ tests/test_buscar.py         |  74 ++++++
+-+ tests/test_herramientas.py   |  10 +-
+-+ tests/test_puntaje.py        | 120 +++++++++
+-+ 9 files changed, 723 insertions(+), 346 deletions(-)
++- ESPEC.md                     |  12 +-
++- _capturas/CAMBIOS.diff       | 607 ++++++++++++++++++++++---------------------
++- _capturas/PRUEBAS.txt        |  25 +-
++- recomendador/herramientas.py | 205 ++++++++++++---
++- recomendador/titulos.py      |   4 +-
++- tests/test_app.py            |  12 +-
++- tests/test_buscar.py         |  74 ++++++
++- tests/test_herramientas.py   |  10 +-
++- tests/test_puntaje.py        | 120 +++++++++
++- 9 files changed, 723 insertions(+), 346 deletions(-)
+++ ARQUITECTURA.md             |   6 +-
+++ ESPEC.md                    |  17 +-
+++ _capturas/CAMBIOS.diff      | 608 +++++++++++++++++++++++---------------------
+++ _capturas/PRUEBAS.txt       |  33 ++-
+++ app/app.py                  |   7 +-
+++ recomendador/llm.py         | 202 ++++++++++++---
+++ tests/test_bateria.py       | 147 +++++++++++
+++ tests/test_red_seguridad.py |  86 +++++++
+++ 8 files changed, 752 insertions(+), 354 deletions(-)
   
---diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
---index b61ed7a..dae00f2 100644
------ a/ARQUITECTURA.md
---+++ b/ARQUITECTURA.md
---@@ -1,146 +1,81 @@
----# Plan de «recomendador-peliculas» (version 2)
---+# Plan de «recomendador-peliculas-v2» (version 2)
--- Lo mantiene Delegado; no lo edites.
+++diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
+++index dae00f2..d367cc0 100644
+++--- a/ARQUITECTURA.md
++++++ b/ARQUITECTURA.md
+++@@ -8,7 +8,7 @@ Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea
+++ Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
+++ 
+++ ## Paquetes de trabajo
+++-### 1. 1. Corte temporal en todos los modos y demo.json relativo [pendiente]
++++### 1. 1. Corte temporal en todos los modos y demo.json relativo [verificado]
+++ Objetivo: Que en todos los modos (demo o no) Herramientas y la app solo vean ratings y tags anteriores a FECHA_CORTE, más los eventos en vivo de estado.db. Que los scripts de los 25M respeten el corte por defecto y que demo.json use rutas relativas.
+++ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/config.py, recomendador/demo.py, app/app.py, scripts/productor_kafka.py, correr_25m.ps1, tests/test_corte.py · Depende de: -
+++ - Criterio: Herramientas aplica siempre un corte: por defecto config.FECHA_CORTE; con la muestra mini, FECHA_CORTE_MINI; se puede pasar explícito con el parámetro 'corte'. No hay ningún camino sin corte.
+++@@ -21,7 +21,7 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
+++ - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
+++ - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
+++ - Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
+++-### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [pendiente]
++++### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
+++ Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
+++ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
+++ - Criterio: Ánimos y ocasiones mapeados a géneros y tags: 'para llorar' -> Drama + sad/tearjerker; 'en familia' -> Children/Animation + family; 'liviano' -> Comedy; 'que me haga pensar' -> thought-provoking; 'con
+++@@ -34,7 +34,7 @@ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.p
+++ - Criterio: Con clave, usa los títulos en español de tmdb_cache.json y ClienteTMDb.buscar (/search/movie con language=es-ES), cuyo resultado queda en caché; tmdbId se mapea a movieId con links.csv
+++ - Prueba de aceptacion: Interpretación ES/EN, errores de tipeo, ánimos y ocasiones: el comando «.venv/Scripts/python -m pytest -q tests/test_pedido.py» debe terminar sin error
+++ - Prueba de aceptacion: Búsqueda de títulos con y sin TMDb (cliente falso, caché): el comando «.venv/Scripts/python -m pytest -q tests/test_titulos.py» debe terminar sin error
+++-### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [pendiente]
++++### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [verificado]
+++ Objetivo: Reemplazar los filtros duros de Herramientas.recomendar por grupos según el número de condiciones cumplidas, ordenar por afinidad ALS dentro de cada grupo y registrar buscar_pelicula en ESQUEMAS.
+++ Requisitos: 4, 5, 11 · Archivos: recomendador/herramientas.py, tests/test_puntaje.py, tests/test_buscar.py · Depende de: 1, 2
+++ - Criterio: recomendar acepta generos, tags y max_duracion_min y nunca devuelve una lista vacía si el catálogo tiene películas
+  diff --git a/ESPEC.md b/ESPEC.md
+--index 411bb96..b0baefb 100644
+-+index b0baefb..2f5b5e6 100644
++-index b0baefb..2f5b5e6 100644
+++index 2f5b5e6..b656a62 100644
+  --- a/ESPEC.md
+  +++ b/ESPEC.md
+--@@ -9,19 +9,22 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+-- El resto del plan está aprobado.
 -- 
----Vision: Sistema de recomendación de películas distribuido sobre MovieLens 25M para una expo con póster. Usa PySpark/MLlib para entrenar ALS batch con evaluación temporal, construir perfiles de gusto y agrupar a los usuarios con KMeans en «tipos de espectador». Kafka y Spark Structured Streaming procesan calificaciones en vivo, hay un experimento de speedup de 1 a 6 núcleos y una app Streamlit con chat LLM local (Ollama qwen3.5:9b, thinking desactivado por defecto) que solo explica con datos obtenidos por herramientas. Las métricas, los perfiles y el speedup los calcula el autor sobre los 25M completos. Para la demo en vivo, un «modo demo» carga ALS y perfiles precalculados sobre 25M y reentrena en vivo sobre un subconjunto configurable (por defecto, ratings desde 2015).
----Stack: Python 3.12 en .venv creado con 'py -3.12 -m venv .venv' por setup_entorno.ps1, con requirements.txt de versiones fijadas (Lo exige el usuario. Fijar versiones evita sorpresas el día de la expo.); PySpark 3.5.x fijado (p. ej. 3.5.5) en local[N] con spark.driver.memory=6g, más el conector org.apache.spark:spark-sql-kafka-0-10_2.12 con la MISMA versión que pyspark.__version__, resuelto con spark.jars.packages y caché Ivy dentro del proyecto (spark.jars.ivy=.ivy2) (La guía oficial de integración Kafka de Spark 3.5 (spark.apache.org/docs/3.5.x/structured-streaming-kafka-integration.html) define el artefacto _2.12 con la versión de Spark. Con la caché Ivy local, después de la primera descarga funciona sin internet en la expo. La rama 3.5 evita los cambios de Scala 2.13 y winutils que trae Spark 4.); Trigger.availableNow + startingOffsets='earliest' para la prueba de integración real con Kafka (y para la opción --availableNow del streaming) (Desde Spark 3.3 la fuente Kafka soporta AvailableNow (SPARK-36649), y en 3.4 se agregaron validaciones del rango de offsets (SPARK-41387). Así la prueba procesa lo que hay en el topic y termina sola, sin quedar colgada, lo que respeta el límite de 2 minutos.); Cliente confluent-kafka (Producer y AdminClient) (Trae wheels oficiales para Windows y Python 3.12. AdminClient crea topics, incluido un topic de prueba único, sin tocar Docker.); SQLite (stdlib) en modo WAL como estado en vivo compartido (artefactos/estado.db) (No requiere instalación y permite que el proceso de streaming escriba mientras Streamlit lee, sin los problemas de leer un parquet a medio escribir.); Fold-in con numpy para actualizar recomendaciones al instante y reentrenamiento ALS periódico por lotes en un hilo aparte (Cumple «tiempo real + reentrenamiento periódico» sin reentrenar ALS en cada micro-lote. En modo demo, el reentrenamiento usa solo el subconjunto desde 2015 para que tarde minutos y no horas.); Paquete oficial 'ollama' con tool calling nativo y parámetro think=False por defecto (LLM_THINK configurable) (La documentación de Ollama expone 'think' por solicitud en chat() (docs.ollama.com/capabilities/thinking) y tool calling con funciones Python (docs.ollama.com/capabilities/tool-calling). Hay reportes de que algunos wrappers no propagan 'think' (github.com/tidyverse/ellmer/issues/940) y de que LiteLLM pierde los tool_calls de qwen3.5 (github.com/BerriAI/litellm/issues/24091), por eso se usa la API directa.); Streamlit, probado con streamlit.testing.v1.AppTest (Lo pide el usuario. AppTest permite probar la UI sin navegador, dentro de pytest.); matplotlib para figuras y diagrama (PNG a 300 dpi y SVG) (No hace falta instalar Graphviz ni nada externo, y las figuras se reproducen con un comando.); pytest con muestra mini fija y SparkSession compartida (scope session, local[2], con conector Kafka) (Una sola SparkSession por proceso evita pagar el arranque (10–15 s en Windows) en cada prueba y permite que el streaming Kafka use la misma sesión.); Sin Dask (El usuario lo decidió: queda como extensión futura.)
----Arquitectura: recomendador-peliculas/
----  setup_entorno.ps1, requirements.txt, check_entorno.py, README.md, .gitignore
----  recomendador/
----    config.py        rutas, FECHA_CORTE, NUCLEOS, SPARK_MEMORIA=6g, KAFKA_BOOTSTRAP, TOPIC, MODO (completo|demo), DEMO_DESDE=2015-01-01, ARTEFACTOS_BASE, LLM_PROVIDER, LLM_MODEL, OLLAMA_HOST, LLM_THINK=false (todo se sobrescribe con variables de entorno)
----    spark_utils.py   crear_spark(nucleos, kafka=False)
----    datos.py         cargar_movielens(ruta)
----    kafka_utils.py   kafka_disponible(timeout=3), crear_topic(nombre)
----    batch_als.py     partición temporal, ALS, popularidad, métricas
----    foldin.py        recomendar_foldin(...)
----    perfiles.py      vectores de gusto, KMeans, nombrado, perfil_usuario()
----    estado.py        SQLite WAL: eventos, perfiles, recomendaciones, meta
----    demo.py          preparar_demo(): base precalculada de 25M + subconjunto >= DEMO_DESDE
----    streaming.py     readStream kafka|archivo -> foreachBatch procesar_lote() -> estado.db; hilo de reentrenamiento
----    enriquecimiento.py  IMDb, TMDb con caché, Letterboxd
----    herramientas.py  funciones para el LLM (leen artefactos y estado.db)
----    llm.py           Ollama (tools, think configurable) y proveedor 'reglas'
----  scripts/  descargar_movielens.py, ordenar_ratings.py, crear_topic.py, productor_kafka.py, entrenar_batch.py, perfilar_usuarios.py, preparar_demo.py, streaming.py, escalabilidad.py, figuras_poster.py, descargar_imdb.py, importar_letterboxd.py
----  app/app.py
----  muestras/ml-mini/ (formato de ml-25m, con LEEME.md de valores conocidos), muestras/imdb-mini/, muestras/letterboxd_ratings.csv
----  tests/ conftest.py y test_<paquete>.py
----  data/ (ml-25m, imdb; ignorado)  artefactos/<corrida>/ (25m, mini, demo)  poster/figuras/
----Flujo completo (lo corre el usuario): descargar -> ordenar -> entrenar_batch (25M) -> perfilar (25M) -> escalabilidad -> figuras.
----Flujo demo: preparar_demo (toma artefactos/25m y crea artefactos/demo con el subconjunto desde DEMO_DESDE) -> crear_topic -> streaming --modo demo -> productor --desde FECHA_CORTE -> app (lee artefactos/demo y estado.db).
----Todos los scripts aceptan --datos/--salida/--artefactos para correr sobre ml-mini en las pruebas.
----Diseno: Identidad común para el póster y la app: fondo oscuro de cine (#141414), acento rojo (#E50914) para la acción principal, ámbar (#F5C518) para métricas y estrellas, texto #F2F2F2/#B3B3B3 y paleta tab10 para los clusters (apta para daltónicos). Figuras en DejaVu Sans de 14 pt o más, con títulos en español. En la app, la barra lateral muestra el userId, un badge con el tipo de espectador, las barras de géneros del perfil, un indicador «Modo demo · reentrenado hace X min» y la configuración del LLM. La columna principal tiene tarjetas de película (póster TMDb si hay clave, título, año, duración y motivo de una línea) y el chat. Tono cercano en español; el LLM siempre cita datos concretos («calificaste Heat (1995) con 5★»).
----Supuestos: La carpeta solo tiene ESPEC.md y ARQUITECTURA.md (plan v1): no hay código verificado, así que el plan v2 parte de cero y conserva la estructura del v1.; Las métricas, perfiles y speedup de 25M los corre el usuario. Las pruebas automáticas usan ml-mini.; En el modo demo, el productor reproduce ratings desde la fecha de corte (2018-01-01) en adelante y acelerados. El reentrenamiento en vivo usa ratings desde 2015-01-01 anteriores al corte, más los eventos recibidos.; Las pruebas usan un topic único 'ratings_test_<uuid>' (que se borra al final) para no contaminar el topic 'ratings' de la demo. Se asume que el broker permite crear y borrar topics.; El conector Kafka de Spark se descarga de Maven la primera vez (requiere internet) y queda en .ivy2 del proyecto para usarse sin conexión.; Fecha de corte de 25M: 2018-01-01. Relevante = rating >= 4. 'Corto' = 100 min o menos según IMDb.; Los ítems que no están en el subconjunto demo después de reentrenar no se recomiendan hasta el siguiente reentrenamiento completo.
---+Vision: Reparar y pulir el recomendador de películas que ya existe (MovieLens, ALS con Spark, perfiles, streaming Kafka, app Streamlit con chat por reglas u Ollama, póster) sin rehacer lo verificado. Hay cinco cambios: (1) en todos los modos, el historial del usuario son los ratings anteriores a FECHA_CORTE más los eventos en vivo; (2) el orden se arma por niveles de coincidencia con el pedido y, dentro de cada nivel, por afinidad ALS; (3) el pedido se interpreta aunque traiga ánimos, errores de tipeo o venga en inglés; (4) buscar_pelicula busca de forma aproximada en MovieLens y, si hay clave, también en los títulos en español de TMDb guardados en caché; (5) el chat nunca termina sin películas. Las pruebas usan solo la muestra mini y las 117 pruebas actuales se mantienen.
---+Stack: Mantener Python, el .venv, pytest, Streamlit, Spark y el resto del stack actual (El proyecto ya funciona y tiene 117 pruebas verificadas. Hay que reparar, no reescribir.); Aplicar el corte siempre en Herramientas: corte = config.FECHA_CORTE por defecto y FECHA_CORTE_MINI con la muestra mini (Es lo que pidió el usuario: el modelo se entrenó hasta el corte, así que el historial posterior no debe existir en ningún modo. Además, un solo camino es más fácil de probar.); Hacer la coincidencia aproximada con difflib y unicodedata de la biblioteca estándar (No hay que instalar nada y alcanza para tolerar tildes, mayúsculas y errores de tipeo.); Para los títulos en español, reutilizar ClienteTMDb de recomendador/enriquecimiento.py y su caché artefactos/tmdb_cache.json, y agregar una búsqueda /search/movie con language=es-ES que también se guarda en caché (Ya existe un cliente con caché que, sin TMDB_API_KEY, devuelve None sin errores. Así la búsqueda en español es opcional y las pruebas no salen a la red: se les inyecta un cliente falso.); Crear el módulo recomendador/pedido.py con diccionarios ES/EN de géneros, ánimos y ocasiones (Es determinista y se puede probar sin LLM. Lo usan el modo reglas, el modo Ollama y la red de seguridad.); Simular el LLM con un cliente falso que se inyecta en responder_ollama (La batería de 30 pedidos tiene que correr sin Ollama y en pocos minutos.)
---+Arquitectura: recomendador/: config.py (FECHA_CORTE, FECHA_CORTE_MINI, TMDB_API_KEY), herramientas.py (Herramientas: catálogo, historial con el corte siempre aplicado, recomendar por niveles, buscar_pelicula, ESQUEMAS), pedido.py (NUEVO: texto -> {generos, tags_genome, max_duracion_min, condiciones, titulo_mencionado, pide_recomendacion}), titulos.py (NUEVO: normalizar(), índice de títulos MovieLens + títulos ES de tmdb_cache.json, búsqueda aproximada y consulta opcional a TMDb mediante ClienteTMDb.buscar con caché), llm.py (interpretar delega en pedido.py; responder_reglas y responder_ollama, _validar, red de seguridad), enriquecimiento.py (ClienteTMDb + búsqueda con caché), demo.py (demo.json relativo), poster.py (figuras). Flujo: app/app.py -> llm.responder -> (reglas | ollama + herramientas) -> Herramientas.recomendar(niveles: n.º de condiciones cumplidas DESC, luego afinidad ALS; sin condiciones = orden híbrido actual) -> tarjetas con «Cumple / No cumple / No se pudo evaluar». Scripts que el usuario corre sobre los 25M: correr_25m.ps1 (perfilar_usuarios --hasta FECHA_CORTE), scripts/productor_kafka.py (--desde FECHA_CORTE por defecto). Las pruebas van en tests/test_<punto>.py y usan tests/base_mini.py.
---+Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea «Cumple: …» y, cuando corresponde, «No cumple: …» y «No se pudo evaluar: …» (por ejemplo, la duración sin IMDb). Si el título se encontró por TMDb, la tarjeta muestra el título en español y, entre paréntesis, el original. La figura tipos_espectador pasa a barras horizontales ordenadas, con las etiquetas a la izquierda sin superponerse, letra de 11 pt o más y la paleta de las demás figuras. El tono del chat sigue siendo breve y en español.
---+Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
--- 
--- ## Paquetes de trabajo
----### 1. 1. Entorno, configuración, check_entorno y muestra mini [verificado]
----Objetivo: Dejar el .venv, la configuración central (incluido el modo demo y LLM_THINK), la fábrica de SparkSession con conector Kafka cacheado, la detección de Kafka, check_entorno.py y la muestra mini con valores conocidos.
----Requisitos: 1, 2, 11, 12, 13, 14, 23, 25 · Archivos: setup_entorno.ps1, requirements.txt, check_entorno.py, .gitignore, recomendador/__init__.py, recomendador/config.py, recomendador/spark_utils.py, recomendador/datos.py, recomendador/kafka_utils.py, muestras/ml-mini/movies.csv, muestras/ml-mini/ratings.csv, muestras/ml-mini/tags.csv, muestras/ml-mini/links.csv, muestras/ml-mini/genome-tags.csv, muestras/ml-mini/genome-scores.csv, muestras/ml-mini/LEEME.md, tests/conftest.py, tests/test_entorno.py · Depende de: -
----- Criterio: setup_entorno.ps1 ejecuta 'py -3.12 -m venv .venv' e instala requirements.txt con versiones fijadas (pyspark==3.5.x, confluent-kafka, pandas, pyarrow, numpy, matplotlib, scikit-learn, streamlit, ollam
----- Criterio: check_entorno.py reporta [OK]/[FALTA] con una sugerencia para: Python 3.12, Java 17 (java -version y JAVA_HOME), HADOOP_HOME, winutils.exe y hadoop.dll, pyspark importable, conector Kafka en caché, Ka
----- Criterio: config.py incluye MODO ('completo'|'demo'), DEMO_DESDE='2015-01-01', ARTEFACTOS_BASE (artefactos/25m), LLM_THINK=False, LLM_MODEL='qwen3.5:9b', SPARK_MEMORIA='6g', NUCLEOS=6, KAFKA_BOOTSTRAP='localhos
----- Criterio: spark_utils.crear_spark(nucleos, kafka=False) usa local[nucleos], driver.memory 6g, shuffle.partitions proporcional y spark.jars.ivy=<proyecto>/.ivy2. Con kafka=True agrega spark-sql-kafka-0-10_2.12 c
----- Criterio: kafka_utils.kafka_disponible(timeout=3) devuelve bool sin lanzar excepción. crear_topic(nombre, particiones) es idempotente.
----- Criterio: ml-mini tiene el formato exacto de ml-25m: unos 15 usuarios, unas 25 películas reales con movieId/imdbId/tmdbId reales y unos 300 ratings entre 2010 y 2019. LEEME.md documenta los conteos totales, los
----- Criterio: conftest.py ofrece la fixture spark (session, local[2], kafka=True), ruta_mini y kafka_ok. Las pruebas de Kafka hacen pytest.skip('Kafka no disponible') solo si kafka_disponible() es False.
----- Prueba de aceptacion: check_entorno corre sin traceback y reporta cada chequeo: el comando «.venv/Scripts/python check_entorno.py» debe terminar sin error
----- Prueba de aceptacion: La muestra se carga con los conteos documentados, Toy Story es la más popular antes del corte, la config lee variables de entorno (MODO, DEMO_DESDE, LLM_THINK) y kafka_disponible no lanza excepciones: el comando «.venv/Scripts/python -m pytest -q -rs tests/test_entorno.py» debe terminar sin error
----### 2. 2. Ingesta: descarga, topic 'ratings' y productor Kafka [verificado]
----Objetivo: Descargar ml-25m con verificación md5, ordenar los ratings por timestamp y reproducirlos en un topic Kafka a velocidad configurable, con una función de publicación reutilizable por el streaming y las pruebas.
----Requisitos: 3, 4, 13 · Archivos: scripts/descargar_movielens.py, scripts/ordenar_ratings.py, scripts/crear_topic.py, scripts/productor_kafka.py, tests/test_ingesta.py · Depende de: 1
----- Criterio: descargar_movielens.py baja https://files.grouplens.org/datasets/movielens/ml-25m.zip a data/, verifica el .md5, descomprime en data/ml-25m y no repite la descarga si ya existe. Tiene --dry-run.
----- Criterio: ordenar_ratings.py --datos --salida escribe ratings_ordenados.parquet ordenado por timestamp con Spark.
----- Criterio: crear_topic.py [--topic ratings] crea el topic (6 particiones, RF 1) si no existe y avisa si ya existía.
----- Criterio: productor_kafka.py acepta --datos, --topic, --velocidad (ratings/seg; 0 = sin pausa), --acelerar X, --desde y --hasta AAAA-MM-DD, --limite N y --dry-run. Envía JSON {userId, movieId, rating, timestamp
----- Criterio: Expone publicar(eventos, topic, bootstrap) -> int, que reutiliza la prueba de integración del paquete 5.
----- Criterio: Si Kafka no responde, termina con un mensaje claro y código distinto de 0, sin traceback.
----- Prueba de aceptacion: Dry-run sobre la muestra emite 5 eventos ordenados por timestamp: el comando «.venv/Scripts/python
+-+@@ -11,17 +11,20 @@ El resto del plan está aprobado.
+-  ## Requisitos (estado actual, 11 en total)
+---- [pendiente] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+---- [pendiente] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
+--+- [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+--+- [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
+-- - [pendiente] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
+-+ - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+-+ - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
+-+-- [pendiente] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
+-++- [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
+-  - [pendiente] 4. Puntaje combinado: Herramientas.recomendar ordena por afinidad ALS + coincidencia (fracción de géneros, tags genome y condiciones pedidas que cumple cada película). Las que cumplen todo van primero y la lista nunca queda vacía si el catálogo tiene películas. Cada pelí
 …(diff recortado)

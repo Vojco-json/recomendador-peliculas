@@ -31,7 +31,9 @@ sys.path.insert(0, str(RAIZ / "tests"))
 from recomendador import config, spark_utils  # noqa: E402
 
 SALIDA = RAIZ / "artefactos" / "vista_previa" / "app.html"
-PEDIDO = "algo corto y liviano para hoy"
+# Pedidos que se envían al chat, en orden (la vista previa muestra las dos respuestas,
+# con la afinidad textual y el resumen de condiciones de cada tarjeta).
+PEDIDOS = ["algo corto y liviano para hoy", "drama policial con un twist épico"]
 
 
 def md(texto: str) -> str:
@@ -130,7 +132,8 @@ def main() -> int:
         config.LLM_PROVIDER = "reglas"
         at = AppTest.from_file(str(RAIZ / "app" / "app.py"), default_timeout=120)
         at.run()
-        at.chat_input[0].set_value(PEDIDO).run()
+        for pedido in PEDIDOS:
+            at.chat_input[0].set_value(pedido).run()
         if at.exception:
             print("La app lanzó una excepción:", at.exception)
             return 1

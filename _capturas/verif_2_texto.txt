@@ -1,0 +1,145 @@
+🎬 Recomendador
+userId
+1
+Violencia y acción
+Destaca en violencia y acción
+
+Géneros que más pesan en tu perfil
+
+Acción
+0.37
+Suspenso
+0.29
+Ciencia ficción
+0.24
+Crimen
+0.17
+Misterio
+0.04
+Terror
+0.01
+
+14 calificaciones · media 4.43 · perfil: artefactos
+
+Modo: completo
+
+Historial de MovieLens hasta el 2016-01-01 (exclusivo) + eventos en vivo
+
+Sin actualizaciones en vivo para este usuario
+
+LLM_PROVIDER: reglas
+LLM_MODEL: qwen3.5:9b
+think: false
+
+Chat en modo reglas (configurado con LLM_PROVIDER=reglas).
+
+🔄 Actualizar
+Recomendaciones para el usuario 1
+#1
+The Lion King
+1994 · 88 min · IMDb 8.5
+aventuraanimacióncine infantildrama
+híbrido ALS + popularidad (artefactos) · afinidad alta
+#2
+Shrek
+2001 · 90 min · IMDb 7.9
+aventuraanimacióncine infantilcomedia
+híbrido ALS + popularidad (artefactos) · afinidad alta
+#3
+Finding Nemo
+2003 · 100 min · IMDb 8.2
+aventuraanimacióncine infantilcomedia
+híbrido ALS + popularidad (artefactos) · afinidad media
+#4
+Groundhog Day
+1993 · 101 min
+comediafantasíaromance
+híbrido ALS + popularidad (artefactos) · afinidad media
+#5
+Forrest Gump
+1994 · 142 min · IMDb 8.8
+comediadramaromancebélico
+híbrido ALS + popularidad (artefactos) · afinidad media
+#6
+The Shawshank Redemption
+1994 · 142 min · IMDb 9.3
+crimendrama
+híbrido ALS + popularidad (artefactos) · afinidad media
+#7
+Pretty Woman
+1990 · 119 min · IMDb 7.1
+comediaromance
+híbrido ALS + popularidad (artefactos) · afinidad media
+#8
+Titanic
+1997 · 194 min · IMDb 7.9
+dramaromance
+híbrido ALS + popularidad (artefactos) · afinidad media
+💬 Pregúntale al recomendador
+
+Ej.: «algo corto y liviano para hoy». Solo se recomiendan películas que entregan las herramientas, explicadas con tus datos.
+
+algo corto y liviano para hoy
+
+Busqué películas que no has visto de 100 min o menos, de comedia, animación y cine infantil. Eres «Violencia y acción». Encontré 5:
+
+#1
+Shrek
+2001 · 90 min · IMDb 7.9
+aventuraanimacióncine infantilcomedia
+Cumple: género: comedia/animación/cine infantil; tag: feel-good; tag: funny; duración ≤ 100 min.
+Shrek (2001) · 90 min · aventura, animación, cine infantil, comedia, fantasía y romance · IMDb 7.9. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Le diste 4.5★ a Jurassic Park, que también es aventura. Según tu historial, afinidad alta contigo.
+híbrido ALS + popularidad (artefactos) · afinidad alta
+#2
+Finding Nemo
+2003 · 100 min · IMDb 8.2
+aventuraanimacióncine infantilcomedia
+Cumple: género: comedia/animación/cine infantil; tag: feel-good; tag: funny; duración ≤ 100 min.
+Finding Nemo (2003) · 100 min · aventura, animación, cine infantil y comedia · IMDb 8.2. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Le diste 4.5★ a Star Wars: Episode IV - A New Hope, que también es aventura. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#3
+When Harry Met Sally...
+1989 · 95 min · IMDb 7.7
+comediaromance
+Cumple: género: comedia/animación/cine infantil; tag: feel-good; tag: funny; duración ≤ 100 min.
+When Harry Met Sally... (1989) · 95 min · comedia y romance · IMDb 7.7. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Le diste 4★ a Pulp Fiction, que también es comedia. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#4
+The Lion King
+1994 · 88 min · IMDb 8.5
+aventuraanimacióncine infantildrama
+Cumple: género: comedia/animación/cine infantil; tag: feel-good; duración ≤ 100 min. No cumple: tag: funny.
+The Lion King (1994) · 88 min · aventura, animación, cine infantil, drama, musicales y IMAX · IMDb 8.5. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Le diste 4.5★ a The Dark Knight, que también es drama y IMAX. Según tu historial, afinidad alta contigo.
+híbrido ALS + popularidad (artefactos) · afinidad alta
+#5
+Groundhog Day
+1993 · 101 min
+comediafantasíaromance
+Cumple: género: comedia/animación/cine infantil; tag: feel-good; tag: funny. No cumple: duración ≤ 100 min.
+Groundhog Day (1993) · 101 min · comedia, fantasía y romance. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+
+drama policial con un twist épico
+
+Busqué películas que no has visto de crimen y drama. Eres «Violencia y acción». Encontré 5: (Ninguna película cumple todas las condiciones: van primero las que cumplen más)
+
+#1
+The Shawshank Redemption
+1994 · 142 min · IMDb 9.3
+crimendrama
+Cumple: género: crimen; género: drama. No cumple: tag: twist ending.
+The Shawshank Redemption (1994) · 142 min · crimen y drama · IMDb 9.3. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Le diste 5★ a Die Hard, que también es crimen. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#2
+The Lion King
+1994 · 88 min · IMDb 8.5
+aventuraanimacióncine infantildrama
+Cumple: género: drama. No cumple: género: crimen; tag: twist ending.
+The Lion King (1994) · 88 min · aventura, animación, cine infantil, drama, musicales y IMAX · IMDb 8.5. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro de lo que pediste. Le diste 4.5★ a The Dark Knight, que también es drama y IMAX. Según tu historial, afinidad alta contigo.
+híbrido ALS + popularidad (artefactos) · afinidad alta
+#3
+Forrest Gump
+1994 · 142 min · IMDb 8.8
+comediadramaromancebélico
+Cumple: género: drama. No cumple: género: crimen; tag: twist ending.
+Forrest Gump (1994) · 142 min · comedia, drama, romance y bélico · IMDb 8.8. Tu perfil (Violencia y acción) se inclina por acción y suspenso; esta te da un cambio de tono dentro 

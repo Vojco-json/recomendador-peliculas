@@ -525,8 +525,10 @@ class Herramientas:
             en_maximo += nivel == n_cond
             if en_maximo >= n:
                 break
-        # Orden estable: nivel de mayor a menor; dentro del nivel, el orden ALS.
-        evaluadas.sort(key=lambda e: -e[0])
+        # Orden estable: primero todas las bien votadas (>= min_votos) y recién después
+        # las poco votadas (último respaldo); dentro de cada bloque, nivel de mayor a
+        # menor y, dentro del nivel, el orden ALS de llegada.
+        evaluadas.sort(key=lambda e: (votos.get(e[1], 0) < self.min_votos, -e[0]))
 
         recs = []
         for nivel, mid, score, fuente, ev in evaluadas[:n]:

@@ -257,7 +257,6 @@ def responder_reglas(mensaje: str, userId: int, herramientas: Herramientas,
     usadas = ["perfil_gustos", "peliculas_calificadas", "recomendar"]
     if a["referencia"] is not None or a["frase_titulo"]:
         usadas.append("buscar_pelicula")
-    refs: set = set()   # películas de referencia ya usadas (no se repiten)
     recs = [_con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas, refs)})
             for r in res["recomendaciones"]]
     texto = _texto_reglas(a, perfil, recs, res.get("avisos"))
