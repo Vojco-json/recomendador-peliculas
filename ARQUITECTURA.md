@@ -35,7 +35,6 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
 - Criterio: tests/test_corte.py prueba el corte con y sin modo demo sobre la muestra mini (por ejemplo, los ratings de 2017 de los usuarios 12 y 15 no aparecen)
 - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
 - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
-- Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
 ### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
 Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
 Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
@@ -81,7 +80,7 @@ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py
 - Criterio: El README explica el corte en todos los modos, que TMDB_API_KEY es opcional para los títulos en español, y que la regeneración sobre los 25M se hace a mano con correr_25m.ps1 y scripts/figuras_poster.
 - Criterio: test_readme.py y test_poster.py siguen pasando
 - Prueba de aceptacion: La figura no tiene etiquetas superpuestas: el comando «.venv/Scripts/python -m pytest -q tests/test_poster_tipos.py» debe terminar sin error
-### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [pendiente]
+### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [verificado]
 Objetivo: Crear recomendador/precalculo.py y scripts/precalcular_app.py, que con Spark generen en artefactos/<perfil>/app/ cuatro parquets: peliculas (id, título, año, géneros, duración, nota IMDb, votos y promedio antes del corte, histograma 0,5–5, tags principales), personas (directores/actores por movieId vía links.csv + title.crew/principals/name.basics, con nombre normalizado sin tildes), populares_por_tipo (agregación por cluster de perfiles.parquet, antes del corte) y vecinos (LSH sobre itemFactors, top-20). Agregar el paso a correr_25m.ps1. Quitar de llm.py _validar, completar_args, como_dict y 
 Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scripts/precalcular_app.py, correr_25m.ps1, recomendador/llm.py, tests/test_precalculo.py · Depende de: -
 - Criterio: scripts/precalcular_app.py --perfil mini termina en menos de 3 minutos y crea los 4 parquets

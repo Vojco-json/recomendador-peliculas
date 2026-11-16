@@ -17,6 +17,10 @@ Tablas
 - lotes(consulta, batch_id, procesado_en)
       micro-lotes ya aplicados: si Spark reintenta un lote tras un reinicio, no se aplica
       dos veces (los perfiles son incrementales y se inflarían).
+- resenas(id, uid, userId, movieId, texto, timestamp, oculta, recibido_en)
+      reseñas públicas. ``uid`` lo genera quien publica (eventos.publicar_resena): la
+      misma reseña llegada por Kafka y por el respaldo directo no se duplica. ``id`` es el
+      número corto que usa scripts/moderar_resenas.py; ``oculta=1`` la saca de la vista.
 
 Las marcas de tiempo son segundos epoch (float, UTC).
 """
@@ -64,7 +68,18 @@ CREATE TABLE IF NOT EXISTS lotes (
     procesado_en REAL    NOT NULL,
     PRIMARY KEY (consulta, batch_id)
 );
+CREATE TABLE IF NOT EXISTS resenas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid         TEXT    NOT NULL UNIQUE,
+    userId      INTEGER NOT NULL,
+    movieId     INTEGER NOT NULL,
+    texto       TEXT    NOT NULL,
+    timestamp   INTEGER NOT NULL,
+    oculta      INTEGER NOT NULL DEFAULT 0,
+    recibido_en REAL    NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ix_eventos_usuario ON eventos(userId);
+CREATE INDEX IF NOT EXISTS ix_resenas_pelicula ON resenas(movieId);
 """
 
 
@@ -160,7 +175,7 @@ def todos_los_eventos(con: sqlite3.Connection):
 
 
 def contar(con: sqlite3.Connection, tabla: str) -> int:
-    if tabla not in {"eventos", "perfiles", "recomendaciones", "meta", "lotes"}:
+    if tabla not in {"eventos", "perfiles", "recomendaciones", "meta", "lotes", "resenas"}:
         raise ValueError(tabla)
     return int(con.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0])
 
@@ -205,6 +220,64 @@ def leer_recomendaciones(con: sqlite3.Connection, userId: int) -> list[dict]:
     filas = con.execute("SELECT movieId, rank, score, actualizado_en FROM recomendaciones "
                         "WHERE userId=? ORDER BY rank", (int(userId),)).fetchall()
     return [dict(f) for f in filas]
+
+
+# --------------------------------------------------------------------------- #
+# Reseñas
+# --------------------------------------------------------------------------- #
+
+COLUMNAS_RESENA = "id, uid, userId, movieId, texto, timestamp, oculta, recibido_en"
+
+
+def guardar_resenas(con: sqlite3.Connection, resenas: Iterable[dict],
+                    commit: bool = True) -> list[dict]:
+    """Inserta reseñas ignorando las repetidas (mismo ``uid``); devuelve las nuevas."""
+    ahora = time.time()
+    nuevas = []
+    for r in resenas:
+        cur = con.execute(
+            "INSERT OR IGNORE INTO resenas(uid, userId, movieId, texto, timestamp, oculta, "
+            "recibido_en) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            (str(r["uid"]), int(r["userId"]), int(r["movieId"]), str(r["texto"]),
+             int(r["timestamp"]), ahora))
+        if cur.rowcount == 1:
+            nuevas.append(r)
+    if commit:
+        con.commit()
+    return nuevas
+
+
+def resenas_pelicula(con: sqlite3.Connection, movieId: int, limite: int = 50) -> list[dict]:
+    """Reseñas PÚBLICAS de una película (sin las ocultas), de la más nueva a la más vieja."""
+    filas = con.execute(
+        f"SELECT {COLUMNAS_RESENA} FROM resenas WHERE movieId=? AND oculta=0 "
+        "ORDER BY timestamp DESC, id DESC LIMIT ?", (int(movieId), int(limite))).fetchall()
+    return [dict(f) for f in filas]
+
+
+def resenas_usuario(con: sqlite3.Connection, userId: int) -> list[dict]:
+    """Reseñas públicas de un usuario (sin las ocultas), de la más nueva a la más vieja."""
+    filas = con.execute(
+        f"SELECT {COLUMNAS_RESENA} FROM resenas WHERE userId=? AND oculta=0 "
+        "ORDER BY timestamp DESC, id DESC", (int(userId),)).fetchall()
+    return [dict(f) for f in filas]
+
+
+def listar_resenas(con: sqlite3.Connection, limite: int = 100,
+                   incluir_ocultas: bool = True) -> list[dict]:
+    """Todas las reseñas (para el script de moderación), de la más nueva a la más vieja."""
+    filtro = "" if incluir_ocultas else "WHERE oculta=0"
+    filas = con.execute(f"SELECT {COLUMNAS_RESENA} FROM resenas {filtro} "
+                        "ORDER BY id DESC LIMIT ?", (int(limite),)).fetchall()
+    return [dict(f) for f in filas]
+
+
+def marcar_oculta(con: sqlite3.Connection, id_resena: int, oculta: bool = True) -> bool:
+    """Oculta (o vuelve a mostrar) una reseña por su id. False si el id no existe."""
+    with con:
+        cur = con.execute("UPDATE resenas SET oculta=? WHERE id=?",
+                          (1 if oculta else 0, int(id_resena)))
+    return cur.rowcount == 1
 
 
 def ultima_actualizacion(con: sqlite3.Connection, userId: int) -> float | None:

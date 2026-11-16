@@ -52,6 +52,10 @@ def construir_parser() -> argparse.ArgumentParser:
                    help="procesa lo disponible y termina (Trigger.availableNow)")
     p.add_argument("--starting-offsets", choices=["latest", "earliest"], default="latest")
     p.add_argument("--nucleos", type=int, default=config.NUCLEOS)
+    p.add_argument("--topic-resenas", default="resenas",
+                   help="topic de reseñas que se consume junto con el de ratings (%(default)s)")
+    p.add_argument("--sin-resenas", action="store_true",
+                   help="no consumir el topic de reseñas")
     return p
 
 
@@ -82,15 +86,34 @@ def main(argv: list[str] | None = None) -> int:
     consulta = streaming.iniciar_streaming(
         ctx, a.fuente, a.topic, a.bootstrap, a.ruta, a.trigger, a.availableNow,
         a.starting_offsets, formato=a.formato)
+    # Reseñas (topic propio): se guardan en la tabla resenas de estado.db.
+    ctx_resenas, consulta_resenas = None, None
+    if a.fuente == "kafka" and not a.sin_resenas:
+        from recomendador import kafka_utils as ku
+        try:
+            ku.crear_topic(a.topic_resenas, bootstrap=a.bootstrap)
+        except Exception as exc:  # el topic puede crearse solo al primer mensaje
+            print(f"Aviso: no se pudo crear el topic {a.topic_resenas}: {exc}")
+        ctx_resenas = streaming.ContextoResenas(a.estado)
+        consulta_resenas = streaming.iniciar_streaming_resenas(
+            spark, ctx_resenas, streaming.ruta_checkpoint(artefactos, a.topic_resenas),
+            "kafka", a.topic_resenas, a.bootstrap, trigger_s=a.trigger,
+            available_now=a.availableNow, starting_offsets=a.starting_offsets)
+        print(f"Reseñas: topic {a.topic_resenas} -> tabla resenas de {a.estado}")
+    consultas = [c for c in (consulta, consulta_resenas) if c is not None]
     try:
-        consulta.awaitTermination()
+        for c in consultas:
+            c.awaitTermination()
     except KeyboardInterrupt:
         print("Deteniendo...")
-        consulta.stop()
+        for c in consultas:
+            c.stop()
     finally:
         if hilo:
             hilo.detener()
         ctx.cerrar()
+        if ctx_resenas:
+            ctx_resenas.cerrar()
         from recomendador.spark_utils import detener_spark
         detener_spark(spark)   # con plazo: no se cuelga al apagar la JVM
     return 0

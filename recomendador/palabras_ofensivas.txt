@@ -1,0 +1,80 @@
+# Lista básica de palabras ofensivas para el filtro de reseñas (recomendador/moderacion.py).
+# Una palabra o expresión por línea. Se compara sin tildes ni mayúsculas y por palabra
+# completa ("puta" no bloquea "computadora"). Las líneas con # son comentarios.
+# Para agregar una palabra basta con escribirla en una línea nueva. Se evitan palabras
+# con usos comunes no ofensivos («pico» en «dos horas y pico», «Dick» de Philip K. Dick).
+
+# Español (incluye modismos chilenos)
+weon
+weona
+weones
+huevon
+huevona
+hueon
+aweonao
+aweonado
+aweonada
+conchetumare
+conchesumadre
+ctm
+csm
+culiao
+culiado
+culia
+maraco
+maricon
+maricona
+puta
+putas
+puto
+putos
+hijo de puta
+hdp
+pendejo
+pendeja
+cabron
+cabrona
+mierda
+mierdas
+imbecil
+imbeciles
+idiota
+idiotas
+estupido
+estupida
+retrasado
+retrasada
+subnormal
+zorra
+perra
+mongolico
+mongolica
+chupala
+carajo
+gilipollas
+malparido
+malparida
+gonorrea
+negro de mierda
+sudaca
+# Inglés
+fuck
+fucking
+fucker
+motherfucker
+shit
+bullshit
+bitch
+bitches
+asshole
+bastard
+cunt
+dickhead
+faggot
+fag
+retard
+retarded
+slut
+whore
+nigger
+nigga

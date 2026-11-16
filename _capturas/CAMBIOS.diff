@@ -1,314 +1,317 @@
-13867cf Paquete 6 (1. Capa batch Spark para la app (parquets) + limpieza de llm.py), intento 1: Creé recomendador/precalculo.py, que no usa pandas: todo se calcula con pyspark.sql y pyspark.ml. También creé scripts/precalcular_app.py. Juntos gene
+ba685d3 Paquete 6 (1. Capa batch Spark para la app (parquets) + limpieza de llm.py), intento 2: El problema del intento anterior era que la suite completa pasaba de 3 minutos. Ahora sigue pasando como un solo comando (385 pruebas pasan en 198 s),
 
- ARQUITECTURA.md                         | 122 +++++-
- ESPEC.md                                |  66 +++-
- _capturas/CAMBIOS.diff                  | 643 +++++++++++++++-----------------
- _capturas/PRUEBAS.txt                   |  79 ++--
- correr_25m.ps1                          |   8 +-
- muestras/imdb-mini/LEEME.md             |  64 ++--
- muestras/imdb-mini/name.basics.tsv      |  27 ++
- muestras/imdb-mini/title.crew.tsv       |   8 +
- muestras/imdb-mini/title.principals.tsv |  20 +
- recomendador/llm.py                     |  72 +---
- recomendador/precalculo.py              | 448 ++++++++++++++++++++++
- scripts/precalcular_app.py              | 104 ++++++
- tests/test_precalculo.py                | 199 ++++++++++
- 13 files changed, 1349 insertions(+), 511 deletions(-)
+ ESPEC.md                   |  22 +-
+ _capturas/CAMBIOS.diff     | 591 ++++++++++++++++++++++-----------------------
+ _capturas/PRUEBAS.txt      |  87 ++++---
+ recomendador/precalculo.py |  64 ++++-
+ scripts/precalcular_app.py |   6 +
+ tests/conftest.py          |  23 ++
+ tests/test_precalculo.py   |  33 +++
+ 7 files changed, 468 insertions(+), 358 deletions(-)
 
-diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
-index 4541f85..75c339a 100644
---- a/ARQUITECTURA.md
-+++ b/ARQUITECTURA.md
-@@ -1,11 +1,26 @@
--# Plan de «recomendador-peliculas-v2» (version 2)
-+# Plan de «recomendador-peliculas-v2» (version 4)
- Lo mantiene Delegado; no lo edites.
- 
--Vision: Reparar y pulir el recomendador de películas que ya existe (MovieLens, ALS con Spark, perfiles, streaming Kafka, app Streamlit con chat por reglas u Ollama, póster) sin rehacer lo verificado. Hay cinco cambios: (1) en todos los modos, el historial del usuario son los ratings anteriores a FECHA_CORTE más los eventos en vivo; (2) el orden se arma por niveles de coincidencia con el pedido y, dentro de cada nivel, por afinidad ALS; (3) el pedido se interpreta aunque traiga ánimos, errores de tipeo o venga en inglés; (4) buscar_pelicula busca de forma aproximada en MovieLens y, si hay clave, también en los títulos en español de TMDb guardados en caché; (5) el chat nunca termina sin películas. Las pruebas usan solo la muestra mini y las 117 pruebas actuales se mantienen.
--Stack: Mantener Python, el .venv, pytest, Streamlit, Spark y el resto del stack actual (El proyecto ya funciona y tiene 117 pruebas verificadas. Hay que reparar, no reescribir.); Aplicar el corte siempre en Herramientas: corte = config.FECHA_CORTE por defecto y FECHA_CORTE_MINI con la muestra mini (Es lo que pidió el usuario: el modelo se entrenó hasta el corte, así que el historial posterior no debe existir en ningún modo. Además, un solo camino es más fácil de probar.); Hacer la coincidencia aproximada con difflib y unicodedata de la biblioteca estándar (No hay que instalar nada y alcanza para tolerar tildes, mayúsculas y errores de tipeo.); Para los títulos en español, reutilizar ClienteTMDb de recomendador/enriquecimiento.py y su caché artefactos/tmdb_cache.json, y agregar una búsqueda /search/movie con language=es-ES que también se guarda en caché (Ya existe un cliente con caché que, sin TMDB_API_KEY, devuelve None sin errores. Así la búsqueda en español es opcional y las pruebas no salen a la red: se les inyecta un cliente falso.); Crear el módulo recomendador/pedido.py con diccionarios ES/EN de géneros, ánimos y ocasiones (Es determinista y se puede probar sin LLM. Lo usan el modo reglas, el modo Ollama y la red de seguridad.); Simular el LLM con un cliente falso que se inyecta en responder_ollama (La batería de 30 pedidos tiene que correr sin Ollama y en pocos minutos.)
--Arquitectura: recomendador/: config.py (FECHA_CORTE, FECHA_CORTE_MINI, TMDB_API_KEY), herramientas.py (Herramientas: catálogo, historial con el corte siempre aplicado, recomendar por niveles, buscar_pelicula, ESQUEMAS), pedido.py (NUEVO: texto -> {generos, tags_genome, max_duracion_min, condiciones, titulo_mencionado, pide_recomendacion}), titulos.py (NUEVO: normalizar(), índice de títulos MovieLens + títulos ES de tmdb_cache.json, búsqueda aproximada y consulta opcional a TMDb mediante ClienteTMDb.buscar con caché), llm.py (interpretar delega en pedido.py; responder_reglas y responder_ollama, _validar, red de seguridad), enriquecimiento.py (ClienteTMDb + búsqueda con caché), demo.py (demo.json relativo), poster.py (figuras). Flujo: app/app.py -> llm.responder -> (reglas | ollama + herramientas) -> Herramientas.recomendar(niveles: n.º de condiciones cumplidas DESC, luego afinidad ALS; sin condiciones = orden híbrido actual) -> tarjetas con «Cumple / No cumple / No se pudo evaluar». Scripts que el usuario corre sobre los 25M: correr_25m.ps1 (perfilar_usuarios --hasta FECHA_CORTE), scripts/productor_kafka.py (--desde FECHA_CORTE por defecto). Las pruebas van en tests/test_<punto>.py y usan tests/base_mini.py.
--Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea «Cumple: …» y, cuando corresponde, «No cumple: …» y «No se pudo evaluar: …» (por ejemplo, la duración sin IMDb). Si el título se encontró por TMDb, la tarjeta muestra el título en español y, entre paréntesis, el original. La figura tipos_espectador pasa a barras horizontales ordenadas, con las etiquetas a la izquierda sin superponerse, letra de 11 pt o más y la paleta de las demás figuras. El tono del chat sigue siendo breve y en español.
--Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
-+Vision: CineRuta: una app Streamlit de estética oscura, inspirada en Letterboxd pero con paleta propia, montada sobre el recomendador MovieLens 25M ya verificado (ALS híbrido, pedido.py, chat; 31 requisitos). Tiene cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha, reseñas públicas moderadas fuera de la app, modo explorar y chat como pestaña. Sigue una arquitectura Lambda: Spark batch escribe parquets, Kafka (topics 'ratings' y 'resenas') + Structured Streaming manejan los eventos, y la app solo lee lo precalculado. Es para mostrarla en una expo (póster con QR) y publicarla por Cloudflare Tunnel.
-+Stack: Mantener Python 3.12 + .venv, pyspark 3.5.5, confluent-kafka, Streamlit 1.40.1 y pytest (Las 374 pruebas verificadas corren sobre este stack. Cambiarlo rompería la regresión.); Spark (no pandas) para todo cálculo sobre 25M/IMDb, en recomendador/precalculo.py + scripts/precalcular_app.py, que escriben artefactos/<perfil>/app/*.parquet (Es la capa batch Lambda que pide el usuario. Con la muestra mini tarda segundos y sobre 25M la ejecuta el usuario con correr_25m.ps1.); BucketedRandomProjectionLSH (Spark ML) sobre itemFactors ALS para 'Porque te gustó X' (Lo pide el usuario y escala sin producto cruzado completo.); La app lee los parquets con pandas/pyarrow + st.cache_data/cache_resource y nunca importa pyspark (Así cada página carga en menos de 2 s sin levantar una JVM.); bcrypt + SQLite (artefactos/<perfil>/cuentas.db) para las cuentas; las reseñas van en una tabla 'resenas' de estado.db con columna 'oculta' (Es simple y sin servidor. Las reseñas siguen el mismo camino que los eventos (streaming o respaldo directo) y la moderación solo cambia un flag.); Kafka: topic 'ratings' (formato sin cambios) y topic nuevo 'resenas' (key userId) (Es el ajuste del usuario: así no se toca el esquema verificado de ratings.); Tipo de espectador de los usuarios nuevos con perfiles.asignar_tipo (media/std/centroides de tipos.json) y un vector crudo construido igual que vectores_gusto (Reutiliza los clusters existentes de perfilar_usuarios con el mismo escalado del KMeans, sin Spark en la app.); segno para el QR; TMDb vía requests con caché JSON; sin TMDB_API_KEY, carátula SVG generada (Son Python puro y deterministas, y las pruebas no dependen de la red.)
-+Arquitectura: recomendador/ (núcleo verificado: config, datos, batch_als, foldin, perfiles, herramientas, pedido, llm, titulos, streaming, kafka_utils, estado, poster) + módulos nuevos:
-+- precalculo.py (Spark): peliculas.parquet (stats antes del corte, histograma de 10 casillas, tags), personas.parquet (IMDb vía links.csv), populares_por_tipo.parquet (cluster de perfiles.parquet), vecinos.parquet (LSH, top-20). Lo llama scripts/precalcular_app.py; correr_25m.ps1 agrega el paso.
-+- cuentas.py: registro/login bcrypt y userId > 162541; Limitador (20 acciones/min por sesión).
-+- moderacion.py: filtro de palabras ofensivas (recomendador/palabras_ofensivas.txt, sin tildes, palabra completa) y validación de 500 caracteres.
-+- eventos.py: publicar_rating → topic 'ratings', publicar_resena → topic 'resenas', key userId; si Kafka no responde en 3 s, escribe directo en estado.db y devuelve un aviso.
-+- streaming.py: además procesa el topic 'resenas' → tabla resenas.
-+- perfiles.py: + vector_crudo(ratings) y tipo_usuario(userId), que recalcula el tipo con cada calificación nueva.
-+- scripts/moderar_resenas.py (solo local): --listar / --ocultar ID / --mostrar ID.
-+- catalogo_app.py (solo lectura, con caché): buscar, ficha, filas_inicio, explicar, explorar. tmdb.py: póster, sinopsis y tráiler, o SVG generado.
-+- app/app.py ('CineRuta'): login → onboarding → pestañas Inicio | Buscar | Explorar | Chat; ficha por ?pelicula=<id>; vistas en app/vistas/*.py; estilo en app/estilo.py.
-+Flujo: batch Spark → parquets → app. Evento → Kafka → Structured Streaming → estado.db → fold-in y tipo actualizado en la app. Las pruebas usan muestras/ml-mini, muestras/imdb-mini y artefactos/mini.
-+Diseno: Marca 'CineRuta' (título de página, cabecera y pie). Paleta oscura propia, inspirada en Letterboxd pero sin sus colores exactos (prohibidos #14181c, #2c3440, #00e054, #ff8000, #40bcf4, #9ab):
-+- fondo #0e1216, superficies #1f2730, bordes #34404c
-+- texto #aab4be, títulos #f3f5f7
-+- acento principal ámbar #f0b23a (botones, estrellas propias, barras del histograma)
-+- secundarios coral #e5675c ('puede que no') y turquesa #3cb4a8 ('probablemente te guste', enlaces)
-+Tipografía sans del sistema (system-ui), títulos en serif ligera (Georgia). Carátulas 2:3 con borde redondeado de 4 px en filas horizontales desplazables. Ficha con fondo difuminado del póster e histograma 0,5–5 en ámbar; la afinidad se muestra como texto 'afinidad alta/media'. Las carátulas generadas llevan un color por género y el título centrado. Tono en español, cercano y breve. Al pie, la atribución a TMDb. El CSS está en app/estilo.py y se inyecta una sola vez.
-+Supuestos: Las reseñas se guardan en una tabla 'resenas' de estado.db (columna 'oculta'), alimentada por streaming desde el topic 'resenas' o por el respaldo directo. Las cuentas van en cuentas.db, aparte.; Una reseña con una palabra ofensiva se rechaza entera (no se censura con asteriscos).; El límite de 20/min es por sesión de Streamlit (en memoria) y cuenta solo acciones que escriben o llaman al LLM, no la navegación.; El vector del usuario nuevo usa la misma función de features que perfilar_usuarios (géneros + tags genome + log(1+n)). Si un rasgo de tipos.json no se puede calcular, toma el valor medio (0 al estandarizar).; Paleta CineRuta: fondo #0e1216, superficie #1f2730, texto #aab4be, ámbar #f0b23a, turquesa #3cb4a8, coral #e5675c.; Los paquetes 1–5 del plan anterior ya están verificados y no se rehacen. Los 6 paquetes de este plan reemplazan a los pendientes 6–11 con los ajustes incorporados.
- 
- ## Paquetes de trabajo
- ### 1. 1. Corte temporal en todos los modos y demo.json relativo [verificado]
-@@ -66,16 +81,93 @@ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py
- - Criterio: El README explica el corte en todos los modos, que TMDB_API_KEY es opcional para los títulos en español, y que la regeneración sobre los 25M se hace a mano con correr_25m.ps1 y scripts/figuras_poster.
- - Criterio: test_readme.py y test_poster.py siguen pasando
- - Prueba de aceptacion: La figura no tiene etiquetas superpuestas: el comando «.venv/Scripts/python -m pytest -q tests/test_poster_tipos.py» debe terminar sin error
-+### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [pendiente]
-+Objetivo: Crear recomendador/precalculo.py y scripts/precalcular_app.py, que con Spark generen en artefactos/<perfil>/app/ cuatro parquets: peliculas (id, título, año, géneros, duración, nota IMDb, votos y promedio antes del corte, histograma 0,5–5, tags principales), personas (directores/actores por movieId vía links.csv + title.crew/principals/name.basics, con nombre normalizado sin tildes), populares_por_tipo (agregación por cluster de perfiles.parquet, antes del corte) y vecinos (LSH sobre itemFactors, top-20). Agregar el paso a correr_25m.ps1. Quitar de llm.py _validar, completar_args, como_dict y 
-+Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scripts/precalcular_app.py, correr_25m.ps1, recomendador/llm.py, tests/test_precalculo.py · Depende de: -
-+- Criterio: scripts/precalcular_app.py --perfil mini termina en menos de 3 minutos y crea los 4 parquets
-+- Criterio: recomendador/precalculo.py no importa pandas; todo se hace con pyspark.sql/pyspark.ml
-+- Criterio: El histograma, el promedio, los votos y populares_por_tipo excluyen timestamps >= FECHA_CORTE_MINI (prueba con valores conocidos)
-+- Criterio: populares_por_tipo usa la columna cluster de perfiles.parquet (los mismos tipos de perfilar_usuarios)
-+- Criterio: vecinos.parquet no incluye a la propia película y tiene a lo sumo 20 vecinos por movieId
-+- Criterio: personas filtra por los tconst de links.csv antes de cruzar con principals
-+- Criterio: Si imdb-mini no trae un director conocido (Nolan), se agregan filas conocidas a la muestra
-+- Criterio: llm.py ya no define los 4 símbolos y la suite previa sigue pasando
-+- Prueba de aceptacion: Precálculos Spark sobre la muestra mini (corte, LSH, personas, populares por tipo): el comando «.venv/Scripts/python -m pytest -q tests/test_precalculo.py» debe terminar sin error
-+- Prueba de aceptacion: Regresión del chat tras la limpieza de llm.py: el comando «.venv/Scripts/python -m pytest -q tests/test_llm_redactor.py tests/test_bateria.py» debe terminar sin error
-+### 7. 2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos [pendiente]
-+Objetivo: Crear cuentas.py (bcrypt + SQLite, userId > 162541, Limitador de 20 acciones/min por sesión), moderacion.py (máx. 500 caracteres y filtro de palabras ofensivas), eventos.py (ratings → topic 'ratings' sin cambiar el formato; reseñas → topic 'resenas'; key userId; respaldo directo a estado.db con aviso), extender streaming.py para el topic 'resenas', crear scripts/moderar_resenas.py y agregar a perfiles.py vector_crudo/tipo_usuario para asignar el centroide más cercano con el mismo escalado. Agregar bcrypt y segno a requirements.txt.
-+Requisitos: 33, 41, 44, 46, 49, 50, 51, 52 · Archivos: recomendador/cuentas.py, recomendador/moderacion.py, recomendador/palabras_ofensivas.txt, recomendador/eventos.py, recomendador/streaming.py, recomendador/estado.py, recomendador/perfiles.py, scripts/moderar_resenas.py, requirements.txt, tests/test_cuentas.py, tests/test_eventos.py, tests/test_tipo_nuevo.py · Depende de: -
-+- Criterio: La contraseña se guarda solo como hash bcrypt; el login con clave incorrecta falla y con la correcta devuelve el userId
-+- Criterio: El primer usuario recibe userId >= 162542 y el siguiente uno mayor; un nombre duplicado se rechaza
-+- Criterio: El Limitador acepta 20 acciones y rechaza la 21.ª dentro del mismo minuto; la acepta tras 60 s (reloj simulado)
-+- Criterio: Una reseña de 501 caracteres o con una palabra de la lista (también con mayúsculas o tildes) se rechaza con un mensaje; una válida se acepta
-+- Criterio: Con un productor simulado, la calificación va a 'ratings' con el mismo formato que antes y la reseña a 'resenas', ambas con key=str(userId)
-+- Criterio: Con Kafka caído (simulado), la calificación o reseña queda en estado.db y se devuelve un aviso no vacío
-+- Criterio: scripts/moderar_resenas.py --ocultar ID marca la reseña como oculta y las consultas públicas ya no la devuelven; ningún módulo de app/ importa moderar_resenas
-+- Criterio: tipo_usuario sobre las 10 calificaciones de onboarding coincide con asignar_tipo(vector_crudo) usando media/std de tipos.json, y cambia al agregar calificaciones que mueven el vector hacia otro centro
-+- Prueba de aceptacion: Cuentas bcrypt, userIds > 162541 y límite de 20 por minuto: el comando «.venv/Scripts/python -m pytest -q tests/test_cuentas.py» debe terminar sin error
-+- Prueba de aceptacion: Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas y moderación local: el comando «.venv/Scripts/python -m pytest -q tests/test_eventos.py tests/test_streaming.py» debe terminar sin error
-+- Prueba de aceptacion: Tipo de espectador del centroide más cercano para usuarios nuevos, con el mismo escalado: el comando «.venv/Scripts/python -m pytest -q tests/test_tipo_nuevo.py» debe terminar sin error
-+### 8. 3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb [pendiente]
-+Objetivo: Crear recomendador/catalogo_app.py (solo lectura de parquets y estado.db, con caché): buscar por título o persona sin tildes; ficha (incluye las reseñas no ocultas); filas_inicio con 'Para ti' (fold-in), 'Populares entre espectadores como tú' (según tipo_usuario) y 'Porque te gustó X' (vecinos); explicar con veredicto, la más parecida calificada alto y la calificada baja, tags a favor/en contra y persona en común. Crear tmdb.py: póster, sinopsis y tráiler con caché, o SVG generado sin clave.
-+Requisitos: 35, 36, 37, 38, 39, 48, 52 · Archivos: recomendador/catalogo_app.py, recomendador/tmdb.py, tests/test_catalogo_app.py, tests/test_tmdb.py · Depende de: 6, 7
-+- Criterio: catalogo_app no importa pyspark (comprobado con sys.modules)
-+- Criterio: buscar('nolan') y buscar('NOLÁN') devuelven las películas de Nolan de la muestra; la búsqueda por título tolera tildes
-+- Criterio: ficha() trae año, géneros, duración, nota IMDb, director, reparto, histograma de 10 casillas, promedio, tags y reseñas visibles (una reseña oculta no aparece)
-+- Criterio: 'Populares entre espectadores como tú' de un usuario nuevo usa el cluster que da tipo_usuario
-+- Criterio: explicar() usa solo ratings anteriores al corte más los eventos en vivo, y su texto trae títulos y tags concretos, sin números de afinidad tipo estrellas
-+- Criterio: Sin TMDB_API_KEY, poster() devuelve un SVG con el título y el color del género, y trailer() devuelve None sin excepción
-+- Criterio: 20 llamadas a ficha() y filas_inicio() con caché caliente tardan menos de 2 s en total
-+- Prueba de aceptacion: Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini: el comando «.venv/Scripts/python -m pytest -q tests/test_catalogo_app.py» debe terminar sin error
-+- Prueba de aceptacion: TMDb con caché y respaldo sin clave: el comando «.venv/Scripts/python -m pytest -q tests/test_tmdb.py» debe terminar sin error
-+### 9. 4. App CineRuta: estilo propio, login, onboarding e Inicio [pendiente]
-+Objetivo: Reestructurar app/app.py como 'CineRuta': estilo en app/estilo.py con la paleta propia; pantalla de login/registro; onboarding (calificar ~10 populares o importar CSV de Letterboxd) con fold-in y tipo de espectador al instante; pestañas Inicio | Buscar | Explorar | Chat. Inicio muestra las tres filas y el tipo de espectador del usuario. El chat pasa a su pestaña sin cambiar su lógica. Cada acción (calificar, reseñar, mensaje de chat, importar) pasa por el Limitador.
-+Requisitos: 32, 33, 34, 35, 51, 52, 53 · Archivos: app/app.py, app/estilo.py, app/vistas/login.py, app/vistas/onboarding.py, app/vistas/inicio.py, app/vistas/chat.py, muestras/letterboxd_mini.csv, tests/test_app_letterboxd.py, tests/test_app.py · Depende de: 7, 8
-+- Criterio: Con AppTest, un usuario sin sesión ve solo el login/registro y el nombre 'CineRuta'
-+- Criterio: Tras registrarse ve el onboarding; al calificar 10 películas, Inicio muestra 'Para ti', 'Populares entre espectadores como tú' y 'Porque te gustó <título>' con al menos una carátula cada una, y el nom
-+- Criterio: Importar muestras/letterboxd_mini.csv (10 filas conocidas, creado aquí) salta el onboarding
-+- Criterio: La acción 21 en menos de un minuto muestra un aviso de límite y no se registra
-+- Criterio: app/estilo.py no contiene ninguno de #14181c, #2c3440, #00e054, #ff8000, #40bcf4 (prueba de texto) y define los colores de la paleta CineRuta
-+- Criterio: La pestaña Chat responde 'drama policial con un twist final' con la línea 'Entendí:'
-+- Criterio: La app no importa pyspark al navegar
-+- Prueba de aceptacion: Flujo login → onboarding → Inicio con tres filas, tipo de espectador, límite y paleta CineRuta: el comando «.venv/Scripts/python -m pytest -q tests/test_app_letterboxd.py» debe terminar sin error
-+- Prueba de aceptacion: Regresión del chat dentro de la app: el comando «.venv/Scripts/python -m pytest -q tests/test_app.py» debe terminar sin error
-+### 10. 5. Buscar, Ficha con reseñas, tarjeta 'Para ti' y Explorar [pendiente]
-+Objetivo: Implementar las vistas Buscar (título o persona); Ficha (póster/sinopsis TMDb o carátula generada, datos IMDb, histograma, promedio, tags, reseñas públicas, botones para calificar y reseñar con el contador de 500 caracteres, el filtro y el aviso si Kafka falla, tráiler si existe, atribución TMDb); y Explorar (una película a la vez con la explicación personalizada y el botón Siguiente). La tarjeta 'Para ti' usa explicar(); el LLM solo redacta, con la plantilla como respaldo. Al calificar se recalcula el tipo de espectador.
-+Requisitos: 36, 37, 38, 39, 40, 41, 46, 48, 49, 52 · Archivos: app/vistas/buscar.py, app/vistas/ficha.py, app/vistas/explorar.py, app/vistas/tarjetas.py, tests/test_app_ficha.py · Depende de: 9
-+- Criterio: AppTest: buscar 'nolan' muestra al menos un resultado; la ficha muestra 'Director', 'Reparto', el histograma y la atribución a TMDb
-+- Criterio: Sin TMDB_API_KEY la ficha no muestra 'Error' ni 'Traceback'
-+- Criterio: Calificar con Kafka caído (simulado) muestra el aviso y la calificación aparece en estado.db
-+- Criterio: Una reseña válida se publica y aparece en la ficha; una con palabra ofensiva o de más de 500 caracteres muestra un mensaje y no se guarda
-+- Criterio: No hay en la app ningún botón ni control para ocultar reseñas
-+- Criterio: Explorar: 'Siguiente' cambia a otra película y muestra 'probablemente te guste' o 'puede que no'
-+- Prueba de aceptacion: Buscar, ficha sin clave TMDb, calificar y reseñar con filtro y respaldo, explorar: el comando «.venv/Scripts/python -m pytest -q tests/test_app_ficha.py» debe terminar sin error
-+### 11. 6. Chat por persona, modo público, QR, rendimiento y cierre [pendiente]
-+Objetivo: Extender pedido.py para detectar personas ('algo de Nolan', 'con Tom Hanks') con personas.parquet, como condición del orden por niveles. Agregar el modo público (MODO_PUBLICO=1): login obligatorio, límite de 20/min, LLM de a una solicitud (si está ocupado, plantilla) y sin controles de administración. Agregar la figura QR hacia URL_PUBLICA. Medir los tiempos por página. Actualizar el README: orden de scripts (precalcular_app, streaming, cloudflared), moderar_resenas.py y CineRuta. Regenerar scripts/vista_previa_app.py.
-+Requisitos: 43, 44, 45, 50, 51 · Archivos: recomendador/pedido.py, recomendador/herramientas.py, recomendador/llm.py, app/app.py, scripts/figuras_poster.py, scripts/vista_previa_app.py, README.md, tests/test_personas_chat.py, tests/test_modo_publico.py, tests/test_rendimiento_app.py · Depende de: 10
-+- Criterio: pedido.analizar('algo de Nolan') produce una condición de persona; el chat devuelve películas de Nolan de la muestra y 'Entendí:' lo menciona
-+- Criterio: Con MODO_PUBLICO=1, AppTest sin sesión no muestra pestañas ni controles de administración (rutas, recarga, selector de usuario, moderación)
-+- Criterio: Con el semáforo del LLM tomado, una segunda solicitud responde con la plantilla sin esperar
-+- Criterio: figuras_poster.py genera qr_publico.png si URL_PUBLICA está definida y avisa si no
-+- Criterio: Inicio, Buscar, Ficha y Explorar cargan cada una en menos de 2 s con caché caliente (muestra mini)
-+- Criterio: El README documenta scripts/moderar_resenas.py como único camino de moderación
-+- Criterio: La suite completa pasa
-+- Prueba de aceptacion: Chat entiende pedidos por persona: el comando «.venv/Scripts/python -m pytest -q tests/test_personas_chat.py» debe terminar sin error
-+- Prueba de aceptacion: Modo público: login, límite 20/min, LLM de a uno, sin administración, QR: el comando «.venv/Scripts/python -m pytest -q tests/test_modo_publico.py» debe terminar sin error
-+- Prueba de aceptacion: Cada página en menos de 2 s con datos precalculados: el comando «.venv/Scripts/python -m pytest -q tests/test_rendimiento_app.py» debe terminar sin error
- 
- ## Riesgos
--- Aplicar el corte en todos los modos puede romper pruebas actuales (test_herramientas, test_app, test_streaming) que esperaban ver ratings posteriores. Hay que ajustarlas y documentarlo, sin borrar ninguna.
--- Los perfiles precalculados sobre los 25M siguen incluyendo datos posteriores al corte hasta que el usuario corra correr_25m.ps1 con --hasta.
--- Pasar de filtros duros a niveles puede cambiar resultados que esperan las pruebas actuales. La prueba 'sin condiciones = orden híbrido' protege el caso base.
--- La coincidencia aproximada puede dar falsos positivos con títulos cortos; el umbral se fija en 0.8 y se prueba.
--- Recargar el catálogo en cada caso hace lenta la batería de 30 × 4 modos; hay que usar una fixture de módulo.
-+- Los AppTest con login, onboarding y pestañas pueden volverse lentos o frágiles. Conviene que las vistas sean funciones puras y probar la lógica fuera de Streamlit.
-+- Reestructurar app/app.py puede romper tests/test_app.py (verificado). El chat debe mantener su API.
-+- title.principals de 25M pesa varios GB: hay que filtrar por los tconst de links.csv antes de cruzar, o Spark local puede quedarse sin memoria.
-+- Si el vector del usuario nuevo no replica exactamente las features de vectores_gusto, el tipo asignado no será coherente con los clusters. La prueba debe comparar con un usuario del perfilado.
-+- Un filtro por lista de palabras es básico: tiene falsos positivos y negativos, y no reemplaza la moderación manual.
-+- bcrypt y segno deben instalarse en .venv. Sin red, fallan las pruebas de los paquetes 2 y 6.
- 
- ## Limitaciones
--- Los artefactos de los 25M (perfiles con --hasta y figuras del póster) no se regeneran dentro de los paquetes: los regenera el usuario con correr_25m.ps1 y scripts/figuras_poster.py.
--- Sin TMDB_API_KEY, un título solo en español se reconoce si se parece lo suficiente al de MovieLens o ya está en la caché.
--- La duración depende de IMDb; sin ese dato, la condición queda como no evaluable.
--- En modo reglas, la tolerancia a errores de tipeo es léxica (difflib) y no entiende frases muy libres.
-\ No newline at end of file
-+- Las corridas sobre 25M e IMDb completo (precalcular_app.py --perfil 25m, perfilar_usuarios) las ejecuta el usuario con correr_25m.ps1 y no se verifican automáticamente.
-+- Kafka y Structured Streaming reales los levanta el usuario a mano. Las pruebas usan un productor simulado y el respaldo directo.
-+- Cloudflare Tunnel (cloudflared) es un paso manual. El plan deja listos el modo público y el QR.
-+- Sin TMDB_API_KEY no hay pósters reales, sinopsis ni tráileres.
-+- El tiempo de menos de 2 s se mide con la muestra mini.
-+- El límite por sesión se reinicia si el usuario abre una sesión nueva. No es una protección fuerte contra abuso.
-\ No newline at end of file
 diff --git a/ESPEC.md b/ESPEC.md
-index f28367e..0b9f52a 100644
+index 0b9f52a..461d72f 100644
 --- a/ESPEC.md
 +++ b/ESPEC.md
-@@ -9,8 +9,13 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
- El resto del plan está aprobado.
- 3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, tags y condiciones. 5. Las explicaciones no repiten la misma película de referencia en todas las tarjetas, y el puntaje ALS se muestra como "afinidad alta/media" y no como un número tipo estrellas. 6. En recomendador/spark_utils.py, en modo local: spark.executor.heartbeatInterval=60s y spark.network.timeout=600s. 7. Script scripts/probar_pedidos.py que, con los artefactos reales, imprime el top-5 de una lista de pedidos (entre ellos "drama policial con un twist épico" y "algo como de drama policial con un twist épico"), para que yo lo revise. Agregar los casos a la batería con datos de la muestra mini.
- 4. El LLM solo redacta la respuesta final. (1) La interpretación del pedido (pedido.py) es la única fuente de los filtros: el modelo ya no elige filtros ni películas. Recibe la lista final de recomendaciones con sus datos (condiciones que cumple, película parecida que el usuario calificó, afinidad) y solo escribe el texto. (2) Si Ollama falla o tarda más de 20 s, se usa la plantilla del modo reglas. (3) Línea "Entendí: …" con las condiciones finales en cada respuesta. (4) Prueba: "drama policial con un twist final" con un LLM simulado que intenta omitir Crime o agregar duración; los filtros finales deben ser Crime+Drama, tags de giro y sin duración.
-+5. Convertir la app Streamlit en una app tipo Letterboxd con recomendaciones, sin romper lo verificado. El chat queda como pestaña. Arquitectura Lambda: batch con Spark sobre el histórico, velocidad con Kafka + Structured Streaming para eventos de usuarios, y la app solo lee resultados precalculados (no ejecuta Spark al navegar). Todo cálculo sobre los 25M o IMDb se hace con Spark, no pandas. Corridas de 25M como scripts que ejecuto yo; pruebas con la muestra mini. 1. Cuentas locales: registro y login con bcrypt en SQLite; userId nuevo mayor a 162541. 2. Primer ingreso: calificar unas 10 populares o importar CSV de Letterboxd; recomendaciones al instante por fold-in. 3. Inicio con filas de carátulas: "Para ti", "Populares entre espectadores como tú" (agregación Spark por tipo, antes del corte) y "Porque te gustó X" (vecinos precalculados con Spark ML BucketedRandomProjectionLSH sobre factores ALS, en parquet). 4. Buscador por título y por persona (director o actor), sin importar tildes. 5. Ficha tipo Letterboxd: póster y sinopsis de TMDb (TMDB_API_KEY), año, géneros, duración, nota IMDb, director y reparto (title.crew, title.principals y name.basics de IMDb cruzados con Spark vía links.csv), histograma 0,5-5 y promedio (groupBy Spark antes del corte, en parquet), tags principales, reseñas de usuarios, y botones para calificar y reseñar. 6. Tarjeta "Para ti": "probablemente te guste" o "puede que no"; la más parecida que calificó alto y la que calificó bajo, con tags a favor y en contra y director o actor en común. Texto con datos; el LLM solo redacta. 7. Tráiler de YouTube desde TMDb. Sin clave: carátulas generadas (título y color por género), sin sinopsis ni tráiler, sin errores. Atribución a TMDb al pie. 8. Modo explorar: una película a la vez: carátula, info personalizada, tráiler, siguiente. 9. Cada calificación y reseña se publica en Kafka (topic ratings, key userId) y la procesa Structured Streaming; si Kafka no responde, se guarda directo y se avisa. 10. Chat como pestaña con la misma lógica (pedido.py; el LLM solo redacta); entiende pedidos por persona ("algo de Nolan"). 11. Modo público para Cloudflare Tunnel: login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado, plantilla), nada de administración expuesto, y figura con QR a la URL pública (variable URL_PUBLICA) para el póster. 12. Cada página carga en menos de 2 s con datos precalculados y en caché. 13. Limpieza: quitar de llm.py el código sin uso (_validar, completar_args, como_dict, MAX_RONDAS_HERRAMIENTAS). 14. Pruebas automáticas de cada punto.
-+6. Ajuste al plan: 1. Reseñas públicas para todos, máximo 500 caracteres, con un filtro básico de palabras ofensivas. La moderación (ocultar una reseña) se hace con un script local, nunca desde la app.
-+2. Límite de 20 acciones por minuto por sesión.
-+3. Usar los tipos de espectador existentes (clusters de perfilar_usuarios). Los usuarios nuevos de la app reciben el tipo del centroide más cercano según sus calificaciones del onboarding (mismo escalado del KMeans) y se actualiza cuando califican más.
-+Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato de "ratings"). La app se llama "CineRuta" y usa una paleta propia: oscura, inspirada en Letterboxd pero sin sus colores de marca exactos. El resto del plan está aprobado.
- 
--## Requisitos (estado actual, 31 en total)
-+## Requisitos (estado actual, 53 en total)
- - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
- - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
- - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
-@@ -32,23 +37,48 @@ El resto del plan está aprobado.
- - [verificado] 19. La interfaz de usuario debe mostrar la afinidad ALS como etiquetas textuales ('afinidad alta/media') en lugar de una escala numérica tipo estrellas
- - [verificado] 20. El script local spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos en modo local
- - [verificado] 21. Script scripts/probar_pedidos.py que usa los artefactos REALES de 25M (no la muestra mini) e imprime el top-5, con géneros, votos y tags cumplidos, para una lista de pedidos que incluya 'drama policial con un twist épico' y 'algo como de drama policial con un twist épico'. Lo ejecuta el usuario a mano; en las pruebas automáticas se verifica con la muestra mini que el script corre.
--- [pendiente] 22. El LLM solo redacta el texto final de la respuesta sin seleccionar ni filtrar películas
--- [pendiente] 23. Si Ollama falla o tarda más de 20s, se activa automáticamente la plantilla del modo reglas
--- [pendiente] 24. Cada respuesta debe incluir obligatoriamente una línea 'Entendí: …' que liste las condiciones finales aplicadas
--- [pendiente] 25. La interpretación del pedido (pedido.py) es la única fuente de verdad para los filtros; el modelo no elige nada
--- [pendiente] 26. Los datos recibidos por el LLM incluyen explícitamente las condiciones cumplidas, película parecida y afinidad ALS
--- [pendiente] 27. El sistema debe rechazar cualquier intento del LLM de omitir géneros o agregar duraciones no solicitadas en la interpretación
--- [pendiente] 28. La prueba 'drama policial con un twist final' debe resultar obligatoriamente en los filtros: Crime + Drama + tags giro (sin duración)
--- [pendiente] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
--- [pendiente] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
--- [pendiente] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
-+- [verificado] 22. El LLM solo redacta el texto final de la respuesta sin seleccionar ni filtrar películas
-+- [verificado] 23. Si Ollama falla o tarda más de 20s, se activa automáticamente la plantilla del modo reglas
-+- [verificado] 24. Cada respuesta debe incluir obligatoriamente una línea 'Entendí: …' que liste las condiciones finales aplicadas
-+- [verificado] 25. La interpretación del pedido (pedido.py) es la única fuente de verdad para los filtros; el modelo no elige nada
-+- [verificado] 26. Los datos recibidos por el LLM incluyen explícitamente las condiciones cumplidas, película parecida y afinidad ALS
-+- [verificado] 27. El sistema debe rechazar cualquier intento del LLM de omitir géneros o agregar duraciones no solicitadas en la interpretación
-+- [verificado] 28. La prueba 'drama policial con un twist final' debe resultar obligatoriamente en los filtros: Crime + Drama + tags giro (sin duración)
-+- [verificado] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
-+- [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
-+- [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
-+- [pendiente] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
-+- [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
-+- [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
-+- [pendiente] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
-+- [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
-+- [pendiente] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
-+- [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
-+- [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
-+- [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
-+- [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
-+- [pendiente] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
-+- [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
-+- [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
-+- [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
-+- [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
-+- [pendiente] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
-+- [pendiente] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
-+- [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
-+- [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
-+- [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
-+- [pendiente] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
-+- [pendiente] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
+@@ -47,23 +47,23 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [verificado] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
+ - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
+ - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
+-- [pendiente] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
++- [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
+ - [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+ - [pendiente] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
+-- [pendiente] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
++- [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
+ - [pendiente] 36. Desarrollar buscador híbrido que acepte búsqueda por título, director o actor, ignorando tildes y mayúsculas
+-- [pendiente] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
++- [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
+ - [pendiente] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
+ - [pendiente] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
+ - [pendiente] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
+ - [pendiente] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
+-- [pendiente] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
++- [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
+ - [pendiente] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
+ - [pendiente] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
+ - [pendiente] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
+ - [pendiente] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
+-- [pendiente] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
+-- [pendiente] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
++- [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
++- [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
+ - [pendiente] 49. Reseñas públicas visibles para todos los usuarios: máximo 500 caracteres y filtro básico de palabras ofensivas (lista en recomendador/palabras_ofensivas.txt, comparada sin tildes ni mayúsculas y por palabra completa). Una reseña que no pasa el filtro se rechaza con un mensaje. Se publican en un topi
+ - [pendiente] 50. La moderación se hace solo con el script local scripts/moderar_resenas.py (--listar, --ocultar ID, --mostrar ID), que marca la reseña como oculta en estado.db. La app no tiene ningún control de moderación y las reseñas ocultas no se muestran
+ - [pendiente] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
+@@ -71,14 +71,14 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [pendiente] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
  
  ## Bitacora (lo mas reciente primero)
-+- 2026-11-16T00:43 ronda - [arquitecto]: Plan v4: CineRuta: una app Streamlit de estética oscura, inspirada en Letterboxd pero con paleta propia, montada sobre el recomendador MovieLens 25M ya verificado (ALS híbrido, pedido.py, chat; 31 requisitos). Tiene cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha, reseñas públ
-+- 2026-11-16T00:41 ronda - [usuario]: Ajuste al plan: 1. Reseñas públicas para todos, máximo 500 caracteres, con un filtro básico de palabras ofensivas. La moderación (ocultar una reseña) se hace con un script local, nunca desde la app.
-+2. Límite de 20 acciones por minuto por sesión.
-+3. Usar los tipos de espectador existentes (clusters de perfilar_usuarios). Los usuarios nuevos de la app reciben el tipo del centroide más cercano según sus calificaciones del onboarding (mismo escalado del KMeans) y se actualiza cuando califican más.
-+Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato de "ratings"). La app se llama "CineRuta" y usa una paleta propia: oscura, inspirada en Letterboxd pero sin sus colores de marca exactos. El resto del plan está aprobado.
-+- 2026-11-16T00:39 ronda - [arquitecto]: Plan v3: Convertir el recomendador MovieLens 25M (motor ALS híbrido, pedido.py y chat ya verificados, 31 requisitos) en una app Streamlit tipo Letterboxd. Tendrá cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha de película, modo explorar y el chat como pestaña. Seguirá una arqu
-+- 2026-11-16T00:10 ronda 1 [revisor]: veredicto aprobado, nota 9/10, 31/31 verificados. General: Las capturas verif_1 y verif_2 no reflejan esta ronda: su texto no muestra la línea 'Entendí: …' ni el flujo nuevo de Ollama. El requisito 24 se apoya solo en el código y en las pruebas. Conviene regenerar scripts/vista_previa_app.py y capturar de nuevo. | General: Menor: la línea 'Entendí' muestra los tags genome en inglés (por ejemplo «twist ending») mientras los géneros salen en español. Para el usuario sería más claro traducirlos o mostrarlos junto a la frase original ('giro final'). | General: Menor: la 'intro' que redacta el LLM se usa tal cual (l.413). Solo se filtran los movie
-+- 2026-11-16T00:09 ronda - [delegado]: pruebas automáticas 28/28 ✅; 2 prueba(s) nueva(s); version a1c10c3
-+- 2026-11-15T23:59 ronda 1 [constructor]: Rehice el modo Ollama en recomendador/llm.py para que el LLM solo redacte el texto. pedido.py (vía analizar) arma los filtros, recomendar arma la lista final (la misma del modo reglas), y el modelo recibe esa lista con sus datos en una sola llamada sin herramientas. Si inventa películas, se descartan; si no redacta nada útil, se usa la plantilla de reglas. Si falla o tarda más de 20 s, la respuesta sale en modo reglas con aviso. Las respuestas de ambos modos traen la línea «Entendí: …», y Respuesta.filtros guarda los filtros finales. Agregué tests/test_llm_redactor.py (6 pruebas) y ajusté 4 pruebas antiguas que suponían que el LLM elegía las películas. La suite completa pasa: 374 pruebas en 2 min 45 s.
- - 2026-11-15T23:06 ronda 2 [revisor]: veredicto aprobado, nota 9/10, 21/21 verificados. General: Menor: en recomendar(), el corte temprano (en_maximo >= n) también cuenta películas poco votadas de nivel máximo. Si el híbrido no cubre todo el catálogo, eso podría cortar antes de evaluar películas bien votadas que entran por popularidad. Hoy no pasa porque orden_hibrido recorre todos los ids, pero conviene contar en en_maximo solo las que tienen votos >= min_votos. | General: Vista previa con la muestra mini: en 'drama policial con un twist épico' ninguna película cumple 'twist ending' (texto 1). Es esperable con los datos mini; el usuario debería confirmarlo con scripts/probar_ped
++- 2026-11-16T01:11 ronda 1 [revisor paquete 6]: corregir (pruebas que fallan 1, requisitos verificados 6): Prueba automatica fallida: Suite completa (regresión) — se paso de 3 minutos (lo detuve junto con sus subprocesos) | General: El constructor dice que la suite completa (385 pruebas) pasa, pero Delegado no pudo confirmarlo por el límite de 3 minutos. Conviene marcar las pruebas lentas de Spark (test_precalculo tarda unos 65 s) con un marker de pytest y correr la regresión en tandas. | General: Para 25M, vecinos usa bucketLength=0.05 y umbral 1.0 (coseno >= 0,5). Algunas películas podrían quedar c
++- 2026-11-16T01:11 ronda 1 [revisor]: Pruebas de aceptacion anuladas por mal definidas: [aceptación] Regresión completa: No falló ninguna aserción. Delegado cortó la ejecución porque superó su límite de 3 minutos. En el mismo PRUEBAS.txt la 'Suite completa (regresión)' de una ronda anterior ya se pasaba de 3 minutos antes de este paquete: la suite entrenaba ALS con Spark en varias pruebas. Con ese límite la prueba no puede pasar, sea correcto o no el código. Todos los subconjuntos de regresión ejecutados por separado pasan: chat 135 y 146, batería 129, herramientas 34, póster 24, n
++- 2026-11-16T01:10 ronda - [delegado]: pruebas automáticas 30/32 ❌; 2 prueba(s) nueva(s); version 13867cf
++- 2026-11-16T00:56 ronda 1 [constructor paquete 6]: Creé recomendador/precalculo.py, que no usa pandas: todo se calcula con pyspark.sql y pyspark.ml. También creé scripts/precalcular_app.py. Juntos generan en artefactos/<perfil>/app/ cuatro parquets: peliculas (votos, promedio e histograma de 10 casillas solo antes del corte, datos de IMDb y tags), personas (directores y reparto), populares_por_tipo (agrupado por la columna cluster de perfiles.parquet) y vecinos (BucketedRandomProjectionLSH sobre los itemFactors normalizados, top-20 sin la propia película). En personas, crew y principals se filtran primero por los tconst de links.csv con un semi join; recién después se cruzan con name.basics, ya filtrado por nconst. En muestras/imdb-mini agregué title.crew, title.principals y name.basics. Traen a Christopher Nolan en The Dark Knight, Breaking Bad como serie que no está en links.csv (comprueba el filtro) y una fila ficticia con tildes («Penélope Cruz Sánchez») para probar la normalización; todo queda documentado en el LEEME. Agregué el paso 8 a correr_25m.ps1 y quité de llm.py _validar, completar_args, _como_dict y MAX_RONDAS_HERRAMIENTAS. La suite completa pasa: 385 pruebas, que son las 374 previas más 11 nuevas. Sobre la muestra mi
+ - 2026-11-16T00:43 ronda - [arquitecto]: Plan v4: CineRuta: una app Streamlit de estética oscura, inspirada en Letterboxd pero con paleta propia, montada sobre el recomendador MovieLens 25M ya verificado (ALS híbrido, pedido.py, chat; 31 requisitos). Tiene cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha, reseñas públ
+ - 2026-11-16T00:41 ronda - [usuario]: Ajuste al plan: 1. Reseñas públicas para todos, máximo 500 caracteres, con un filtro básico de palabras ofensivas. La moderación (ocultar una reseña) se hace con un script local, nunca desde la app.
+ 2. Límite de 20 acciones por minuto por sesión.
+ 3. Usar los tipos de espectador existentes (clusters de perfilar_usuarios). Los usuarios nuevos de la app reciben el tipo del centroide más cercano según sus calificaciones del onboarding (mismo escalado del KMeans) y se actualiza cuando califican más.
+ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato de "ratings"). La app se llama "CineRuta" y usa una paleta propia: oscura, inspirada en Letterboxd pero sin sus colores de marca exactos. El resto del plan está aprobado.
+ - 2026-11-16T00:39 ronda - [arquitecto]: Plan v3: Convertir el recomendador MovieLens 25M (motor ALS híbrido, pedido.py y chat ya verificados, 31 requisitos) en una app Streamlit tipo Letterboxd. Tendrá cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha de película, modo explorar y el chat como pestaña. Seguirá una arqu
+-- 2026-11-16T00:10 ronda 1 [revisor]: veredicto aprobado, nota 9/10, 31/31 verificados. General: Las capturas verif_1 y verif_2 no reflejan esta ronda: su texto no muestra la línea 'Entendí: …' ni el flujo nuevo de Ollama. El requisito 24 se apoya solo en el código y en las pruebas. Conviene regenerar scripts/vista_previa_app.py y capturar de nuevo. | General: Menor: la línea 'Entendí' muestra los tags genome en inglés (por ejemplo «twist ending») mientras los géneros salen en español. Para el usuario sería más claro traducirlos o mostrarlos junto a la frase original ('giro final'). | General: Menor: la 'intro' que redacta el LLM se usa tal cual (l.413). Solo se filtran los movie
+-- 2026-11-16T00:09 ronda - [delegado]: pruebas automáticas 28/28 ✅; 2 prueba(s) nueva(s); version a1c10c3
+-- 2026-11-15T23:59 ronda 1 [constructor]: Rehice el modo Ollama en recomendador/llm.py para que el LLM solo redacte el texto. pedido.py (vía analizar) arma los filtros, recomendar arma la lista final (la misma del modo reglas), y el modelo recibe esa lista con sus datos en una sola llamada sin herramientas. Si inventa películas, se descartan; si no redacta nada útil, se usa la plantilla de reglas. Si falla o tarda más de 20 s, la respuesta sale en modo reglas con aviso. Las respuestas de ambos modos traen la línea «Entendí: …», y Respuesta.filtros guarda los filtros finales. Agregué tests/test_llm_redactor.py (6 pruebas) y ajusté 4 pruebas antiguas que suponían que el LLM elegía las películas. La suite completa pasa: 374 pruebas en 2 min 45 s.
+-- 2026-11-15T23:06 ronda 2 [revisor]: veredicto aprobado, nota 9/10, 21/21 verificados. General: Menor: en recomendar(), el corte temprano (en_maximo >= n) también cuenta películas poco votadas de nivel máximo. Si el híbrido no cubre todo el catálogo, eso podría cortar antes de evaluar películas bien votadas que entran por popularidad. Hoy no pasa porque orden_hibrido recorre todos los ids, pero conviene contar en en_maximo solo las que tienen votos >= min_votos. | General: Vista previa con la muestra mini: en 'drama policial con un twist épico' ninguna película cumple 'twist ending' (texto 1). Es esperable con los datos mini; el usuario debería confirmarlo con scripts/probar_ped
 -- 2026-11-15T23:05 ronda - [delegado]: pruebas automáticas 26/26 ✅; 4 prueba(s) nueva(s); version 93eb0f9
--- 2026-11-15T22:55 ronda 2 [constructor]: Corregí el requisito 13 en recomendador/herramientas.py. Ahora el orden final usa la clave (votos < min_votos, -nivel), así que las películas con menos de 50 votos siempre quedan después de todas las bien votadas, aunque cumplan más condiciones. En llm.py quité la declaración duplicada de `refs`. Agregué los dos casos «drama policial con un twist épico» y «algo como de drama policial con un twist épico» a tests/test_bateria.py, que siguen probándose en los 4 modos (30 originales + 2 = 32 mensajes). Creé tests/test_niveles_integracion.py con 7 pruebas de integración para los requisitos 12, 13, 14, 17 y 18. scripts/vista_previa_app.py ahora envía también el pedido de drama policial, para revisar el chat. Corrí la suite completa: 368 passed en 2 min 33 s.
--- 2026-11-15T22:50 ronda 1 [revisor]: veredicto corregir, nota 7/10, 18/21 verificados. Requisito 13: Las películas de menos de 50 votos no quedan siempre al final. Entran por respaldo() (herramientas.py:505-508) y luego evaluadas.sort(key=-nivel) (l.529) puede ponerlas por encima de películas con ≥50 votos de nivel menor. Eso contradice 'solo aparecen como último respaldo, después de todas las demás' y puede reproducir el problema de los 'dramas desconocidos'. Para corregirlo, ordenar con la clave (votos<min_votos, -nivel) o agregar las poco votadas solo después de las bien votadas. Tampoco hay prueba de min_votos ni de que orden_hibrido coincida con recs_hibrido (test_niveles_v
--- 2026-11-15T22:49 ronda - [delegado]: pruebas automáticas 22/22 ✅; 2 prueba(s) nueva(s); version 0886a39
--- 2026-11-15T22:42 ronda 1 [constructor]: Rehice Herramientas.recomendar. Ahora cada género pedido es una condición aparte (Family/Children y el grupo «liviano» cuentan como una sola). Un tag sin datos de genome baja el nivel, y la duración sin dato de IMDb queda neutral. Los candidatos salen del orden híbrido peso·z(ALS) + (1-peso)·z(log votos), solo con películas de 50 votos o más antes del corte; las de menos votos quedan como último respaldo. También: «algo como X» se trata como descripción si X empieza con «de» o tiene géneros, ánimos o tags; si X no se encuentra, igual se extraen sus géneros, tags y duración. Las películas de referencia rotan entre tarjetas, la afinidad se muestra como texto, se agregaron los timeouts de Spark y está el script scripts/probar_pedidos.py. Pasan 180 pruebas en los archivos que corrí (puntaje, batería, red de seguridad, pedido y niveles_v2). No corrí la suite completa por falta de presupuesto.
--- 2026-11-15T21:13 ronda 5 [revisor paquete 5]: aprobado (pruebas que fallan 0, requisitos verificados 2): General: C1: cumple. Usa barh, está ordenada y las etiquetas van a la izquierda (código, poster.py:411-416). | General: C2: cumple. Renderiza con ml-mini y verifica con get_window_extent que no hay intersecciones (código del test + PRUEBAS.txt: 4 passed). | General: C3: cumple. El README tiene una sección «Corte temporal en todos los modos» (l.208-218), otra de niveles de coincidencia (l.220-230), dice que TMDB_API_KEY es opcional (l.238) y da los pasos manuales con correr_25m.ps1 y scripts/figu
--- 2026-11-15T21:13 ronda - [delegado]: pruebas automáticas 20/20 ✅; 2 prueba(s) nueva(s); version 86d18bb
 \ No newline at end of file
-+- 2026-11-15T23:05 ronda - [delegado]: pruebas automáticas 26/26 ✅; 4 prueba(s) nueva(s); version 93eb0f9
++- 2026-11-16T00:10 ronda 1 [revisor]: veredicto aprobado, nota 9/10, 31/31 verificados. General: Las capturas verif_1 y verif_2 no reflejan esta ronda: su texto no muestra la línea 'Entendí: …' ni el flujo nuevo de Ollama. El requisito 24 se apoya solo en el código y en las pruebas. Conviene regenerar scripts/vista_previa_app.py y capturar de nuevo. | General: Menor: la línea 'Entendí' muestra los tags genome en inglés (por ejemplo «twist ending») mientras los géneros salen en español. Para el usuario sería más claro traducirlos o mostrarlos junto a la frase original ('giro final'). | General: Menor: la 'intro' que redacta el LLM se usa tal cual (l.413). Solo se filtran los movie
 \ No newline at end of file
 diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
-index 63e5015..d220fe0 100644
+index d220fe0..3b96678 100644
 --- a/_capturas/CAMBIOS.diff
 +++ b/_capturas/CAMBIOS.diff
-@@ -1,380 +1,337 @@
--93eb0f9 Ronda 2: Corregí el requisito 13 en recomendador/herramientas.py. Ahora el orden final usa la clave (votos < min_votos, -nivel), así que las películas con meno
-+a1c10c3 Ronda 1: Rehice el modo Ollama en recomendador/llm.py para que el LLM solo redacte el texto. pedido.py (vía analizar) arma los filtros, recomendar arma la list
+@@ -1,337 +1,314 @@
+-a1c10c3 Ronda 1: Rehice el modo Ollama en recomendador/llm.py para que el LLM solo redacte el texto. pedido.py (vía analizar) arma los filtros, recomendar arma la list
++13867cf Paquete 6 (1. Capa batch Spark para la app (parquets) + limpieza de llm.py), intento 1: Creé recomendador/precalculo.py, que no usa pandas: todo se calcula con pyspark.sql y pyspark.ml. También creé scripts/precalcular_app.py. Juntos gene
  
-- ESPEC.md                          |  28 +-
-- _capturas/CAMBIOS.diff            | 651 ++++++++++++++++++++------------------
-- _capturas/INDICE.txt              |   3 +-
-- _capturas/PRUEBAS.txt             |  73 +++--
-- _capturas/verif_1.png             | Bin 106430 -> 255946 bytes
-- _capturas/verif_1_texto.txt       | 145 +++++++++
-- _capturas/verif_2.png             | Bin 0 -> 256585 bytes
-- _capturas/verif_2_texto.txt       | 145 +++++++++
-- recomendador/herramientas.py      |   6 +-
-- recomendador/llm.py               |   1 -
-- scripts/vista_previa_app.py       |   7 +-
-- tests/test_bateria.py             |  11 +-
-- tests/test_niveles_integracion.py | 139 ++++++++
-- 13 files changed, 845 insertions(+), 364 deletions(-)
-+ ESPEC.md                    |  27 +-
-+ _capturas/CAMBIOS.diff      | 679 ++++++++++++++++++++++----------------------
-+ _capturas/PRUEBAS.txt       |  60 ++--
-+ recomendador/llm.py         | 245 +++++++++-------
-+ tests/test_app.py           |  21 +-
-+ tests/test_bateria.py       |   9 +-
-+ tests/test_llm_redactor.py  | 106 +++++++
-+ tests/test_red_seguridad.py |   3 +-
-+ 8 files changed, 668 insertions(+), 482 deletions(-)
+- ESPEC.md                    |  27 +-
+- _capturas/CAMBIOS.diff      | 679 ++++++++++++++++++++++----------------------
+- _capturas/PRUEBAS.txt       |  60 ++--
+- recomendador/llm.py         | 245 +++++++++-------
+- tests/test_app.py           |  21 +-
+- tests/test_bateria.py       |   9 +-
+- tests/test_llm_redactor.py  | 106 +++++++
+- tests/test_red_seguridad.py |   3 +-
+- 8 files changed, 668 insertions(+), 482 deletions(-)
++ ARQUITECTURA.md                         | 122 +++++-
++ ESPEC.md                                |  66 +++-
++ _capturas/CAMBIOS.diff                  | 643 +++++++++++++++-----------------
++ _capturas/PRUEBAS.txt                   |  79 ++--
++ correr_25m.ps1                          |   8 +-
++ muestras/imdb-mini/LEEME.md             |  64 ++--
++ muestras/imdb-mini/name.basics.tsv      |  27 ++
++ muestras/imdb-mini/title.crew.tsv       |   8 +
++ muestras/imdb-mini/title.principals.tsv |  20 +
++ recomendador/llm.py                     |  72 +---
++ recomendador/precalculo.py              | 448 ++++++++++++++++++++++
++ scripts/precalcular_app.py              | 104 ++++++
++ tests/test_precalculo.py                | 199 ++++++++++
++ 13 files changed, 1349 insertions(+), 511 deletions(-)
  
++diff --git a/ARQUITECTURA.md b/ARQUITECTURA.md
++index 4541f85..75c339a 100644
++--- a/ARQUITECTURA.md
+++++ b/ARQUITECTURA.md
++@@ -1,11 +1,26 @@
++-# Plan de «recomendador-peliculas-v2» (version 2)
+++# Plan de «recomendador-peliculas-v2» (version 4)
++ Lo mantiene Delegado; no lo edites.
++ 
++-Vision: Reparar y pulir el recomendador de películas que ya existe (MovieLens, ALS con Spark, perfiles, streaming Kafka, app Streamlit con chat por reglas u Ollama, póster) sin rehacer lo verificado. Hay cinco cambios: (1) en todos los modos, el historial del usuario son los ratings anteriores a FECHA_CORTE más los eventos en vivo; (2) el orden se arma por niveles de coincidencia con el pedido y, dentro de cada nivel, por afinidad ALS; (3) el pedido se interpreta aunque traiga ánimos, errores de tipeo o venga en inglés; (4) buscar_pelicula busca de forma aproximada en MovieLens y, si hay clave, también en los títulos en español de TMDb guardados en caché; (5) el chat nunca termina sin películas. Las pruebas usan solo la muestra mini y las 117 pruebas actuales se mantienen.
++-Stack: Mantener Python, el .venv, pytest, Streamlit, Spark y el resto del stack actual (El proyecto ya funciona y tiene 117 pruebas verificadas. Hay que reparar, no reescribir.); Aplicar el corte siempre en Herramientas: corte = config.FECHA_CORTE por defecto y FECHA_CORTE_MINI con la muestra mini (Es lo que pidió el usuario: el modelo se entrenó hasta el corte, así que el historial posterior no debe existir en ningún modo. Además, un solo camino es más fácil de probar.); Hacer la coincidencia aproximada con difflib y unicodedata de la biblioteca estándar (No hay que instalar nada y alcanza para tolerar tildes, mayúsculas y errores de tipeo.); Para los títulos en español, reutilizar ClienteTMDb de recomendador/enriquecimiento.py y su caché artefactos/tmdb_cache.json, y agregar una búsqueda /search/movie con language=es-ES que también se guarda en caché (Ya existe un cliente con caché que, sin TMDB_API_KEY, devuelve None sin errores. Así la búsqueda en español es opcional y las pruebas no salen a la red: se les inyecta un cliente falso.); Crear el módulo recomendador/pedido.py con diccionarios ES/EN de géneros, ánimos y ocasiones (Es determinista y se puede probar sin LLM. Lo usan el modo reglas, el modo Ollama y la red de seguridad.); Simular el LLM con un cliente falso que se inyecta en responder_ollama (La batería de 30 pedidos tiene que correr sin Ollama y en pocos minutos.)
++-Arquitectura: recomendador/: config.py (FECHA_CORTE, FECHA_CORTE_MINI, TMDB_API_KEY), herramientas.py (Herramientas: catálogo, historial con el corte siempre aplicado, recomendar por niveles, buscar_pelicula, ESQUEMAS), pedido.py (NUEVO: texto -> {generos, tags_genome, max_duracion_min, condiciones, titulo_mencionado, pide_recomendacion}), titulos.py (NUEVO: normalizar(), índice de títulos MovieLens + títulos ES de tmdb_cache.json, búsqueda aproximada y consulta opcional a TMDb mediante ClienteTMDb.buscar con caché), llm.py (interpretar delega en pedido.py; responder_reglas y responder_ollama, _validar, red de seguridad), enriquecimiento.py (ClienteTMDb + búsqueda con caché), demo.py (demo.json relativo), poster.py (figuras). Flujo: app/app.py -> llm.responder -> (reglas | ollama + herramientas) -> Herramientas.recomendar(niveles: n.º de condiciones cumplidas DESC, luego afinidad ALS; sin condiciones = orden híbrido actual) -> tarjetas con «Cumple / No cumple / No se pudo evaluar». Scripts que el usuario corre sobre los 25M: correr_25m.ps1 (perfilar_usuarios --hasta FECHA_CORTE), scripts/productor_kafka.py (--desde FECHA_CORTE por defecto). Las pruebas van en tests/test_<punto>.py y usan tests/base_mini.py.
++-Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea «Cumple: …» y, cuando corresponde, «No cumple: …» y «No se pudo evaluar: …» (por ejemplo, la duración sin IMDb). Si el título se encontró por TMDb, la tarjeta muestra el título en español y, entre paréntesis, el original. La figura tipos_espectador pasa a barras horizontales ordenadas, con las etiquetas a la izquierda sin superponerse, letra de 11 pt o más y la paleta de las demás figuras. El tono del chat sigue siendo breve y en español.
++-Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
+++Vision: CineRuta: una app Streamlit de estética oscura, inspirada en Letterboxd pero con paleta propia, montada sobre el recomendador MovieLens 25M ya verificado (ALS híbrido, pedido.py, chat; 31 requisitos). Tiene cuentas locales, onboarding, filas de carátulas personalizadas, buscador, ficha, reseñas públicas moderadas fuera de la app, modo explorar y chat como pestaña. Sigue una arquitectura Lambda: Spark batch escribe parquets, Kafka (topics 'ratings' y 'resenas') + Structured Streaming manejan los eventos, y la app solo lee lo precalculado. Es para mostrarla en una expo (póster con QR) y publicarla por Cloudflare Tunnel.
+++Stack: Mantener Python 3.12 + .venv, pyspark 3.5.5, confluent-kafka, Streamlit 1.40.1 y pytest (Las 374 pruebas verificadas corren sobre este stack. Cambiarlo rompería la regresión.); Spark (no pandas) para todo cálculo sobre 25M/IMDb, en recomendador/precalculo.py + scripts/precalcular_app.py, que escriben artefactos/<perfil>/app/*.parquet (Es la capa batch Lambda que pide el usuario. Con la muestra mini tarda segundos y sobre 25M la ejecuta el usuario con correr_25m.ps1.); BucketedRandomProjectionLSH (Spark ML) sobre itemFactors ALS para 'Porque te gustó X' (Lo pide el usuario y escala sin producto cruzado completo.); La app lee los parquets con pandas/pyarrow + st.cache_data/cache_resource y nunca importa pyspark (Así cada página carga en menos de 2 s sin levantar una JVM.); bcrypt + SQLite (artefactos/<perfil>/cuentas.db) para las cuentas; las reseñas van en una tabla 'resenas' de estado.db con columna 'oculta' (Es simple y sin servidor. Las reseñas siguen el mismo camino que los eventos (streaming o respaldo directo) y la moderación solo cambia un flag.); Kafka: topic 'ratings' (formato sin cambios) y topic nuevo 'resenas' (key userId) (Es el ajuste del usuario: así no se toca el esquema verificado de ratings.); Tipo de espectador de los usuarios nuevos con perfiles.asignar_tipo (media/std/centroides de tipos.json) y un vector crudo construido igual que vectores_gusto (Reutiliza los clusters existentes de perfilar_usuarios con el mismo escalado del KMeans, sin Spark en la app.); segno para el QR; TMDb vía requests con caché JSON; sin TMDB_API_KEY, carátula SVG generada (Son Python puro y deterministas, y las pruebas no dependen de la red.)
+++Arquitectura: recomendador/ (núcleo verificado: config, datos, batch_als, foldin, perfiles, herramientas, pedido, llm, titulos, streaming, kafka_utils, estado, poster) + módulos nuevos:
+++- precalculo.py (Spark): peliculas.parquet (stats antes del corte, histograma de 10 casillas, tags), personas.parquet (IMDb vía links.csv), populares_por_tipo.parquet (cluster de perfiles.parquet), vecinos.parquet (LSH, top-20). Lo llama scripts/precalcular_app.py; correr_25m.ps1 agrega el paso.
+++- cuentas.py: registro/login bcrypt y userId > 162541; Limitador (20 acciones/min por sesión).
+++- moderacion.py: filtro de palabras ofensivas (recomendador/palabras_ofensivas.txt, sin tildes, palabra completa) y validación de 500 caracteres.
+++- eventos.py: publicar_rating → topic 'ratings', publicar_resena → topic 'resenas', key userId; si Kafka no responde en 3 s, escribe directo en estado.db y devuelve un aviso.
+++- streaming.py: además procesa el topic 'resenas' → tabla resenas.
+++- perfiles.py: + vector_crudo(ratings) y tipo_usuario(userId), que recalcula el tipo con cada calificación nueva.
+++- scripts/moderar_resenas.py (solo local): --listar / --ocultar ID / --mostrar ID.
+++- catalogo_app.py (solo lectura, con caché): buscar, ficha, filas_inicio, explicar, explorar. tmdb.py: póster, sinopsis y tráiler, o SVG generado.
+++- app/app.py ('CineRuta'): login → onboarding → pestañas Inicio | Buscar | Explorar | Chat; ficha por ?pelicula=<id>; vistas en app/vistas/*.py; estilo en app/estilo.py.
+++Flujo: batch Spark → parquets → app. Evento → Kafka → Structured Streaming → estado.db → fold-in y tipo actualizado en la app. Las pruebas usan muestras/ml-mini, muestras/imdb-mini y artefactos/mini.
+++Diseno: Marca 'CineRuta' (título de página, cabecera y pie). Paleta oscura propia, inspirada en Letterboxd pero sin sus colores exactos (prohibidos #14181c, #2c3440, #00e054, #ff8000, #40bcf4, #9ab):
+++- fondo #0e1216, superficies #1f2730, bordes #34404c
+++- texto #aab4be, títulos #f3f5f7
+++- acento principal ámbar #f0b23a (botones, estrellas propias, barras del histograma)
+++- secundarios coral #e5675c ('puede que no') y turquesa #3cb4a8 ('probablemente te guste', enlaces)
+++Tipografía sans del sistema (system-ui), títulos en serif ligera (Georgia). Carátulas 2:3 con borde redondeado de 4 px en filas horizontales desplazables. Ficha con fondo difuminado del póster e histograma 0,5–5 en ámbar; la afinidad se muestra como texto 'afinidad alta/media'. Las carátulas generadas llevan un color por género y el título centrado. Tono en español, cercano y breve. Al pie, la atribución a TMDb. El CSS está en app/estilo.py y se inyecta una sola vez.
+++Supuestos: Las reseñas se guardan en una tabla 'resenas' de estado.db (columna 'oculta'), alimentada por streaming desde el topic 'resenas' o por el respaldo directo. Las cuentas van en cuentas.db, aparte.; Una reseña con una palabra ofensiva se rechaza entera (no se censura con asteriscos).; El límite de 20/min es por sesión de Streamlit (en memoria) y cuenta solo acciones que escriben o llaman al LLM, no la navegación.; El vector del usuario nuevo usa la misma función de features que perfilar_usuarios (géneros + tags genome + log(1+n)). Si un rasgo de tipos.json no se puede calcular, toma el valor medio (0 al estandarizar).; Paleta CineRuta: fondo #0e1216, superficie #1f2730, texto #aab4be, ámbar #f0b23a, turquesa #3cb4a8, coral #e5675c.; Los paquetes 1–5 del plan anterior ya están verificados y no se rehacen. Los 6 paquetes de este plan reemplazan a los pendientes 6–11 con los ajustes incorporados.
++ 
++ ## Paquetes de trabajo
++ ### 1. 1. Corte temporal en todos los modos y demo.json relativo [verificado]
++@@ -66,16 +81,93 @@ Requisitos: 7, 1 · Archivos: recomendador/poster.py, tests/test_poster_tipos.py
++ - Criterio: El README explica el corte en todos los modos, que TMDB_API_KEY es opcional para los títulos en español, y que la regeneración sobre los 25M se hace a mano con correr_25m.ps1 y scripts/figuras_poster.
++ - Criterio: test_readme.py y test_poster.py siguen pasando
++ - Prueba de aceptacion: La figura no tiene etiquetas superpuestas: el comando «.venv/Scripts/python -m pytest -q tests/test_poster_tipos.py» debe terminar sin error
+++### 6. 1. Capa batch Spark para la app (parquets) + limpieza de llm.py [pendiente]
+++Objetivo: Crear recomendador/precalculo.py y scripts/precalcular_app.py, que con Spark generen en artefactos/<perfil>/app/ cuatro parquets: peliculas (id, título, año, géneros, duración, nota IMDb, votos y promedio antes del corte, histograma 0,5–5, tags principales), personas (directores/actores por movieId vía links.csv + title.crew/principals/name.basics, con nombre normalizado sin tildes), populares_por_tipo (agregación por cluster de perfiles.parquet, antes del corte) y vecinos (LSH sobre itemFactors, top-20). Agregar el paso a correr_25m.ps1. Quitar de llm.py _validar, completar_args, como_dict y 
+++Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scripts/precalcular_app.py, correr_25m.ps1, recomendador/llm.py, tests/test_precalculo.py · Depende de: -
+++- Criterio: scripts/precalcular_app.py --perfil mini termina en menos de 3 minutos y crea los 4 parquets
+++- Criterio: recomendador/precalculo.py no importa pandas; todo se hace con pyspark.sql/pyspark.ml
+++- Criterio: El histograma, el promedio, los votos y populares_por_tipo excluyen timestamps >= FECHA_CORTE_MINI (prueba con valores conocidos)
+++- Criterio: populares_por_tipo usa la columna cluster de perfiles.parquet (los mismos tipos de perfilar_usuarios)
+++- Criterio: vecinos.parquet no incluye a la propia película y tiene a lo sumo 20 vecinos por movieId
+++- Criterio: personas filtra por los tconst de links.csv antes de cruzar con principals
+++- Criterio: Si imdb-mini no trae un director conocido (Nolan), se agregan filas conocidas a la muestra
+++- Criterio: llm.py ya no define los 4 símbolos y la suite previa sigue pasando
+++- Prueba de aceptacion: Precálculos Spark sobre la muestra mini (corte, LSH, personas, populares por tipo): el comando «.venv/Scripts/python -m pytest -q tests/test_precalculo.py» debe terminar sin error
+++- Prueba de aceptacion: Regresión del chat tras la limpieza de llm.py: el comando «.venv/Scripts/python -m pytest -q tests/test_llm_redactor.py tests/test_bateria.py» debe terminar sin error
+++### 7. 2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos [pendiente]
+++Objetivo: Crear cuentas.py (bcrypt + SQLite, userId > 162541, Limitador de 20 acciones/min por sesión), moderacion.py (máx. 500 caracteres y filtro de palabras ofensivas), eventos.py (ratings → topic 'ratings' sin cambiar el formato; reseñas → topic 'resenas'; key userId; respaldo directo a estado.db con aviso), extender streaming.py para el topic 'resenas', crear scripts/moderar_resenas.py y agregar a perfiles.py vector_crudo/tipo_usuario para asignar el centroide más cercano con el mismo escalado. Agregar bcrypt y segno a requirements.txt.
+++Requisitos: 33, 41, 44, 46, 49, 50, 51, 52 · Archivos: recomendador/cuentas.py, recomendador/moderacion.py, recomendador/palabras_ofensivas.txt, recomendador/eventos.py, recomendador/streaming.py, recomendador/estado.py, recomendador/perfiles.py, scripts/moderar_resenas.py, requirements.txt, tests/test_cuentas.py, tests/test_eventos.py, tests/test_tipo_nuevo.py · Depende de: -
+++- Criterio: La contraseña se guarda solo como hash bcrypt; el login con clave incorrecta falla y con la correcta devuelve el userId
+++- Criterio: El primer usuario recibe userId >= 162542 y el siguiente uno mayor; un nombre duplicado se rechaza
+++- Criterio: El Limitador acepta 20 acciones y rechaza la 21.ª dentro del mismo minuto; la acepta tras 60 s (reloj simulado)
+++- Criterio: Una reseña de 501 caracteres o con una palabra de la lista (también con mayúsculas o tildes) se rechaza con un mensaje; una válida se acepta
+++- Criterio: Con un productor simulado, la calificación va a 'ratings' con el mismo formato que antes y la reseña a 'resenas', ambas con key=str(userId)
+++- Criterio: Con Kafka caído (simulado), la calificación o reseña queda en estado.db y se devuelve un aviso no vacío
+++- Criterio: scripts/moderar_resenas.py --ocultar ID marca la reseña como oculta y las consultas públicas ya no la devuelven; ningún módulo de app/ importa moderar_resenas
+++- Criterio: tipo_usuario sobre las 10 calificaciones de onboarding coincide con asignar_tipo(vector_crudo) usando media/std de tipos.json, y cambia al agregar calificaciones que mueven el vector hacia otro centro
+++- Prueba de aceptacion: Cuentas bcrypt, userIds > 162541 y límite de 20 por minuto: el comando «.venv/Scripts/python -m pytest -q tests/test_cuentas.py» debe terminar sin error
+++- Prueba de aceptacion: Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas y moderación local: el comando «.venv/Scripts/python -m pytest -q tests/test_eventos.py tests/test_streaming.py» debe terminar sin error
+++- Prueba de aceptacion: Tipo de espectador del centroide más cercano para usuarios nuevos, con el mismo escalado: el comando «.venv/Scripts/python -m pytest -q tests/test_tipo_nuevo.py» debe terminar sin error
+++### 8. 3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb [pendiente]
+++Objetivo: Crear recomendador/catalogo_app.py (solo lectura de parquets y estado.db, con caché): buscar por título o persona sin tildes; ficha (incluye las reseñas no ocultas); filas_inicio con 'Para ti' (fold-in), 'Populares entre espectadores como tú' (según tipo_usuario) y 'Porque te gustó X' (vecinos); explicar con veredicto, la más parecida calificada alto y la calificada baja, tags a favor/en contra y persona en común. Crear tmdb.py: póster, sinopsis y tráiler con caché, o SVG generado sin clave.
+++Requisitos: 35, 36, 37, 38, 39, 48, 52 · Archivos: recomendador/catalogo_app.py, recomendador/tmdb.py, tests/test_catalogo_app.py, tests/test_tmdb.py · Depende de: 6, 7
+++- Criterio: catalogo_app no importa pyspark (comprobado con sys.modules)
+++- Criterio: buscar('nolan') y buscar('NOLÁN') devuelven las películas de Nolan de la muestra; la búsqueda por título tolera tildes
+++- Criterio: ficha() trae año, géneros, duración, nota IMDb, director, reparto, histograma de 10 casillas, promedio, tags y reseñas visibles (una reseña oculta no aparece)
+++- Criterio: 'Populares entre espectadores como tú' de un usuario nuevo usa el cluster que da tipo_usuario
+++- Criterio: explicar() usa solo ratings anteriores al corte más los eventos en vivo, y su texto trae títulos y tags concretos, sin números de afinidad tipo estrellas
+++- Criterio: Sin TMDB_API_KEY, poster() devuelve un SVG con el título y el color del género, y trailer() devuelve None sin excepción
+++- Criterio: 20 llamadas a ficha() y filas_inicio() con caché caliente tardan menos de 2 s en total
+++- Prueba de aceptacion: Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini: el comando «.venv/Scripts/python -m pytest -q tests/test_catalogo_app.py» debe terminar sin error
+++- Prueba de aceptacion: TMDb con caché y respaldo sin clave: el comando «.venv/Scripts/python -m pytest -q tests/test_tmdb.py» debe terminar sin error
+++### 9. 4. App CineRuta: estilo propio, login, onboarding e Inicio [pendiente]
+++Objetivo: Reestructurar app/app.py como 'CineRuta': estilo en app/estilo.py con la paleta propia; pantalla de login/registro; onboarding (calificar ~10 populares o importar CSV de Letterboxd) con fold-in y tipo de espectador al instante; pestañas Inicio | Buscar | Explorar | Chat. Inicio muestra las tres filas y el tipo de espectador del usuario. El chat pasa a su pestaña sin cambiar su lógica. Cada acción (calificar, reseñar, mensaje de chat, importar) pasa por el Limitador.
+++Requisitos: 32, 33, 34, 35, 51, 52, 53 · Archivos: app/app.py, app/estilo.py, app/vistas/login.py, app/vistas/onboarding.py, app/vistas/inicio.py, app/vistas/chat.py, muestras/letterboxd_mini.csv, tests/test_app_letterboxd.py, tests/test_app.py · Depende de: 7, 8
+++- Criterio: Con AppTest, un usuario sin sesión ve solo el login/registro y el nombre 'CineRuta'
+++- Criterio: Tras registrarse ve el onboarding; al calificar 10 películas, Inicio muestra 'Para ti', 'Populares entre espectadores como tú' y 'Porque te gustó <título>' con al menos una carátula cada una, y el nom
+++- Criterio: Importar muestras/letterboxd_mini.csv (10 filas conocidas, creado aquí) salta el onboarding
+++- Criterio: La acción 21 en menos de un minuto muestra un aviso de límite y no se registra
+++- Criterio: app/estilo.py no contiene ninguno de #14181c, #2c3440, #00e054, #ff8000, #40bcf4 (prueba de texto) y define los colores de la paleta CineRuta
+++- Criterio: La pestaña Chat responde 'drama policial con un twist final' con la línea 'Entendí:'
+++- Criterio: La app no importa pyspark al navegar
+++- Prueba de aceptacion: Flujo login → onboarding → Inicio con tres filas, tipo de espectador, límite y paleta CineRuta: el comando «.venv/Scripts/python -m pytest -q tests/test_app_letterboxd.py» debe terminar sin error
+++- Prueba de aceptacion: Regresión del chat dentro de la app: el comando «.venv/Scripts/python -m pytest -q tests/test_app.py» debe terminar sin error
+++### 10. 5. Buscar, Ficha con reseñas, tarjeta 'Para ti' y Explorar [pendiente]
+++Objetivo: Implementar las vistas Buscar (título o persona); Ficha (póster/sinopsis TMDb o carátula generada, datos IMDb, histograma, promedio, tags, reseñas públicas, botones para calificar y reseñar con el contador de 500 caracteres, el filtro y el aviso si Kafka falla, tráiler si existe, atribución TMDb); y Explorar (una película a la vez con la explicación personalizada y el botón Siguiente). La tarjeta 'Para ti' usa explicar(); el LLM solo redacta, con la plantilla como respaldo. Al calificar se recalcula el tipo de espectador.
+++Requisitos: 36, 37, 38, 39, 40, 41, 46, 48, 49, 52 · Archivos: app/vistas/buscar.py, app/vistas/ficha.py, app/vistas/explorar.py, app/vistas/tarjetas.py, tests/test_app_ficha.py · Depende de: 9
+++- Criterio: AppTest: buscar 'nolan' muestra al menos un resultado; la ficha muestra 'Director', 'Reparto', el histograma y la atribución a TMDb
+++- Criterio: Sin TMDB_API_KEY la ficha no muestra 'Error' ni 'Traceback'
+++- Criterio: Calificar con Kafka caído (simulado) muestra el aviso y la calificación aparece en estado.db
+++- Criterio: Una reseña válida se publica y aparece en la ficha; una con palabra ofensiva o de más de 500 caracteres muestra un mensaje y no se guarda
+++- Criterio: No hay en la app ningún botón ni control para ocultar reseñas
+++- Criterio: Explorar: 'Siguiente' cambia a otra película y muestra 'probablemente te guste' o 'puede que no'
+++- Prueba de aceptacion: Buscar, ficha sin clave TMDb, calificar y reseñar con filtro y respaldo, explorar: el comando «.venv/Scripts/python -m pytest -q tests/test_app_ficha.py» debe terminar sin error
+++### 11. 6. Chat por persona, modo público, QR, rendimiento y cierre [pendiente]
+++Objetivo: Extender pedido.py para detectar personas ('algo de Nolan', 'con Tom Hanks') con personas.parquet, como condición del orden por niveles. Agregar el modo público (MODO_PUBLICO=1): login obligatorio, límite de 20/min, LLM de a una solicitud (si está ocupado, plantilla) y sin controles de administración. Agregar la figura QR hacia URL_PUBLICA. Medir los tiempos por página. Actualizar el README: orden de scripts (precalcular_app, streaming, cloudflared), moderar_resenas.py y CineRuta. Regenerar scripts/vista_previa_app.py.
+++Requisitos: 43, 44, 45, 50, 51 · Archivos: recomendador/pedido.py, recomendador/herramientas.py, recomendador/llm.py, app/app.py, scripts/figuras_poster.py, scripts/vista_previa_app.py, README.md, tests/test_personas_chat.py, tests/test_modo_publico.py, tests/test_rendimiento_app.py · Depende de: 10
+++- Criterio: pedido.analizar('algo de Nolan') produce una condición de persona; el chat devuelve películas de Nolan de la muestra y 'Entendí:' lo menciona
+++- Criterio: Con MODO_PUBLICO=1, AppTest sin sesión no muestra pestañas ni controles de administración (rutas, recarga, selector de usuario, moderación)
+++- Criterio: Con el semáforo del LLM tomado, una segunda solicitud responde con la plantilla sin esperar
+++- Criterio: figuras_poster.py genera qr_publico.png si URL_PUBLICA está definida y avisa si no
+++- Criterio: Inicio, Buscar, Ficha y Explorar cargan cada una en menos de 2 s con caché caliente (muestra mini)
+++- Criterio: El README documenta scripts/moderar_resenas.py como único camino de moderación
+++- Criterio: La suite completa pasa
+++- Prueba de aceptacion: Chat entiende pedidos por persona: el comando «.venv/Scripts/python -m pytest -q tests/test_personas_chat.py» debe terminar sin error
+++- Prueba de aceptacion: Modo público: login, límite 20/min, LLM de a uno, sin administración, QR: el comando «.venv/Scripts/python -m pytest -q tests/test_modo_publico.py» debe terminar sin error
+++- Prueba de aceptacion: Cada página en menos de 2 s con datos precalculados: el comando «.venv/Scripts/python -m pytest -q tests/test_rendimiento_app.py» debe terminar sin error
++ 
++ ## Riesgos
++-- Aplicar el corte en todos los modos puede romper pruebas actuales (test_herramientas, test_app, test_streaming) que esperaban ver ratings posteriores. Hay que ajustarlas y documentarlo, sin borrar ninguna.
++-- Los perfiles precalculados sobre los 25M siguen incluyendo datos posteriores al corte hasta que el usuario corra correr_25m.ps1 con --hasta.
++-- Pasar de filtros duros a niveles puede cambiar resultados que esperan las pruebas actuales. La prueba 'sin condiciones = orden híbrido' protege el caso base.
++-- La coincidencia aproximada puede dar falsos positivos con títulos cortos; el umbral se fija en 0.8 y se prueba.
++-- Recargar el catálogo en cada caso hace lenta la batería de 30 × 4 modos; hay que usar una fixture de módulo.
+++- Los AppTest con login, onboarding y pestañas pueden volverse lentos o frágiles. Conviene que las vistas sean funciones puras y probar la lógica fuera de Streamlit.
+++- Reestructurar app/app.py puede romper tests/test_app.py (verificado). El chat debe mantener su API.
+++- title.principals de 25M pesa varios GB: hay que filtrar por los tconst de links.csv antes de cruzar, o Spark local puede quedarse sin memoria.
+++- Si el vector del usuario nuevo no replica exactamente las features de vectores_gusto, el tipo asignado no será coherente con los clusters. La prueba debe comparar con un usuario del perfilado.
+++- Un filtro por lista de palabras es básico: tiene falsos positivos y negativos, y no reemplaza la moderación manual.
+++- bcrypt y segno deben instalarse en .venv. Sin red, fallan las pruebas de los paquetes 2 y 6.
++ 
++ ## Limitaciones
++-- Los artefactos de los 25M (perfiles con --hasta y figuras del póster) no se regeneran dentro de los paquetes: los regenera el usuario con correr_25m.ps1 y scripts/figuras_poster.py.
++-- Sin TMDB_API_KEY, un título solo en español se reconoce si se parece lo suficiente al de MovieLens o ya está en la caché.
++-- La duración depende de IMDb; sin ese dato, la condición queda como no evaluable.
++-- En modo reglas, la tolerancia a errores de tipeo es léxica (difflib) y no entiende frases muy libres.
++\ No newline at end of file
+++- Las corridas sobre 25M e IMDb completo (precalcular_app.py --perfil 25m, perfilar_usuarios) las ejecuta el usuario con correr_25m.ps1 y no se verifican automáticamente.
+++- Kafka y Structured Streaming reales los levanta el usuario a mano. Las pruebas usan un productor simulado y el respaldo directo.
+++- Cloudflare Tunnel (cloudflared) es un paso manual. El plan deja listos el modo público y el QR.
+++- Sin TMDB_API_KEY no hay pósters reales, sinopsis ni tráileres.
+++- El tiempo de menos de 2 s se mide con la muestra mini.
+++- El límite por sesión se reinicia si el usuario abre una sesión nueva. No es una protección fuerte contra abuso.
++\ No newline at end of file
  diff --git a/ESPEC.md b/ESPEC.md
--index 26ddd06..794da19 100644
-+index 794da19..f28367e 100644
+-index 794da19..f28367e 100644
++index f28367e..0b9f52a 100644
  --- a/ESPEC.md
  +++ b/ESPEC.md
--@@ -21,23 +21,23 @@ El resto del plan está aprobado.
-- - [verificado] 9. El corte temporal se aplica en todos los modos, no solo en demo. El historial, los ratings calificados, los tags y la popularidad que usa Herramientas excluyen siempre los timestamps >= FECHA_CORTE (FECHA_CORTE_MINI con la muestra mini). Los eventos en vivo de estado.db se incluyen siempre. Una prue
-+@@ -8,8 +8,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
-+ 3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
-+ El resto del plan está aprobado.
-+ 3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, tags y condiciones. 5. Las explicaciones no repiten la misma película de referencia en todas las tarjetas, y el puntaje ALS se muestra como "afinidad alta/media" y no como un número tipo estrellas. 6. En recomendador/spark_utils.py, en modo local: spark.executor.heartbeatInterval=60s y spark.network.timeout=600s. 7. Script scripts/probar_pedidos.py que, con los artefactos reales, imprime el top-5 de una lista de pedidos (entre ellos "drama policial con un twist épico" y "algo como de drama policial con un twist épico"), para que yo lo revise. Agregar los casos a la batería con datos de la muestra mini.
-++4. El LLM solo redacta la respuesta final. (1) La interpretación del pedido (pedido.py) es la única fuente de los filtros: el modelo ya no elige filtros ni películas. Recibe la lista final de recomendaciones con sus datos (condiciones que cumple, película parecida que el usuario calificó, afinidad) y solo escribe el texto. (2) Si Ollama falla o tarda más de 20 s, se usa la plantilla del modo reglas. (3) Línea "Entendí: …" con las condiciones finales en cada respuesta. (4) Prueba: "drama policial con un twist final" con un LLM simulado que intenta omitir Crime o agregar duración; los filtros finales deben ser Crime+Drama, tags de giro y sin duración.
-+ 
-+-## Requisitos (estado actual, 21 en total)
-++## Requisitos (estado actual, 31 en total)
-+ - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
-+ - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
-+ - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
-+@@ -22,22 +23,32 @@ El resto del plan está aprobado.
-  - [verificado] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
-  - [verificado] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
---- [pendiente] 12. El algoritmo de recomendación debe exigir el cumplimiento de TODOS los géneros especificados (ej. Drama Y Crime) para alcanzar el nivel máximo, no solo uno parcial
---- [pendiente] 13. Los candidatos salen del orden híbrido original (afinidad ALS + popularidad, el mismo de recs_hibrido), no del ALS fold-in solo, y solo con películas de 50 votos o más antes del corte. Las de menos de 50 votos solo aparecen como último respaldo, después de todas las demás.
---- [pendiente] 14. Para ordenar, un tag pedido sin datos en genome cuenta como NO cumplido (baja el nivel igual que un tag con relevancia baja). En la tarjeta se sigue informando como 'sin datos'. Así una película sin datos de genome nunca queda por encima de una que sí cumple el tag.
---- [pendiente] 15. La duración sin dato IMDb debe tratarse como condición neutral, sin penalizar la puntuación del candidato
---- [pendiente] 16. El sistema debe interpretar frases ambiguas (ej. 'algo como X') como descripciones de contenido si contienen palabras clave de género/ánimo, no como títulos de película
---- [pendiente] 17. En caso de error de búsqueda de título, el sistema debe extraer automáticamente los géneros y tags asociados a la cadena de texto proporcionada para generar recomendaciones
---- [pendiente] 18. Las explicaciones de las tarjetas de recomendación deben rotar las películas de referencia y evitar repetir la misma en todas las respuestas
---- [pendiente] 19. La interfaz de usuario debe mostrar la afinidad ALS como etiquetas textuales ('afinidad alta/media') en lugar de una escala numérica tipo estrellas
---- [pendiente] 20. El script local spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos en modo local
---- [pendiente] 21. Script scripts/probar_pedidos.py que usa los artefactos REALES de 25M (no la muestra mini) e imprime el top-5, con géneros, votos y tags cumplidos, para una lista de pedidos que incluya 'drama policial con un twist épico' y 'algo como de drama policial con un twist épico'. Lo ejecuta el usuario a mano; en las pruebas automáticas se verifica con la muestra mini que el script corre.
--+- [verificado] 12. El algoritmo de recomendación debe exigir el cumplimiento de TODOS los géneros especificados (ej. Drama Y Crime) para alcanzar el nivel máximo, no solo uno parcial
--+- [observado] 13. Los candidatos salen del orden híbrido original (afinidad ALS + popularidad, el mismo de recs_hibrido), no del ALS fold-in solo, y solo con películas de 50 votos o más antes del corte. Las de menos de 50 votos solo aparecen como último respaldo, después de todas las demás. — Las películas de menos de 50 votos no quedan siempre al final. Entran por respaldo() (herramientas.py:505-508) y luego evaluadas.sort(key=-nivel) (l.529) puede ponerlas por encima de películas con ≥50 votos de nivel menor. Eso contradice 'solo aparecen como último respaldo, después de todas las demás' y puede reproducir el problema de los 'dramas desconocidos'. Para corregirlo, ordenar con la clav
--+- [verificado] 14. Para ordenar, un tag pedido sin datos en genome cuenta como NO cumplido (baja el nivel igual que un tag con relevancia baja). En la tarjeta se sigue informando como 'sin datos'. Así una película sin datos de genome nunca queda por encima de una que sí cumple el tag.
--+- [verificado] 15. La duración sin dat
+-@@ -8,8 +8,9 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+- 3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
++@@ -9,8 +9,13 @@ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe
+  El resto del plan está aprobado.
+  3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, tags y condiciones. 5. Las explicaciones no repiten la misma película de referencia en todas las tarjetas, y el puntaje ALS se muestra como "afinidad alta/media" y no como un número tipo estrellas. 6. En recomendador/spark_utils.py, en modo local: spark.executor.heartbeatInterval=60s y spark.network.timeout=600s. 7. Script scripts/probar_pedidos.py que, con los artefactos reales, imprime el top-5 de una lista de pedidos (entre ellos "drama policial con un twist épico" y "algo como de drama policial con un twist épico"), para que yo lo revise. Agregar los casos a la batería con datos de la muestra mini.
+-+4. El LLM solo redacta la respuesta final. (1) La interpretación del pedido (pedido.py) es la única fuente de los filtros: el modelo ya no elige filtros ni películas. Recibe la lista final de recomendaciones con sus datos (condiciones que cumple, película parecida que el usuario calificó, afinidad) y solo escribe el texto. (2) Si Ollama falla o tarda más de 20 s, se usa la plantilla del modo reglas. (3) Línea "Entendí: …" con las condiciones finales en cada respuesta. (4) Prueba: "drama policial con un twist final" con un LLM simulado que intenta omitir Crime o agregar duración; los filtros finales deben ser Crime+Drama, tags de giro y sin duración.
++ 4. El LLM solo redacta la respuesta final. (1) La interpretación del pedido (pedido.py) es la única fuente de los filtros: el modelo ya no elige filtros ni películas. Recibe la lista final de recomendaciones con sus datos (condiciones que cumple, película parecida que el usuario calificó, afinidad) y solo escribe el texto. (2) Si Ollama falla o tarda más de 20 s, se usa la plantilla del modo reglas. (3) Línea "Entendí: …" con las condiciones finales en cada respuesta. (4) Prueba: "drama policial con un twist final" con un LLM simulado que intenta omitir Crime o agregar duración; los filtros finales deben ser Crime+Drama, tags de giro y sin duración.
+++5. Convertir la app Streamlit en una app tipo Letterboxd con recomendaciones, sin romper lo verificado. El chat queda como pestaña. Arquitectura Lambda: batch con Spark sobre el histórico, velocidad con Kafka + Structured Streaming para eventos de usuarios, y la app solo lee resultados precalculados (no ejecuta Spark al navegar). Todo cálculo sobre los 25M o IMDb se hace con Spark, no pandas. Corridas de 25M como scripts que ejecuto yo; pruebas con la muestra mini. 1. Cuentas locales: registro y login con bcrypt en SQLite; userId nuevo mayor a 162541. 2. Primer ingreso: calificar unas 10 populares o importar CSV de Letterboxd; recomendaciones al instante por fold-in. 3. Inicio con filas de carátulas: "Para ti", "Populares entre espectadores como tú" (agregación Spark por tipo, antes del corte) y "Porque te gustó X" (vecinos precalculados con Spark ML BucketedRandomProjectionLSH sobre factores ALS, en parquet). 4. Buscador por título y por persona (director o actor), sin importar tildes. 5. Ficha tipo Letterboxd: póster y sinopsis de TMDb (TMDB_API_KEY), año, géneros, duración, nota IMDb, director y reparto (title.crew, title.principals y name.basics de IMDb cruzados con Spark vía links.csv), histograma 0,5-5 y promedio (groupBy Spark antes del corte, en parquet), tags principales, reseñas de usuarios, y botones para calificar y reseñar. 6. Tarjeta "Para ti": "probablemente te guste" o "puede que no"; la más parecida que calificó alto y la que calificó bajo, con tags a favor y en contra y director o actor en común. Texto con datos; el LLM solo redacta. 7. Tráiler de YouTube desde TMDb. Sin clave: carátulas generadas (título y color por género), sin sinopsis ni tráiler, sin errores. Atribución a TMDb al pie. 8. Modo explorar: una película a la vez: carátula, info personalizada, tráiler, siguiente. 9. Cada calificación y reseña se publica en Kafka (topic ratings, key userId) y la procesa Structured Streaming; si Kafka no responde, se guarda directo y se avisa. 10. Chat como pestaña con la misma lógica (pedido.py; el LLM solo redacta); entiende pedidos por persona ("algo de Nolan"). 11. Modo público para Cloudflare Tunnel: login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado, plantilla), nada de administración expuesto, y figura con QR a la URL pública (variable URL_PUBLICA) para el póster. 12. Cada página carga en menos de 2 s con datos precalculados y en caché. 13. Limpieza: quitar de llm.py el código sin uso (_validar, completar_args, como_dict, MAX_RONDAS_HERRAMIENTAS). 14. Pruebas automáticas de cada punto.
+++6. Ajuste al plan: 1. Reseñas públicas para todos, máximo 500 caracteres, con un filtro básico de palabras ofensivas. La moderación (ocultar una reseña) se hace con un script local, nunca desde la app.
+++2. Límite de 20 acciones por minuto por sesión.
+++3. Usar los tipos de espectador existentes (clusters de perfilar_usuarios). Los usuarios nuevos de la app reciben el tipo del centroide más cercano según sus calificaciones del onboarding (mismo escalado del KMeans) y se actualiza cuando califican más.
+++Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato de "ratings"). La app se llama "CineRuta" y usa una paleta propia: oscura, inspirada en Letterboxd pero sin sus colores de marca exactos. El resto del plan está aprobado.
+  
+--## Requisitos (estado actual, 21 en total)
+-+## Requisitos (estado actual, 31 en total)
++-## Requisitos (estado actual, 31 en total)
+++## Requisitos (estado actual, 53 en total)
+  - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+  - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
+  - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
+-@@ -22,22 +23,32 @@ El resto del plan está aprobado.
+- - [verificado] 10. buscar_pelicula hace la coincidencia aproximada contra los títulos de MovieLens como base. Si TMDB_API_KEY está definida, también contra los títulos en español de TMDb (caché en artefactos/tmdb_cache.json y búsqueda /search/movie con language=es-ES, que también se guarda en caché). Sin clave funcion
+- - [verificado] 11. Herramientas.recomendar agrupa las películas en niveles según el número de condiciones del pedido que cumplen (de mayor a menor) y dentro de cada nivel las ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es exactamente el del híbrido actual. Las condiciones no evaluables no bajan
+- - [verificado] 12. El algoritmo de recomendación debe exigir el cumplimiento de TODOS los géneros especificados (ej. Drama Y Crime) para alcanzar el nivel máximo, no solo uno parcial
+--- [observado] 13. Los candidatos salen del orden híbrido original (afinidad ALS + popularidad, el mismo de recs_hibrido), no del ALS fold-in solo, y solo con películas de 50 votos o más antes del corte. Las de menos de 50 votos solo aparecen como último respaldo, después de todas las demás. — Las películas de menos de 50 votos no quedan siempre al final. Entran por respaldo() (herramientas.py:505-508) y luego evaluadas.sort(key=-nivel) (l.529) puede ponerlas por encima de películas con ≥50 votos de nivel menor. Eso contradice 'solo aparecen como último respaldo, después de todas las demás' y puede reproducir el problema de los 'dramas desconocidos'. Para corregirlo, ordenar con la clav
+-+- [verificado] 13. Los candidatos salen del orden híbrido original (afinidad ALS + popularidad, el mismo de recs_hibrido), no del ALS fold-in solo, y solo con películas de 50 votos o más antes del corte. Las de menos de 50 votos solo aparecen como último respaldo, después de todas las demás.
+- - [verificado] 14. Para ordenar, un tag pedido sin datos en genome cuenta como NO cumplido (baja el nivel igual que un tag con relevancia baja). En la tarjeta se sigue informando como 'sin datos'. Así una película sin datos de genome nunca queda por encima de una que sí cumple el tag.
+- - [verificado] 15. La duración sin dato IMDb debe tratarse como condición neutral, sin penalizar la puntuación del candidato
+- - [verificado] 16. El sistema debe interpretar frases ambiguas (ej. 'algo como X') como descripciones de contenido si contienen palabras clave de género/ánimo, no como títulos de película
+--- [observado] 17. En caso de error de búsqueda de título, el sistema debe extraer automáticamente los géneros y tags asociados a la cadena de texto proporcionada para generar recomendaciones — El constructor dice que llm.analizar extrae géneros y tags de X cuando no lo encuentra, pero no hay ninguna prueba. El pedido 9 del usuario exige pruebas automáticas para cada punto. Agregar una prueba con un título inexistente que contenga un género (p. ej. 'parecida a El mecanismo de terror', con X tomado como título) y comprobar que los filtros incluyen Horror y que hay recomendaciones.
+--- [observado] 18. Las explicaciones de las tarjetas de recomendación deben rotar las películas de referencia y evitar repetir la misma en todas las respuestas — La lógica existe: un set 'usadas' se comparte entre tarjetas (llm.py:200-228), aunque refs se declara dos veces en l.255 y l.260. No hay ninguna prueba que verifique que las explicaciones no repiten la película de referencia. Agregar una prueba con varias tarjetas de la mini.
+-+- [verificado] 17. En caso de error de búsqueda de título, el sistema debe extraer automáticamente los géneros y tags asociados a la cadena de texto proporcionada para generar recomendaciones
+-+- [verificado] 18. Las explicaciones de las tarjetas de recomendación deben rotar las películas de referencia y evitar repetir la misma en todas las respuestas
++@@ -32,23 +37,48 @@ El resto del plan está aprobado.
+  - [verificado] 19. La interfaz de usuario debe mostrar la afinidad ALS como etiquetas textuales ('afinidad alta/media') en lugar de una escala numérica tipo estrellas
+  - [verificado] 20. El script local spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos en modo local
+  - [verificado] 21. Script scripts/probar_pedidos.py que usa los artefactos REALES de 25M (no la muestra mini) e imprime el top-5, con géneros, votos y tags cumplidos, para una lista de pedidos que incluya 'drama policial con un twist épico' y 'algo como de drama policial con un twist épico'. Lo ejecuta el usuario a mano; en las pruebas automáticas se verifica con la muestra mini que el script corre.
+-+- [pendiente] 22. El LLM solo redacta el texto final de la respuesta sin seleccionar ni filtrar películas
+-+- [pendiente] 23. Si Ollama falla o tarda más de 20s, se activa automáticamente la plantilla del modo reglas
+-+- [pendiente] 24. Cada respuesta debe incluir obligatoriamente una línea 'Entendí: …' que liste las condiciones finales aplicadas
+-+- [pendiente] 25. La interpretación del pedido (pedido.py) es la única fuente de verdad para los filtros; el modelo no elige nada
+-+- [pendiente] 26. Los datos recibidos por el LLM incluyen explícitamente las condiciones cumplidas, película parecida y afinidad ALS
+-+- [pendiente] 27. El sistema debe rechazar cualquier intento del LLM de omitir géneros o agregar duraciones no solicitadas en la interpretación
+-+- [pendiente] 28. La prueba 'drama policial con un twist final' debe resultar obligatoriamente en los filtros: Crime + Drama + tags giro (sin duración)
+-+- [pendiente] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
+-+- [pendiente] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
+-+- [pendiente] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
++-- [pendiente] 22. El LLM solo redacta el texto final de la respuesta sin seleccionar ni filtrar películas
++-- [pendiente] 23. Si Ollama falla o tarda más de 20s, se activa automáticamente la plantilla del modo reglas
++-- [pendiente] 24. Cada respuesta debe incluir obligatoriamente una línea 'Entendí: …' que liste las condiciones finales aplicadas
++-- [pendiente] 25. La interpretación del pedido (pedido.py) es la única fuente de verdad para los filtros; el modelo no elige nada
++-- [pendiente] 26. Los datos recibidos por el LLM incluyen explícitamente las condiciones cumplidas, película parecida y afinidad ALS
++-- [pendiente] 27. El sistema debe rechazar cualquier intento del LLM de omitir géneros o agregar duraciones no solicitadas en la interpretación
++-- [pendiente] 28. La prueba 'drama policial con un twist final' debe resultar obligatoriamente en los filtros: Crime + Drama + tags giro (sin duración)
++-- [pendiente] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
++-- [pendiente] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
++-- [pendiente] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
+++- [verificado] 22. El LLM solo redacta el texto final de la respuesta sin seleccionar ni filtrar películas
+++- [verificado] 23. Si Ollama falla o tarda más de 20s, se activa automáticamente la plantilla del modo reglas
+++- [verificado] 24. Cada respuesta debe incluir obligatoriamente una línea 'Entendí: …' que liste las condiciones finales aplicadas
+++- [verificado] 25. La interpretación del pedido (pedido.py) es la única fuente de verdad para los filtros; el modelo no elige nada
+++- [verificado] 26. Los datos recibidos por el LLM incluyen explícitamente las condiciones cumplidas, película parecida y afinidad ALS
+++- [verificado] 27. El sistema debe rechazar cualquier intento del LLM de omitir géneros o agregar duraciones no solicitadas en la interpretación
+++- [verificado] 28. La prueba 'drama policial con un twist final' debe resultar obligatoriamente en los filtros: Crime + Drama + tags giro (sin duración)
+++- [verificado] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
+++- [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
+++- [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
+++- [pendiente] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
+++- [pendiente] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+++- [pendiente] 34. En el primer 
 …(diff recortado)

@@ -135,3 +135,69 @@ def test_integracion_kafka_real(spark, base, ruta_mini, tmp_path, requiere_kafka
             kafka_utils.borrar_topic(topic)
         except Exception:
             pass
+
+
+# --------------------------------------------------------------------------- #
+# Paquete 7: topic 'resenas' -> tabla resenas
+# --------------------------------------------------------------------------- #
+
+RESENAS = [
+    {"uid": "r1", "userId": 162542, "movieId": 1, "texto": "Preciosa", "timestamp": 100},
+    {"uid": "r2", "userId": 162543, "movieId": 1, "texto": "Una IDIÓTA total",
+     "timestamp": 101},                                       # el filtro la descarta
+    {"uid": "r3", "userId": 162543, "movieId": 6, "texto": "Tensa de principio a fin",
+     "timestamp": 102},
+]
+
+
+def test_resenas_fuente_archivo_y_lote_idempotente(spark, tmp_path):
+    import json
+
+    entrada = tmp_path / "resenas_in"
+    entrada.mkdir()
+    (entrada / "resenas.json").write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in RESENAS) + "\n",
+        encoding="utf-8")
+    db = tmp_path / "estado.db"
+    ctx = streaming.ContextoResenas(db, log=lambda *_: None)
+    q = streaming.iniciar_streaming_resenas(spark, ctx, tmp_path / "chk", "archivo",
+                                            ruta=entrada, available_now=True)
+    assert q.awaitTermination(ESPERA_S)
+    assert q.exception() is None
+    assert estado.contar(ctx.con, "resenas") == 2
+    assert [r["texto"] for r in estado.resenas_pelicula(ctx.con, 1)] == ["Preciosa"]
+    df = spark.read.schema(streaming.ESQUEMA_RESENA).json(str(entrada))
+    assert streaming.procesar_lote_resenas(df, 0, ctx) == 0      # lote ya aplicado
+    assert streaming.procesar_lote_resenas(df, 50, ctx) == 0     # mismos uid
+    assert estado.contar(ctx.con, "resenas") == 2
+    # Los lotes de reseñas no chocan con los de ratings (otra consulta).
+    assert not estado.lote_procesado(ctx.con, "ratings", 0)
+    ctx.cerrar()
+
+
+def test_integracion_kafka_real_resenas(spark, tmp_path, requiere_kafka):
+    if not getattr(spark, "conector_kafka_ok", False):
+        pytest.fail("El broker responde pero Spark no tiene el conector spark-sql-kafka")
+    from recomendador import eventos
+
+    topic = f"resenas_test_{uuid.uuid4().hex[:12]}"
+    kafka_utils.crear_topic(topic, particiones=2)
+    original = eventos.TOPIC_RESENAS
+    eventos.TOPIC_RESENAS = topic
+    try:
+        db = tmp_path / "estado.db"
+        r = eventos.publicar_resena(162542, 1, "Me hizo llorar", estado_db=db)
+        assert r.via == "kafka", r.aviso
+        ctx = streaming.ContextoResenas(db, consulta=topic, log=lambda *_: None)
+        q = streaming.iniciar_streaming_resenas(spark, ctx, tmp_path / "chk", "kafka",
+                                                topic=topic, available_now=True,
+                                                starting_offsets="earliest")
+        assert q.awaitTermination(ESPERA_S)
+        assert [x["uid"] for x in estado.resenas_pelicula(ctx.con, 1)] == [r.evento["uid"]]
+        ctx.cerrar()
+    finally:
+        eventos.TOPIC_RESENAS = original
+        try:
+            kafka_utils.borrar_topic(topic)
+        except Exception:
+            pass
