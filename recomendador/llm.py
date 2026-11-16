@@ -30,7 +30,6 @@ from .pedido import interpretar_pedido
 log = logging.getLogger(__name__)
 
 AVISO_REGLAS = "Ollama no responde: usando modo reglas"
-MAX_RONDAS_HERRAMIENTAS = 4      # bucle de herramientas limitado
 TIMEOUT_OLLAMA_S = 20         # tope de la conexión HTTP con Ollama
 LIMITE_RESPUESTA_S = 20       # tope total: si Ollama tarda más, plantilla de reglas
 ENTENDI_NO_PEDIDO = "Entendí: no es un pedido de películas."
@@ -153,20 +152,6 @@ def recomendar_detectado(userId: int, herramientas: Herramientas, a: dict) -> di
     for i, r in enumerate(recs[:a["n"]], start=1):
         r["rank"] = i
     return {**res, "recomendaciones": recs[:a["n"]]}
-
-
-def completar_args(args: dict, a: dict) -> dict:
-    """Completa los filtros que el modelo omitió al llamar a ``recomendar``."""
-    args = dict(args)
-    if not args.get("generos") and a["generos"]:
-        args["generos"] = a["generos"]
-    if not args.get("tags") and a["tags"]:
-        args["tags"] = a["tags"]
-    if not args.get("max_duracion_min") and a["max_duracion_min"]:
-        args["max_duracion_min"] = a["max_duracion_min"]
-    if not args.get("n"):
-        args["n"] = a["n"]
-    return args
 
 
 def resumen_condiciones(r: dict) -> str:
@@ -455,61 +440,6 @@ def _leer_redaccion(contenido: str, ids_validos: set) -> tuple[str, dict, list]:
     return intro, textos, descartadas
 
 
-def _como_dict(llamada) -> dict:
-    if isinstance(llamada, dict):
-        return llamada
-    try:
-        return llamada.model_dump()
-    except AttributeError:
-        return {"function": {"name": _campo(_campo(llamada, "function"), "name"),
-                             "arguments": _campo(_campo(llamada, "function"), "arguments")}}
-
-
-def _validar(contenido: str, validas: dict[int, dict], usadas: list[str], userId: int,
-             herramientas: Herramientas) -> Respuesta:
-    """Deja solo películas de las herramientas y agrega la evidencia de cada una."""
-    perfil = herramientas.perfil_gustos(userId)
-    calificadas = herramientas.peliculas_calificadas(userId, n=200).get("peliculas", [])
-    refs: set = set()   # películas de referencia ya usadas (no se repiten)
-    vistas = {c["movieId"] for c in calificadas}
-    dato = _extraer_json(contenido)
-    propuestas, descartadas = [], []
-    if dato is not None:
-        intro = str(dato.get("intro") or "").strip()
-        for item in dato.get("recomendaciones") or []:
-            try:
-                mid = int(item.get("movieId"))
-            except (TypeError, ValueError, AttributeError):
-                descartadas.append(item)
-                continue
-            if mid in validas and mid not in vistas:
-                propuestas.append((mid, str(item.get("explicacion") or "").strip()))
-            else:
-                descartadas.append(item.get("titulo") or mid)
-    else:
-        # Sin JSON: se rescatan solo títulos de las herramientas citados en el texto y no
-        # se muestra el texto libre (podría nombrar películas inventadas).
-        intro = ""
-        t = _normalizar(contenido)
-        propuestas = [(mid, "") for mid, r in validas.items()
-                      if _normalizar(r["titulo"]) in t and mid not in vistas]
-    recs, vistos, refs = [], set(), set()
-    for mid, explicacion in propuestas:
-        if mid in vistos:
-            continue
-        vistos.add(mid)
-        ficha = validas[mid]
-        evidencia = datos_de_respaldo(ficha, perfil, calificadas, refs)
-        recs.append(_con_condiciones({**ficha, "explicacion": (
-            explicacion + " — " if explicacion else "") + evidencia}))
-    # Sin recomendaciones válidas el texto queda vacío: la red de seguridad lo completa.
-    texto = intro or ("Esto encontré con tus datos:" if recs else "")
-    if descartadas:
-        texto += f" (Descarté {len(descartadas)} película(s) que no venían de las herramientas.)"
-    return Respuesta(texto=texto, recomendaciones=recs, proveedor="ollama",
-                     herramientas_usadas=usadas, descartadas=descartadas)
-
-
 # --------------------------------------------------------------------------- #
 # Punto de entrada
 # --------------------------------------------------------------------------- #
@@ -565,5 +495,5 @@ def descripcion_config() -> dict:
 
 __all__ = ["responder", "responder_reglas", "responder_ollama", "interpretar", "analizar",
            "resumen_condiciones", "AYUDA",
-           "Respuesta", "AVISO_REGLAS", "MAX_RONDAS_HERRAMIENTAS", "descripcion_config",
+           "Respuesta", "AVISO_REGLAS", "descripcion_config",
            "estado_ollama", "PROVEEDOR_COMPLETADO"]

@@ -1,4 +1,5 @@
-# correr_25m.ps1 - Corre en orden los pasos 1 a 7 de "Corrida completa de 25M" del README.
+# correr_25m.ps1 - Corre en orden los pasos 1 a 8 de "Corrida completa de 25M" del README.
+# El paso 8 es la capa batch de la app (Spark): artefactos\25m\app\*.parquet.
 #
 # Uso, desde la carpeta del proyecto en PowerShell (con Docker/Kafka corriendo):
 #     powershell -ExecutionPolicy Bypass -File .\correr_25m.ps1
@@ -45,7 +46,8 @@ $pasos = @(
     @{ n = 4; nombre = "Entrenar ALS batch y evaluar";         args = @("scripts/entrenar_batch.py") },
     @{ n = 5; nombre = "Perfiles de gusto y tipos de espectador"; args = @("scripts/perfilar_usuarios.py", "--hasta", $corte) },
     @{ n = 6; nombre = "Experimento de escalabilidad";         args = $escala },
-    @{ n = 7; nombre = "Figuras del poster";                   args = @("scripts/figuras_poster.py") }
+    @{ n = 7; nombre = "Figuras del poster";                   args = @("scripts/figuras_poster.py") },
+    @{ n = 8; nombre = "Precalculos Spark de la app (parquets)"; args = @("scripts/precalcular_app.py", "--perfil", "25m", "--corte", $corte) }
 )
 
 if (-not (Test-Path $py)) { Anotar "No encuentro $py. Corre primero setup_entorno.ps1."; exit 1 }
@@ -57,7 +59,7 @@ $total = Get-Date
 try {
     foreach ($p in $pasos) {
         if ($p.n -lt $Desde) { continue }
-        Anotar "PASO $($p.n)/7: $($p.nombre) ..."
+        Anotar "PASO $($p.n)/$($pasos.Count): $($p.nombre) ..."
         $t0 = Get-Date
         & $py -u @($p.args) 2>&1 | ForEach-Object { $l = "$_"; Write-Host $l; Add-Content -Path $log -Value $l -Encoding UTF8 }
         $codigo = $LASTEXITCODE
