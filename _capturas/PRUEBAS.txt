@@ -1,50 +1,41 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 - PASA: [aceptación] Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts — codigo 0: ..................                                                       [100%]
-18 passed in 1.29s
+18 passed in 1.16s
 - PASA: [aceptación] Interpretación ES/EN, errores de tipeo, ánimos y ocasiones — codigo 0: ........................................                                 [100%]
 40 passed in 0.24s
 - PASA: [aceptación] Búsqueda de títulos con y sin TMDb (cliente falso, caché) — codigo 0: .....................                                                    [100%]
-21 passed in 0.68s
+21 passed in 0.66s
 - PASA: [aceptación] Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía — codigo 0: .....                                                                    [100%]
-5 passed in 48.89s
+5 passed in 28.85s
 - PASA: [aceptación] buscar_pelicula como herramienta y caso inexistente — codigo 0: ..........                                                               [100%]
-10 passed in 1.02s
+10 passed in 1.05s
 - PASA: [aceptación] Batería de 30 pedidos en modo reglas y con LLM simulado — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 2.44s
+129 passed in 2.51s
 - PASA: [aceptación] Red de seguridad y mensaje de título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 1.01s
+8 passed in 1.14s
 - PASA: [aceptación] La figura no tiene etiquetas superpuestas — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-4 passed, 14 warnings in 2.46s
-- PASA: Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía, duración sin dato no baja el nivel — codigo 0: .....                                                                    [100%]
-5 passed in 27.72s
-- PASA: buscar_pelicula en ESQUEMAS, búsqueda aproximada, caso inexistente con mensaje de una frase y título en español desde la caché — codigo 0: ..........                                                               [100%]
-10 passed in 1.04s
-- PASA: Regresión: herramientas (6 esquemas) y app con orden por niveles — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
-    if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-34 passed, 12 warnings in 42.44s
+4 passed, 14 warnings in 2.51s
 - PASA: Batería de 30 pedidos en modo reglas y con 3 LLM simulados — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 2.48s
+129 passed in 2.49s
 - PASA: Red de seguridad, regla de sistema, condiciones por tarjeta y título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 1.00s
+8 passed in 1.11s
 - PASA: Regresión del chat y la app (pruebas ya verificadas) — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-63 passed, 12 warnings in 42.44s
+63 passed, 12 warnings in 43.71s
 - PASA: Prueba de aceptación: las etiquetas de la figura tipos_espectador no se superponen (muestra mini y caso de estrés con 10 tipos) — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-4 passed, 14 warnings in 2.36s
+4 passed, 14 warnings in 2.39s
 - PASA: Regresión: las figuras del póster y el README siguen cumpliendo sus pruebas — codigo 0: 
 
 tests/test_poster.py::test_genera_png_y_svg_no_vacios
@@ -52,79 +43,95 @@ tests/test_poster.py::test_genera_png_y_svg_no_vacios
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-24 passed, 14 warnings in 10.15s
+24 passed, 14 warnings in 10.03s
 - PASA: Pruebas de los niveles v2 (requisitos 12-21) — codigo 0: ......                                                                   [100%]
-6 passed in 1.99s
+6 passed in 2.05s
 - PASA: Regresión de puntaje, batería y red de seguridad — codigo 0: ........................................................................ [ 39%]
 ........................................................................ [ 79%]
 ......................................                                   [100%]
-182 passed in 29.91s
+182 passed in 30.18s
 - PASA: Integración por niveles: poco votadas al final, fórmula del híbrido, tag sin datos, título no encontrado aporta géneros y referencias que no se repiten — codigo 0: .......                                                                  [100%]
-7 passed in 1.04s
+7 passed in 1.06s
 - PASA: Batería de 30 pedidos + 2 casos de drama policial en 4 modos — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 2.71s
+129 passed in 2.69s
 - PASA: Pruebas auxiliares de niveles v2 y del script probar_pedidos con la mini — codigo 0: ......                                                                   [100%]
-6 passed in 2.24s
+6 passed in 2.07s
 - PASA: Suite completa (regresión) — codigo 0: ecomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
     if is_categorical_dtype(series.dtype):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-422 passed, 254 warnings in 199.97s (0:03:19)
+437 passed, 266 warnings in 239.58s (0:03:59)
 - PASA: El LLM solo redacta: filtros finales Crime+Drama+twist sin duración, línea Entendí y timeout de 20 s — codigo 0: ......                                                                   [100%]
-6 passed in 1.48s
+6 passed in 1.88s
 - PASA: Chat, red de seguridad y batería de 32 mensajes en 4 modos con el nuevo flujo — codigo 0: ........................................................................ [ 49%]
 ........................................................................ [ 98%]
 ..                                                                       [100%]
-146 passed in 35.81s
+146 passed in 38.04s
 - PASA: [aceptación] Precálculos Spark sobre la muestra mini (corte, LSH, personas, populares por tipo) — codigo 0: s\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
     if is_categorical_dtype(series.dtype):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 36 warnings in 66.18s (0:01:06)
+12 passed, 36 warnings in 65.21s (0:01:05)
 - PASA: [aceptación] Regresión del chat tras la limpieza de llm.py — codigo 0: ........................................................................ [ 53%]
 ...............................................................          [100%]
-135 passed in 3.02s
+135 passed in 3.05s
 - PASA: [aceptación] Cuentas bcrypt, userIds > 162541 y límite de 20 por minuto — codigo 0: ......                                                                   [100%]
-6 passed in 0.13s
+6 passed in 0.11s
 - PASA: [aceptación] Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas y moderación local — codigo 0: ...........................                                              [100%]
-27 passed in 37.34s
+27 passed in 36.25s
 - PASA: [aceptación] Tipo de espectador del centroide más cercano para usuarios nuevos, con el mismo escalado — codigo 0: ......                                                                   [100%]
-6 passed in 24.14s
+6 passed in 22.77s
+- PASA: [aceptación] Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini — codigo 0: sers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+9 passed, 12 warnings in 36.33s
+- PASA: [aceptación] TMDb con caché y respaldo sin clave — codigo 0: ......                                                                   [100%]
+6 passed in 0.65s
 - PASA: Precálculos Spark sobre la muestra mini: corte, LSH, personas, populares por tipo, script en menos de 3 min y llm.py sin código muerto — codigo 0: s\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
     if is_categorical_dtype(series.dtype):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 36 warnings in 70.79s (0:01:10)
+12 passed, 36 warnings in 85.32s (0:01:25)
 - PASA: Regresión de la red de seguridad, el enriquecimiento IMDb (sigue usando imdb-mini) y el corte — codigo 0: ...........................................                              [100%]
-43 passed in 50.71s
+43 passed in 29.15s
 - PASA: Precálculos Spark sobre la muestra mini: corte, LSH con respaldo exacto, personas, populares por tipo y script en menos de 3 min — codigo 0: s\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
     if is_categorical_dtype(series.dtype):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 36 warnings in 66.95s (0:01:06)
+12 passed, 36 warnings in 65.22s (0:01:05)
 - PASA: Regresión tanda 1: las pruebas que no usan Spark (331, unos 48 s) — codigo 0: oster.py::test_genera_png_y_svg_no_vacios
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-360 passed, 62 deselected, 14 warnings in 48.02s
+367 passed, 70 deselected, 14 warnings in 49.29s
 - PASA: Regresión tanda 2a: pruebas Spark de batch, perfiles, corte, demo y app — codigo 0: oyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-33 passed, 24 deselected, 146 warnings in 92.62s (0:01:32)
-- PASA: Regresión tanda 2b: pruebas Spark de herramientas, niveles, puntaje, red de seguridad y enriquecimiento — codigo 0: proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+33 passed, 24 deselected, 146 warnings in 90.29s (0:01:30)
+- PASA: Regresión tanda 2b: pruebas Spark de herramientas, niveles, puntaje, red de seguridad y enriquecimiento — codigo 0: ments\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-9 passed, 32 deselected, 24 warnings in 63.78s (0:01:03)
+9 passed, 32 deselected, 24 warnings in 42.98s
 - PASA: Regresión tanda 2c: pruebas Spark de streaming, ingesta, póster, entorno y títulos — codigo 0: ......                                                                   [100%]
-6 passed, 134 deselected in 36.52s
+6 passed, 134 deselected in 37.77s
 - PASA: Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas, moderación local y streaming de reseñas — codigo 0: ...........................                                              [100%]
-27 passed in 55.64s
+27 passed in 36.70s
 - PASA: Regresión completa (422 pruebas) — codigo 0: ecomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
     if is_categorical_dtype(series.dtype):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-422 passed, 254 warnings in 224.78s (0:03:44)
+437 passed, 266 warnings in 216.76s (0:03:36)
+- PASA: Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini (incluye C1 sin pyspark y C7 de tiempo) — codigo 0: sers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+9 passed, 12 warnings in 35.70s
+- PASA: TMDb con caché, tráiler y respaldo SVG sin clave — codigo 0: ......                                                                   [100%]
+6 passed in 0.60s
+- PASA: Regresión del tipo de espectador de usuarios nuevos (paquete 7) — codigo 0: ......                                                                   [100%]
+6 passed in 22.75s
