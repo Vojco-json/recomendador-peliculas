@@ -1,47 +1,67 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 - PASA: [aceptación] Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts — codigo 0: ..................                                                       [100%]
-18 passed in 0.88s
+18 passed in 0.86s
 - PASA: [aceptación] Regresión completa — codigo 0: ::test_genera_png_y_svg_no_vacios
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-339 passed, 4 skipped, 198 warnings in 151.79s (0:02:31)
+343 passed, 4 skipped, 198 warnings in 153.37s (0:02:33)
 - PASA: [aceptación] Interpretación ES/EN, errores de tipeo, ánimos y ocasiones — codigo 0: ........................................                                 [100%]
 40 passed in 0.24s
 - PASA: [aceptación] Búsqueda de títulos con y sin TMDb (cliente falso, caché) — codigo 0: .....................                                                    [100%]
 21 passed in 0.64s
 - PASA: [aceptación] Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía — codigo 0: .....                                                                    [100%]
-5 passed in 27.28s
+5 passed in 27.29s
 - PASA: [aceptación] buscar_pelicula como herramienta y caso inexistente — codigo 0: ..........                                                               [100%]
-10 passed in 0.72s
+10 passed in 0.73s
 - PASA: [aceptación] Batería de 30 pedidos en modo reglas y con LLM simulado — codigo 0: ........................................................................ [ 59%]
 .................................................                        [100%]
-121 passed in 2.09s
+121 passed in 2.08s
 - PASA: [aceptación] Red de seguridad y mensaje de título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 0.73s
+8 passed in 0.74s
+- PASA: [aceptación] La figura no tiene etiquetas superpuestas — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
+  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 passed, 14 warnings in 2.31s
 - PASA: Interpretación ES/EN, errores de tipeo, ánimos, ocasiones y llm.interpretar — codigo 0: ........................................                                 [100%]
 40 passed in 0.24s
 - PASA: Búsqueda de títulos con y sin TMDb (sesión falsa, caché temporal, sin red) — codigo 0: .....................                                                    [100%]
 21 passed in 0.64s
 - PASA: Regresión: el chat por reglas y la app siguen funcionando — codigo 0: .........                                                                [100%]
-9 passed in 33.23s
+9 passed in 33.34s
 - PASA: Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía, duración sin dato no baja el nivel — codigo 0: .....                                                                    [100%]
-5 passed in 27.30s
+5 passed in 27.87s
 - PASA: buscar_pelicula en ESQUEMAS, búsqueda aproximada, caso inexistente con mensaje de una frase y título en español desde la caché — codigo 0: ..........                                                               [100%]
-10 passed in 0.73s
+10 passed in 0.76s
 - PASA: Regresión: herramientas (6 esquemas) y app con orden por niveles — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-34 passed, 12 warnings in 41.34s
+34 passed, 12 warnings in 43.04s
 - PASA: Batería de 30 pedidos en modo reglas y con 3 LLM simulados — codigo 0: ........................................................................ [ 59%]
 .................................................                        [100%]
-121 passed in 2.07s
+121 passed in 2.13s
 - PASA: Red de seguridad, regla de sistema, condiciones por tarjeta y título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 0.73s
+8 passed in 0.76s
 - PASA: Regresión del chat y la app (pruebas ya verificadas) — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-63 passed, 12 warnings in 40.94s
+63 passed, 12 warnings in 41.83s
+- PASA: Prueba de aceptación: las etiquetas de la figura tipos_espectador no se superponen (muestra mini y caso de estrés con 10 tipos) — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
+  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 passed, 14 warnings in 2.34s
+- PASA: Regresión: las figuras del póster y el README siguen cumpliendo sus pruebas — codigo 0: )
+
+tests/test_poster.py::test_genera_png_y_svg_no_vacios
+  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+24 passed, 14 warnings in 9.86s

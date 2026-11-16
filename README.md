@@ -205,6 +205,61 @@ $env:MODO = "demo"
 Si Ollama no responde, la app muestra «Ollama no responde: usando modo reglas» y sigue
 funcionando con el proveedor `reglas`.
 
+### Corte temporal en todos los modos
+
+El ALS se entrena con los ratings anteriores a `FECHA_CORTE`. Por eso, en **todos** los
+modos (completo, demo, reglas y Ollama) el historial de un usuario es: sus ratings
+anteriores al corte más los eventos que llegaron en vivo (`artefactos/estado.db`). Lo
+posterior al corte nunca se usa para recomendar ni para excluir «ya vistas».
+
+| Datos | Corte usado |
+|---|---|
+| MovieLens 25M | `FECHA_CORTE` (por defecto 2018-01-01, configurable por variable de entorno) |
+| Muestra `ml-mini` (pruebas) | `FECHA_CORTE_MINI` = 2016-01-01 |
+
+### Cómo se ordenan las recomendaciones: niveles de coincidencia
+
+El pedido («algo corto y de terror», «a funny movie», «comedia ligera de menos de 100
+min»…) se interpreta en `recomendador/pedido.py` (español e inglés, tolera tildes y
+errores de tipeo) y se convierte en condiciones: géneros, tags del genome (relevancia
+≥ 0,5) y duración máxima. La herramienta `recomendar` **no descarta** películas:
+
+1. calcula el nivel de cada candidata = condiciones pedidas − condiciones incumplidas
+   (un dato que falta, como una duración desconocida, no baja el nivel);
+2. ordena por nivel, de mayor a menor;
+3. dentro de cada nivel, ordena por afinidad ALS (top-N en vivo y luego fold-in).
+
+Así, si nada cumple todo, aparecen primero las que cumplen más condiciones, y el chat
+nunca termina sin películas.
+
+### Buscar una película por título (`buscar_pelicula`)
+
+`buscar_pelicula` busca de forma aproximada (difflib, sin tildes ni mayúsculas) en los
+títulos de MovieLens. **`TMDB_API_KEY` es opcional**: si está definida, además busca
+títulos en español en TMDb (`/search/movie` con `language=es-ES`, p. ej. «El padrino»)
+y guarda las respuestas en `artefactos/tmdb_cache.json`; sin clave, todo funciona igual
+usando solo MovieLens y no se hace ninguna llamada a la red. Las pruebas usan un cliente
+TMDb falso.
+
+### Regenerar sobre los 25M (paso manual)
+
+Las pruebas solo usan la muestra `ml-mini` y ningún paso automático corre sobre los 25M
+(tardaría mucho más de 10 minutos). Para actualizar artefactos y figuras con los datos
+completos, hazlo a mano en PowerShell desde la raíz del proyecto:
+
+```powershell
+.\correr_25m.ps1                                 # corrida completa (descarga, ALS, perfiles, escalabilidad y figuras)
+.venv\Scripts\python scripts/figuras_poster.py   # solo rehace las figuras con los artefactos ya generados
+```
+
+Si ya corriste `correr_25m.ps1` antes de este cambio, basta con el segundo comando para
+obtener la nueva figura `tipos_espectador`.
+
+La figura `tipos_espectador` usa barras horizontales ordenadas de mayor a menor, con el
+nombre de cada tipo a la izquierda y «N usuarios · X %» al final de la barra, más un mapa
+PCA sin rótulos con los mismos colores. `tests/test_poster_tipos.py` comprueba que las
+etiquetas no se superponen.
+
 ## Pruebas
 
 Usan la muestra pequeña `muestras/ml-mini`, tardan menos de 2 minutos por suite y se
