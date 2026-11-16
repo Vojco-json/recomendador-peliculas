@@ -73,7 +73,8 @@ def test_titulo_existente_es_referencia_y_no_se_recomienda(herr):
 
 def test_saludo_no_recomienda(herr):
     r = llm.responder("hola", 1, herr, proveedor="reglas")
-    assert r.texto == llm.AYUDA and r.recomendaciones == []
+    assert r.texto.startswith(llm.AYUDA) and r.recomendaciones == []
+    assert "Entendí: no es un pedido" in r.texto
 
 
 def test_tarjeta_de_la_app_muestra_condiciones():

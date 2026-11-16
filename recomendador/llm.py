@@ -18,6 +18,8 @@ import json
 import logging
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass, field
 
 from . import config, perfiles
@@ -29,25 +31,22 @@ log = logging.getLogger(__name__)
 
 AVISO_REGLAS = "Ollama no responde: usando modo reglas"
 MAX_RONDAS_HERRAMIENTAS = 4      # bucle de herramientas limitado
-TIMEOUT_OLLAMA_S = 120
+TIMEOUT_OLLAMA_S = 20         # tope de la conexión HTTP con Ollama
+LIMITE_RESPUESTA_S = 20       # tope total: si Ollama tarda más, plantilla de reglas
+ENTENDI_NO_PEDIDO = "Entendí: no es un pedido de películas."
 
-SISTEMA = """Eres un recomendador de películas para el usuario {userId} de MovieLens.
-Reglas obligatorias:
-- No inventes datos. Usa las herramientas para ver su perfil (perfil_gustos), sus
-  películas calificadas (peliculas_calificadas), sus tags y recomendaciones (recomendar).
-- SOLO puedes recomendar películas devueltas por la herramienta recomendar.
-- 'corto' significa max_duracion_min=100; 'liviano' significa generos
-  ["Comedy","Animation","Children"].
-- Ánimos y ocasiones también son filtros: 'para llorar' o 'triste' -> generos ["Drama"]
-  y tags ["sad"]; 'en familia' -> generos ["Children","Animation"]; 'que haga pensar'
-  -> tags ["thought-provoking"]; 'con giro final' -> tags ["twist ending"]; 'que dé
-  miedo' -> generos ["Horror"]. Pásalos siempre a recomendar.
-- Si el usuario nombra una película ('algo como X'), llama primero a buscar_pelicula.
-  Si no está en el catálogo, dilo en una frase y recomienda igual con lo demás pedido.
-- Si el usuario pide películas, termina SIEMPRE con al menos una recomendación.
-- Explica cada recomendación con datos concretos del usuario y de la película.
-- Responde en español y al final entrega SOLO un JSON con esta forma:
+SISTEMA = """Eres el redactor de un recomendador de películas para el usuario {userId}.
+Tu ÚNICO trabajo es escribir el texto de la respuesta. Reglas obligatorias:
+- El código ya interpretó el pedido (géneros, duración, ánimos y ocasiones, y la
+  película nombrada, buscada con buscar_pelicula) y ya eligió las películas. No
+  cambies filtros, no agregues ni quites películas y no inventes datos.
+- Usa solo los DATOS que recibes: condiciones que cumple cada película (cumple /
+  no_cumple / sin_datos), la película parecida que el usuario calificó y la afinidad
+  (escríbela como texto, nunca como número ni estrellas).
+- Si DATOS trae aviso_titulo (la película nombrada no está), dilo en una frase.
+- Responde en español y entrega SOLO un JSON con esta forma:
   {{"intro": "frase breve", "recomendaciones": [{{"movieId": 123, "explicacion": "..."}}]}}
+  con los mismos movieId de DATOS y en el mismo orden.
 """
 
 
@@ -60,6 +59,7 @@ class Respuesta:
     aviso: str | None = None
     herramientas_usadas: list[str] = field(default_factory=list)
     descartadas: list = field(default_factory=list)            # películas inventadas
+    filtros: dict = field(default_factory=dict)                # filtros finales (pedido.py)
 
 
 # --------------------------------------------------------------------------- #
@@ -249,19 +249,74 @@ def responder_reglas(mensaje: str, userId: int, herramientas: Herramientas,
     """
     a = analizar(mensaje, herramientas)
     if not a["pide"]:
-        return Respuesta(texto=AYUDA, proveedor="reglas", aviso=aviso)
+        return Respuesta(texto=AYUDA + "\n\n" + ENTENDI_NO_PEDIDO, proveedor="reglas",
+                         aviso=aviso)
+    perfil, _, recs, avisos = _recomendaciones_del_pedido(a, userId, herramientas)
+    texto = _texto_reglas(a, perfil, recs, avisos) + "\n\n" + entendi(a)
+    return Respuesta(texto=texto, recomendaciones=recs, proveedor="reglas", aviso=aviso,
+                     herramientas_usadas=_usadas(a), filtros=filtros_finales(a))
+
+
+def _usadas(a: dict) -> list[str]:
+    """Herramientas que el código usó para armar la respuesta."""
+    usadas = ["perfil_gustos", "peliculas_calificadas", "recomendar"]
+    if a["referencia"] is not None or a["frase_titulo"]:
+        usadas.append("buscar_pelicula")
+    return usadas
+
+
+def entendi(a: dict) -> str:
+    """Línea «Entendí: …» con las condiciones finales aplicadas (salen de pedido.py)."""
+    partes = []
+    generos = [perfiles.GENEROS_ES.get(g, g) for g in a["generos"] if g != "Family"]
+    if generos:
+        partes.append(("género " if len(generos) == 1 else "géneros ") + _lista_es(generos))
+    if a["tags"]:
+        partes.append("tags " + ", ".join(f"«{t}»" for t in a["tags"]))
+    if a["max_duracion_min"]:
+        partes.append(f"duración de {a['max_duracion_min']} min o menos")
+    if a.get("referencia") is not None:
+        partes.append("parecidas a la película que nombraste")
+    return "Entendí: " + ("; ".join(partes) if partes
+                          else "sin condiciones; ordené por tus gustos") + "."
+
+
+def filtros_finales(a: dict) -> dict:
+    """Filtros que recibe ``recomendar``: salen SOLO de la interpretación del pedido."""
+    return {"generos": list(a["generos"]), "tags": list(a["tags"]),
+            "max_duracion_min": a["max_duracion_min"], "n": a["n"]}
+
+
+def _recomendaciones_del_pedido(a: dict, userId: int, herramientas: Herramientas):
+    """Lista final, la misma en ambos modos: recomendar con lo que entendió pedido.py."""
     perfil = herramientas.perfil_gustos(userId)
     calificadas = herramientas.peliculas_calificadas(userId, n=200).get("peliculas", [])
     refs: set = set()   # películas de referencia ya usadas (no se repiten)
     res = recomendar_detectado(userId, herramientas, a)
-    usadas = ["perfil_gustos", "peliculas_calificadas", "recomendar"]
-    if a["referencia"] is not None or a["frase_titulo"]:
-        usadas.append("buscar_pelicula")
-    recs = [_con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas, refs)})
+    recs = [_con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas,
+                                                                     refs)})
             for r in res["recomendaciones"]]
-    texto = _texto_reglas(a, perfil, recs, res.get("avisos"))
-    return Respuesta(texto=texto, recomendaciones=recs, proveedor="reglas", aviso=aviso,
-                     herramientas_usadas=usadas)
+    return perfil, calificadas, recs, res.get("avisos")
+
+
+def datos_para_redactar(a: dict, recs: list[dict], calificadas: list[dict]) -> dict:
+    """Lo que recibe el LLM: filtros finales y cada recomendación con sus datos."""
+    items = []
+    for r in recs:
+        parecida = next((c for c in calificadas if c["rating"] >= 3.5
+                         and set(c.get("generos", [])) & set(r.get("generos", []))), None)
+        items.append({
+            "movieId": r["movieId"], "titulo": r["titulo"], "anio": r.get("anio"),
+            "generos": r.get("generos", []), "duracion_min": r.get("duracion_min"),
+            "cumple": r.get("cumple", []), "no_cumple": r.get("no_cumple", []),
+            "sin_datos": r.get("no_evaluables", []),
+            "pelicula_parecida_calificada": ({"titulo": parecida["titulo"],
+                                              "rating": parecida["rating"]}
+                                             if parecida else None),
+            "afinidad": r.get("afinidad") or _afinidad(r.get("score")),
+            "evidencia": r.get("explicacion", "")})
+    return {"entendi": entendi(a), "filtros": filtros_finales(a),
+            "aviso_titulo": a["frase_titulo"], "recomendaciones": items}
 
 
 def _texto_reglas(a: dict, perfil: dict, recs: list[dict], avisos) -> str:
@@ -323,85 +378,81 @@ def crear_cliente():
 
 def responder_ollama(mensaje: str, userId: int, herramientas: Herramientas,
                      historial: list[dict] | None = None, cliente=None) -> Respuesta:
-    """Bucle de tool calling limitado. Lanza excepción si Ollama no responde.
+    """El LLM SOLO redacta. Lanza excepción si Ollama falla o tarda más de 20 s.
 
-    La interpretación determinista del pedido se aplica siempre: los filtros que el
-    modelo omite al llamar a ``recomendar`` se completan con lo detectado, y si se
-    pidieron películas pero ninguna propuesta del modelo es válida, la red de
-    seguridad llama a ``recomendar`` con lo detectado y muestra esas tarjetas.
+    1. pedido.py interpreta el mensaje: es la única fuente de los filtros.
+    2. ``recomendar`` arma la lista final (la misma del modo reglas).
+    3. El modelo recibe esa lista con sus datos (condiciones que cumple, película
+       parecida que el usuario calificó, afinidad) y escribe solo el texto. No recibe
+       herramientas: no puede elegir filtros ni películas. Lo que nombre fuera de la
+       lista se descarta; si no entrega una redacción útil, se usa la plantilla de reglas.
     """
     cliente = cliente or crear_cliente()
     a = analizar(mensaje, herramientas)
+    if not a["pide"]:   # saludo o pregunta general: ayuda, sin tarjetas
+        return Respuesta(texto=AYUDA + "\n\n" + ENTENDI_NO_PEDIDO, proveedor="ollama")
+    perfil, calificadas, recs, avisos = _recomendaciones_del_pedido(a, userId, herramientas)
+    datos = datos_para_redactar(a, recs, calificadas)
     mensajes = [{"role": "system", "content": SISTEMA.format(userId=userId)}]
     mensajes += [{"role": h["role"], "content": h["content"]} for h in (historial or [])
                  if h.get("role") in ("user", "assistant")][-6:]
-    mensajes.append({"role": "user", "content": f"(userId={userId}) {mensaje}"})
-
-    validas: dict[int, dict] = {}      # movieId -> ficha devuelta por 'recomendar'
-    usadas: list[str] = []
-    contenido = ""
-    for ronda in range(MAX_RONDAS_HERRAMIENTAS + 1):
-        ultima = ronda == MAX_RONDAS_HERRAMIENTAS
-        resp = cliente.chat(model=config.LLM_MODEL, messages=mensajes,
-                            tools=None if ultima else ESQUEMAS, think=config.LLM_THINK)
-        msg = _campo(resp, "message", {})
-        contenido = _campo(msg, "content", "") or ""     # 'thinking' se ignora siempre
-        llamadas = _campo(msg, "tool_calls") or []
-        if not llamadas or ultima:
-            break
-        mensajes.append({"role": "assistant", "content": contenido,
-                         "tool_calls": [_como_dict(c) for c in llamadas]})
-        for llamada in llamadas:
-            funcion = _campo(llamada, "function", {})
-            nombre = _campo(funcion, "name", "")
-            args = _campo(funcion, "arguments", {}) or {}
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except ValueError:
-                    args = {}
-            args = dict(args)
-            if nombre not in ("info_pelicula", "buscar_pelicula"):
-                args["userId"] = userId          # el chat es siempre del usuario activo
-            if nombre == "recomendar":
-                args = completar_args(args, a)   # filtros que el modelo omitió
-            resultado = herramientas.ejecutar(nombre, args)
-            usadas.append(nombre)
-            if nombre == "recomendar":
-                for r in resultado.get("recomendaciones", []):
-                    validas[int(r["movieId"])] = r
-            mensajes.append({"role": "tool", "content": json.dumps(resultado,
-                                                                   ensure_ascii=False,
-                                                                   default=str)})
-    respuesta = _validar(_limpiar_thinking(contenido), validas, usadas, userId, herramientas)
-    if a["frase_titulo"] and a["frase_titulo"] not in respuesta.texto:
-        respuesta.texto = a["frase_titulo"] + " " + respuesta.texto
-    if not a["pide"]:
-        if not respuesta.recomendaciones and not _extraer_json(_limpiar_thinking(contenido)):
-            respuesta.texto = AYUDA        # saludo o pregunta general: sin tarjetas
-        return respuesta
-    if not respuesta.recomendaciones:
-        _red_de_seguridad(respuesta, userId, herramientas, a)
-    return respuesta
+    mensajes.append({"role": "user", "content": f"Pedido del usuario: {mensaje}\nDATOS: "
+                     + json.dumps(datos, ensure_ascii=False, default=str)})
+    resp = _llamar_con_limite(cliente, LIMITE_RESPUESTA_S, model=config.LLM_MODEL,
+                              messages=mensajes, tools=None, think=config.LLM_THINK)
+    # 'thinking' se ignora siempre; tool_calls también (el modelo no tiene herramientas).
+    contenido = _limpiar_thinking(_campo(_campo(resp, "message", {}), "content", "") or "")
+    intro, textos, descartadas = _leer_redaccion(contenido, {r["movieId"] for r in recs})
+    finales = [{**r, "explicacion": textos[r["movieId"]] + " — " + r["explicacion"]}
+               if textos.get(r["movieId"]) else r for r in recs]
+    proveedor = "ollama"
+    if not intro and not textos:      # sin redacción útil: plantilla del modo reglas
+        intro = _texto_reglas(a, perfil, finales, avisos)
+        proveedor = PROVEEDOR_COMPLETADO
+    else:
+        intro = intro or "Esto encontré con tus datos:"
+        if a["frase_titulo"] and a["frase_titulo"] not in intro:
+            intro = a["frase_titulo"] + " " + intro
+    if descartadas:
+        intro += f" (Descarté {len(descartadas)} película(s) que no estaban en la lista.)"
+    return Respuesta(texto=intro + "\n\n" + datos["entendi"], recomendaciones=finales,
+                     proveedor=proveedor, herramientas_usadas=_usadas(a),
+                     descartadas=descartadas, filtros=datos["filtros"])
 
 
-def _red_de_seguridad(respuesta: Respuesta, userId: int, herramientas: Herramientas,
-                      a: dict) -> None:
-    """Se pidieron películas y no quedó ninguna válida: recomendar con lo detectado."""
-    perfil = herramientas.perfil_gustos(userId)
-    calificadas = herramientas.peliculas_calificadas(userId, n=200).get("peliculas", [])
-    refs: set = set()   # películas de referencia ya usadas (no se repiten)
-    res = recomendar_detectado(userId, herramientas, a)
-    respuesta.herramientas_usadas.append("recomendar")
-    respuesta.recomendaciones = [
-        _con_condiciones({**r, "explicacion": datos_de_respaldo(r, perfil, calificadas, refs)})
-        for r in res["recomendaciones"]]
-    if respuesta.recomendaciones:
-        respuesta.texto = (respuesta.texto + " Te dejo las del recomendador directamente:"
-                           ).strip()
-        # Transparencia: la leyenda «Proveedor: …» indica que las tarjetas no vienen
-        # del LLM sino de recomendar con el pedido interpretado.
-        respuesta.proveedor = PROVEEDOR_COMPLETADO
+def _llamar_con_limite(cliente, limite_s: float, **kw):
+    """cliente.chat con tope de tiempo total; si se pasa, lanza TimeoutError."""
+    ejecutor = ThreadPoolExecutor(max_workers=1)
+    futuro = ejecutor.submit(cliente.chat, **kw)
+    try:
+        return futuro.result(timeout=limite_s)
+    except FuturesTimeout as exc:
+        raise TimeoutError(f"Ollama tardó más de {limite_s:g} s") from exc
+    finally:
+        ejecutor.shutdown(wait=False)
+
+
+def _leer_redaccion(contenido: str, ids_validos: set) -> tuple[str, dict, list]:
+    """Del JSON del modelo toma la intro y el texto de cada película de la lista final.
+
+    Sin JSON no se usa el texto libre (podría nombrar películas inventadas).
+    """
+    dato = _extraer_json(contenido)
+    if dato is None:
+        return "", {}, []
+    intro = str(dato.get("intro") or "").strip()
+    textos, descartadas = {}, []
+    for item in dato.get("recomendaciones") or []:
+        try:
+            mid = int(item.get("movieId"))
+        except (TypeError, ValueError, AttributeError):
+            descartadas.append(item)
+            continue
+        if mid in ids_validos:
+            textos[mid] = str(item.get("explicacion") or "").strip()
+        else:
+            descartadas.append(item.get("titulo") or mid)
+    return intro, textos, descartadas
 
 
 def _como_dict(llamada) -> dict:

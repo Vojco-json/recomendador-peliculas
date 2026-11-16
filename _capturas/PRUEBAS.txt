@@ -1,41 +1,41 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 - PASA: [aceptación] Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts — codigo 0: ..................                                                       [100%]
-18 passed in 0.84s
+18 passed in 1.15s
 - PASA: [aceptación] Regresión completa — codigo 0: t_poster.py::test_genera_png_y_svg_no_vacios
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-368 passed, 198 warnings in 151.24s (0:02:31)
+374 passed, 198 warnings in 152.04s (0:02:32)
 - PASA: [aceptación] Interpretación ES/EN, errores de tipeo, ánimos y ocasiones — codigo 0: ........................................                                 [100%]
-40 passed in 0.25s
+40 passed in 0.26s
 - PASA: [aceptación] Búsqueda de títulos con y sin TMDb (cliente falso, caché) — codigo 0: .....................                                                    [100%]
-21 passed in 0.65s
+21 passed in 0.67s
 - PASA: [aceptación] Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía — codigo 0: .....                                                                    [100%]
-5 passed in 47.97s
+5 passed in 27.26s
 - PASA: [aceptación] buscar_pelicula como herramienta y caso inexistente — codigo 0: ..........                                                               [100%]
-10 passed in 0.84s
+10 passed in 1.04s
 - PASA: [aceptación] Batería de 30 pedidos en modo reglas y con LLM simulado — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 2.30s
+129 passed in 2.56s
 - PASA: [aceptación] Red de seguridad y mensaje de título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 0.75s
+8 passed in 1.05s
 - PASA: [aceptación] La figura no tiene etiquetas superpuestas — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-4 passed, 14 warnings in 2.61s
+4 passed, 14 warnings in 2.37s
 - PASA: Interpretación ES/EN, errores de tipeo, ánimos, ocasiones y llm.interpretar — codigo 0: ........................................                                 [100%]
-40 passed in 0.32s
+40 passed in 0.25s
 - PASA: Búsqueda de títulos con y sin TMDb (sesión falsa, caché temporal, sin red) — codigo 0: .....................                                                    [100%]
-21 passed in 0.75s
+21 passed in 0.65s
 - PASA: Regresión: el chat por reglas y la app siguen funcionando — codigo 0: .........                                                                [100%]
-9 passed in 34.43s
+9 passed in 33.75s
 - PASA: Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía, duración sin dato no baja el nivel — codigo 0: .....                                                                    [100%]
-5 passed in 27.41s
+5 passed in 27.24s
 - PASA: buscar_pelicula en ESQUEMAS, búsqueda aproximada, caso inexistente con mensaje de una frase y título en español desde la caché — codigo 0: ..........                                                               [100%]
-10 passed in 0.74s
+10 passed in 1.04s
 - PASA: Regresión: herramientas (6 esquemas) y app con orden por niveles — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
@@ -43,44 +43,50 @@ Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 34 passed, 12 warnings in 41.92s
 - PASA: Batería de 30 pedidos en modo reglas y con 3 LLM simulados — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 2.27s
+129 passed in 2.52s
 - PASA: Red de seguridad, regla de sistema, condiciones por tarjeta y título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 0.75s
-- PASA: Regresión del chat y la app (pruebas ya verificadas) — codigo 0: Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+8 passed in 1.09s
+- PASA: Regresión del chat y la app (pruebas ya verificadas) — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-63 passed, 12 warnings in 61.73s (0:01:01)
+63 passed, 12 warnings in 41.56s
 - PASA: Prueba de aceptación: las etiquetas de la figura tipos_espectador no se superponen (muestra mini y caso de estrés con 10 tipos) — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-4 passed, 14 warnings in 2.39s
-- PASA: Regresión: las figuras del póster y el README siguen cumpliendo sus pruebas — codigo 0: 
+4 passed, 14 warnings in 2.37s
+- PASA: Regresión: las figuras del póster y el README siguen cumpliendo sus pruebas — codigo 0: )
 
 tests/test_poster.py::test_genera_png_y_svg_no_vacios
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-24 passed, 14 warnings in 10.02s
+24 passed, 14 warnings in 9.84s
 - PASA: Pruebas de los niveles v2 (requisitos 12-21) — codigo 0: ......                                                                   [100%]
-6 passed in 1.76s
+6 passed in 2.02s
 - PASA: Regresión de puntaje, batería y red de seguridad — codigo 0: ........................................................................ [ 39%]
 ........................................................................ [ 79%]
 ......................................                                   [100%]
-182 passed in 29.45s
+182 passed in 29.51s
 - PASA: Integración por niveles: poco votadas al final, fórmula del híbrido, tag sin datos, título no encontrado aporta géneros y referencias que no se repiten — codigo 0: .......                                                                  [100%]
-7 passed in 0.76s
+7 passed in 1.04s
 - PASA: Batería de 30 pedidos + 2 casos de drama policial en 4 modos — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 2.26s
+129 passed in 2.54s
 - PASA: Pruebas auxiliares de niveles v2 y del script probar_pedidos con la mini — codigo 0: ......                                                                   [100%]
-6 passed in 1.96s
+6 passed in 2.02s
 - PASA: Suite completa (regresión) — codigo 0: t_poster.py::test_genera_png_y_svg_no_vacios
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-368 passed, 198 warnings in 151.54s (0:02:31)
+374 passed, 198 warnings in 153.54s (0:02:33)
+- PASA: El LLM solo redacta: filtros finales Crime+Drama+twist sin duración, línea Entendí y timeout de 20 s — codigo 0: ......                                                                   [100%]
+6 passed in 3.07s
+- PASA: Chat, red de seguridad y batería de 32 mensajes en 4 modos con el nuevo flujo — codigo 0: ........................................................................ [ 49%]
+........................................................................ [ 98%]
+..                                                                       [100%]
+146 passed in 38.71s

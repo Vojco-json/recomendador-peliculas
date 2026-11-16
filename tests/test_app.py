@@ -121,8 +121,9 @@ def test_leyenda_indica_completado_con_reglas(entorno):
             return {"message": {"role": "assistant", "content": json.dumps(dato)}}
 
     r = llm.responder(PEDIDO, 1, entorno, proveedor="ollama", cliente=SoloInventa())
-    assert r.proveedor == llm.PROVEEDOR_COMPLETADO and "reglas" in r.proveedor
-    assert r.recomendaciones[0]["movieId"] == 1307           # nivel máximo primero
+    # El LLM solo redacta: las tarjetas son las de pedido.py + recomendar.
+    assert r.proveedor == "ollama" and r.descartadas == ["Falsa"]
+    assert r.recomendaciones[0]["movieId"] == 1307          # nivel máximo primero
     assert "Falsa" not in r.texto + json.dumps(r.recomendaciones, default=str)
 
 
@@ -149,7 +150,7 @@ class ClienteFalso:
     def chat(self, model, messages, tools=None, think=None, **kw):
         self.llamadas.append({"model": model, "tools": tools, "think": think,
                               "messages": list(messages)})
-        if self.siempre or len(self.llamadas) == 1:
+        if self.siempre:   # intenta usar herramientas: se ignoran (solo redacta)
             return {"message": {"role": "assistant", "content": "", "thinking": "SECRETO-1",
                                 "tool_calls": [{"function": {"name": "recomendar", "arguments": {
                                     "userId": 1, "n": 5, "max_duracion_min": 100,
@@ -167,9 +168,12 @@ def test_ollama_simulado_think_false_y_descarta_inventadas(entorno):
     r = llm.responder(PEDIDO, 1, entorno, proveedor="ollama", cliente=cliente)
     assert all(c["think"] is False for c in cliente.llamadas)      # think=False por defecto
     assert cliente.llamadas[0]["model"] == "qwen3.5:9b"
-    assert [x["movieId"] for x in r.recomendaciones] == [1307]     # inventada y vista fuera
-    assert len(r.descartadas) == 2
+    reglas = llm.responder(PEDIDO, 1, entorno, proveedor="reglas")
+    assert ([x["movieId"] for x in r.recomendaciones]
+            == [x["movieId"] for x in reglas.recomendaciones])     # misma lista final
+    assert len(r.descartadas) == 2                                  # inventada y vista fuera
     assert r.proveedor == "ollama" and r.aviso is None and "recomendar" in r.herramientas_usadas
+    assert r.recomendaciones[0]["explicacion"].startswith("Comedia breve")
     todo = r.texto + json.dumps(r.recomendaciones, default=str)
     assert "Inventada" not in todo and "SECRETO" not in todo        # sin thinking
     assert "95 min" in r.recomendaciones[0]["explicacion"]
@@ -190,11 +194,12 @@ def test_llm_think_true_por_entorno(entorno, monkeypatch):
     assert config.LLM_THINK is False
 
 
-def test_bucle_de_herramientas_limitado(entorno):
+def test_una_sola_llamada_sin_herramientas(entorno):
+    """El modelo solo redacta: una llamada, sin herramientas; sus tool_calls se ignoran."""
     cliente = ClienteFalso(siempre_herramientas=True)
     r = llm.responder(PEDIDO, 1, entorno, proveedor="ollama", cliente=cliente)
-    assert len(cliente.llamadas) == llm.MAX_RONDAS_HERRAMIENTAS + 1
-    assert cliente.llamadas[-1]["tools"] is None
+    assert len(cliente.llamadas) == 1 and cliente.llamadas[0]["tools"] is None
+    assert r.proveedor == llm.PROVEEDOR_COMPLETADO and r.recomendaciones
     assert not set(x["movieId"] for x in r.recomendaciones) & VISTAS_U1
 
 

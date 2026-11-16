@@ -145,9 +145,12 @@ def test_llm_bueno_recibe_filtros_completados(herr):
 
     class Espia(LLMBueno):
         def chat(self, model, messages, tools=None, think=None, **kw):
-            if messages[-1]["role"] == "tool":
-                vistos.append(json.loads(messages[-1]["content"])["filtros"])
-            return super().chat(model, messages, tools, think, **kw)
+            datos = json.loads(messages[-1]["content"].split("DATOS: ", 1)[1])
+            vistos.append(datos["filtros"])
+            final = {"intro": "Te propongo estas.", "recomendaciones": [
+                {"movieId": r["movieId"], "explicacion": "Encaja."}
+                for r in datos["recomendaciones"]]}
+            return {"message": {"role": "assistant", "content": json.dumps(final)}}
 
     r = llm.responder_ollama("algo corto y liviano para hoy", USUARIO, herr, cliente=Espia())
     assert r.proveedor == "ollama" and r.recomendaciones
