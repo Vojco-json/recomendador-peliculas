@@ -210,6 +210,51 @@ def test_tarjeta_para_ti(cat):
     assert t["probable"]["movieId"] not in vistas and t["improbable"]["movieId"] not in vistas
 
 
+def _afinidades(cat, userId):
+    """[(afinidad fold-in, movieId)] de las no vistas, de mayor a menor."""
+    from recomendador import foldin
+    ids, matriz, _, _ = cat._factores()
+    ratings = cat.ratings_usuario(userId)
+    u = foldin.vector_usuario(ids, matriz, list(ratings.items()), cat._h._reg())
+    fichas = cat._peliculas()["fichas"]
+    cand = [(float(s), int(m)) for m, s in zip(ids, matriz @ u)
+            if int(m) in fichas and int(m) not in ratings]
+    return sorted(cand, key=lambda x: (-x[0], x[1]))
+
+
+@pytest.mark.parametrize("candidatas", [1, 2, 3, 5])
+def test_tarjeta_improbable_sale_de_las_de_menor_afinidad(cat, candidatas):
+    """Con un catálogo MAYOR que 'candidatas' la improbable sigue estando entre las de
+    menor afinidad (no entre las de mayor) y explicar() le da «Puede que no»."""
+    import numpy as np
+    cand = _afinidades(cat, 1)
+    assert len(cand) > candidatas            # el catálogo supera al grupo de candidatas
+    t = cat.tarjeta_para_ti(1, candidatas=candidatas)
+    imp = t["improbable"]["movieId"]
+    assert t["improbable"]["veredicto"] == catalogo_app.IMPROBABLE
+    assert t["improbable"]["texto"].startswith(catalogo_app.IMPROBABLE)
+    assert t["probable"]["movieId"] == cand[0][1]
+    mediana = float(np.median([s for s, _ in cand]))
+    score = dict((m, s) for s, m in cand)[imp]
+    assert score < mediana
+    # Está entre las 'candidatas' de menor afinidad.
+    bottom = [m for _, m in sorted(cand, key=lambda x: (x[0], x[1]))[:candidatas]]
+    assert imp in bottom
+    if candidatas == 1:
+        assert imp == min(cand)[1]
+
+
+def test_tarjeta_usuario_nuevo_con_gustos_marcados(cat, tmp_path):
+    """Usuario nuevo de acción: la improbable queda bajo su mediana y es «Puede que no»."""
+    _eventos(tmp_path / "estado.db", NUEVO, ONBOARDING_ACCION)
+    t = cat.tarjeta_para_ti(NUEVO, candidatas=3)
+    assert t["probable"]["veredicto"] == catalogo_app.PROBABLE
+    assert t["improbable"]["veredicto"] == catalogo_app.IMPROBABLE
+    cand = _afinidades(cat, NUEVO)
+    bottom = [m for _, m in sorted(cand, key=lambda x: (x[0], x[1]))[:3]]
+    assert t["improbable"]["movieId"] in bottom
+
+
 def test_cache_caliente_rapida(cat):
     """C7: 20 llamadas a ficha() y filas_inicio() con caché caliente < 2 s en total."""
     cat.ficha(1)

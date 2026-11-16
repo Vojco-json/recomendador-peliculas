@@ -550,8 +550,11 @@ class Catalogo:
     def tarjeta_para_ti(self, userId: int, candidatas: int = 50) -> dict:
         """Tarjeta 'Para ti': una película probable y una improbable, ambas explicadas.
 
-        La probable es la primera del fold-in; la improbable, la de menor afinidad
-        entre las candidatas del catálogo que no vio.
+        - Probable: la de mayor afinidad del fold-in entre las no vistas.
+        - Improbable: se toma el grupo de las ``candidatas`` de MENOR afinidad que
+          quedan bajo la mediana del usuario (el mismo umbral que usa explicar(),
+          así su veredicto es siempre «Puede que no») y, dentro del grupo, la más
+          votada, para que sea una película reconocible y no una rareza.
         """
         ratings = self.ratings_usuario(userId)
         fac = self._factores()
@@ -564,11 +567,16 @@ class Catalogo:
                 scores = matriz @ u
                 cand = [(float(s), int(m)) for m, s in zip(ids, scores)
                         if int(m) in fichas and int(m) not in ratings]
-                cand.sort(key=lambda x: (-x[0], x[1]))
                 if cand:
+                    cand.sort(key=lambda x: (-x[0], x[1]))
                     probable = cand[0][1]
-                    resto = cand[1:candidatas] if len(cand) > 1 else []
-                    improbable = resto[-1][1] if resto else None
+                    # Mismo umbral que explicar(): mediana de la afinidad con lo no visto.
+                    umbral = float(np.median([s for s, _ in cand]))
+                    bajo = sorted((x for x in cand[1:] if x[0] < umbral),
+                                  key=lambda x: (x[0], x[1]))[:max(1, int(candidatas))]
+                    if bajo:
+                        improbable = max(bajo, key=lambda x: (fichas[x[1]]["votos"],
+                                                              -x[0], -x[1]))[1]
         if probable is None:   # sin calificaciones o sin factores: las más votadas
             orden = [m for m in self._peliculas()["populares"] if m not in ratings]
             probable = orden[0] if orden else None
