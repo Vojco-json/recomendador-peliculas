@@ -8,7 +8,7 @@ Diseno: La estética de la app Streamlit no cambia. Cada tarjeta suma la línea 
 Supuestos: El plan v1 ya estaba aprobado; solo cambian los puntos 1, 2 y 3 que pidió el usuario. Ningún paquete figura como verificado todavía, así que se mantienen los cinco con sus ajustes.; Con la muestra mini, el corte de las pruebas es FECHA_CORTE_MINI (2016-01-01). Los ratings de 2017 de los usuarios 12 y 15 sirven como dato conocido posterior al corte.; Los eventos en vivo de estado.db pueden tener cualquier fecha y siempre se muestran.; Una condición no evaluable (por ejemplo, la duración sin IMDb) no suma ni resta al nivel: se informa aparte.; «Corto» sigue siendo ≤ 100 min (DURACION_CORTA_MIN actual).; Se reutiliza ClienteTMDb y su caché; se le agrega un método de búsqueda por texto.; El LLM simulado es un cliente falso inyectado; no se prueba contra Ollama real ni contra TMDb real.
 
 ## Paquetes de trabajo
-### 1. 1. Corte temporal en todos los modos y demo.json relativo [pendiente]
+### 1. 1. Corte temporal en todos los modos y demo.json relativo [verificado]
 Objetivo: Que en todos los modos (demo o no) Herramientas y la app solo vean ratings y tags anteriores a FECHA_CORTE, más los eventos en vivo de estado.db. Que los scripts de los 25M respeten el corte por defecto y que demo.json use rutas relativas.
 Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/config.py, recomendador/demo.py, app/app.py, scripts/productor_kafka.py, correr_25m.ps1, tests/test_corte.py · Depende de: -
 - Criterio: Herramientas aplica siempre un corte: por defecto config.FECHA_CORTE; con la muestra mini, FECHA_CORTE_MINI; se puede pasar explícito con el parámetro 'corte'. No hay ningún camino sin corte.
@@ -21,7 +21,7 @@ Requisitos: 1, 2, 9 · Archivos: recomendador/herramientas.py, recomendador/conf
 - Criterio: Las 117 pruebas existentes siguen pasando; si alguna esperaba ver datos posteriores al corte, se ajusta y el cambio se documenta
 - Prueba de aceptacion: Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts: el comando «.venv/Scripts/python -m pytest -q tests/test_corte.py» debe terminar sin error
 - Prueba de aceptacion: Regresión completa: el comando «.venv/Scripts/python -m pytest -q» debe terminar sin error
-### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [pendiente]
+### 2. 2. Interpretación del pedido y búsqueda de títulos (MovieLens + TMDb opcional) [verificado]
 Objetivo: Crear recomendador/pedido.py, que convierte un mensaje libre en condiciones, y recomendador/titulos.py, que busca títulos de forma aproximada contra MovieLens y, si hay TMDB_API_KEY, también contra los títulos en español de TMDb con caché.
 Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.py, recomendador/enriquecimiento.py, recomendador/llm.py, tests/test_pedido.py, tests/test_titulos.py · Depende de: -
 - Criterio: Ánimos y ocasiones mapeados a géneros y tags: 'para llorar' -> Drama + sad/tearjerker; 'en familia' -> Children/Animation + family; 'liviano' -> Comedy; 'que me haga pensar' -> thought-provoking; 'con
@@ -34,7 +34,7 @@ Requisitos: 3, 5, 10 · Archivos: recomendador/pedido.py, recomendador/titulos.p
 - Criterio: Con clave, usa los títulos en español de tmdb_cache.json y ClienteTMDb.buscar (/search/movie con language=es-ES), cuyo resultado queda en caché; tmdbId se mapea a movieId con links.csv
 - Prueba de aceptacion: Interpretación ES/EN, errores de tipeo, ánimos y ocasiones: el comando «.venv/Scripts/python -m pytest -q tests/test_pedido.py» debe terminar sin error
 - Prueba de aceptacion: Búsqueda de títulos con y sin TMDb (cliente falso, caché): el comando «.venv/Scripts/python -m pytest -q tests/test_titulos.py» debe terminar sin error
-### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [pendiente]
+### 3. 3. Recomendar por niveles de coincidencia y herramienta buscar_pelicula [verificado]
 Objetivo: Reemplazar los filtros duros de Herramientas.recomendar por grupos según el número de condiciones cumplidas, ordenar por afinidad ALS dentro de cada grupo y registrar buscar_pelicula en ESQUEMAS.
 Requisitos: 4, 5, 11 · Archivos: recomendador/herramientas.py, tests/test_puntaje.py, tests/test_buscar.py · Depende de: 1, 2
 - Criterio: recomendar acepta generos, tags y max_duracion_min y nunca devuelve una lista vacía si el catálogo tiene películas

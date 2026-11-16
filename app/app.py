@@ -50,6 +50,8 @@ CSS = """
 .chip {display:inline-block;background:#2b2b2b;color:#ddd;border-radius:999px;
   padding:1px 8px;margin:2px 3px 0 0;font-size:.72rem}
 .tarjeta .expl {color:#ddd;font-size:.85rem;line-height:1.35}
+.tarjeta .cond {color:#F5C518;font-size:.78rem;line-height:1.3;
+  border-left:2px solid #F5C518;padding-left:6px}
 .tarjeta .fuente {color:#777;font-size:.7rem;margin-top:auto}
 @media (max-width: 640px){ .rejilla{grid-template-columns:1fr} }
 </style>
@@ -86,9 +88,12 @@ def tarjeta(peli: dict, explicacion: str | None = None) -> str:
               if peli.get("poster_url") else "")
     puntaje = f" · ALS {peli['score']:.2f}" if peli.get("score") is not None else ""
     expl = f'<div class="expl">{esc(explicacion)}</div>' if explicacion else ""
+    # Qué condiciones del pedido cumple, cuáles no y cuáles no se pudieron evaluar.
+    cond = (f'<div class="cond">{esc(peli["condiciones_texto"])}</div>'
+            if explicacion and peli.get("condiciones_texto") else "")
     return (f'<div class="tarjeta">{poster}<div class="rank">#{peli.get("rank", "")}</div>'
             f'<div class="titulo">{esc(peli["titulo"])}</div>'
-            f'<div class="meta">{esc(" · ".join(meta))}</div><div>{chips}</div>{expl}'
+            f'<div class="meta">{esc(" · ".join(meta))}</div><div>{chips}</div>{cond}{expl}'
             f'<div class="fuente">{esc(peli.get("fuente", ""))}{esc(puntaje)}</div></div>')
 
 
