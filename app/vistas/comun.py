@@ -94,6 +94,23 @@ def publicar_calificacion(userId: int, movieId: int, rating: float, estado_db,
     return r
 
 
+def publicar_resena(userId: int, movieId: int, texto: str, estado_db) -> eventos.Resultado:
+    """Revisa y publica una reseña (Kafka o respaldo) y la deja visible al instante.
+
+    Si Kafka confirma, se guarda además la misma reseña (mismo ``uid``) en estado.db:
+    cuando el streaming la procese, ``INSERT OR IGNORE`` por uid evita el duplicado.
+    Una reseña rechazada por el filtro no se publica ni se guarda.
+    """
+    r = eventos.publicar_resena(userId, movieId, texto, estado_db=estado_db)
+    if r.ok and r.via == "kafka":
+        con = estado.conectar(estado_db)
+        try:
+            estado.guardar_resenas(con, [r.evento])
+        finally:
+            con.close()
+    return r
+
+
 def calificar_varias(userId: int, pares: list[tuple[int, float]], estado_db,
                      limitador: Limitador) -> dict:
     """Califica en orden; cada nota es UNA acción del Limitador.

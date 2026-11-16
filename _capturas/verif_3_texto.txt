@@ -1,6 +1,28 @@
-CineRuta
-Tu ruta por el cine, guiada por tus gustos
-Bienvenido a CineRuta
-Califica lo que has visto y te armamos una ruta de películas a tu medida, con un modelo entrenado sobre 25 millones de calificaciones.
-CineRuta · recomendaciones con MovieLens 25M, Spark y Kafka
-Este producto usa la API de TMDB, pero no está avalado ni certificado por TMDB.
+PELÍCULA 2 DE 14
+Histograma de notas
+3.7 de 5 · 9 votos
+½
+1
+1½
+2
+2½
+3
+3½
+4
+4½
+5
+Finding Nemo
+2003 · 1 h 40 min · aventura · animación · cine infantil · comedia
+NOTA IMDB8.2 (1.150.000 votos)
+DIRECTORSin datos de IMDb
+REPARTOSin datos de IMDb
+TAGS PRINCIPALES
+animaciónfamiliaoptimismohumorclásicos
+PUEDE QUE NO
+Finding Nemo
+
+Puede que no. Se parece a «Terminator 2: Judgment Day», que calificaste alto, y también a «Forrest Gump», que calificaste bajo. En contra: optimismo, familia, humor.
+
+EN CONTRAOPTIMISMOFAMILIAHUMOR
+Reseñas (0)
+Aún no hay reseñas. ¡Escribe la primera!

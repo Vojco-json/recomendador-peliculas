@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import streamlit as st
 
+from . import tarjetas
 from .comun import Contexto, esc, fila_html
+from .ficha import CLAVE_MEMORIA_LLM
 
 
 def tipo_html(tipo: dict | None) -> str:
@@ -31,3 +33,10 @@ def mostrar(ctx: Contexto) -> None:
     html_filas = "".join(fila_html(ctx, f["titulo"], f["peliculas"], f["clave"])
                          for f in filas if f["peliculas"])
     st.markdown(html_filas, unsafe_allow_html=True)
+    # Tarjeta 'Para ti': una probable y una improbable, explicadas con explicar().
+    if ratings:
+        t = ctx.cat.tarjeta_para_ti(ctx.user_id)
+        memoria = st.session_state.setdefault(CLAVE_MEMORIA_LLM, {})
+        textos = {k: tarjetas.redactar(t[k], memoria)[0]
+                  for k in ("probable", "improbable") if t.get(k)}
+        st.markdown(tarjetas.para_ti_html(t, textos), unsafe_allow_html=True)

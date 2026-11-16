@@ -1,9 +1,11 @@
-"""Vista previa estática de CineRuta (login e Inicio) para revisar el aspecto visual.
+"""Vista previa estática de CineRuta (login, Inicio, Ficha y Explorar) para revisar el aspecto.
 
 Uso:  .venv/Scripts/python scripts/vista_previa_cineruta.py
 Ejecuta la app REAL con AppTest sobre artefactos/mini (muestra ml-mini): registra una
 cuenta, importa muestras/letterboxd_mini.csv y guarda el HTML que pintó la app en
-artefactos/vista_previa/cineruta_login.html y cineruta_inicio.html.
+artefactos/vista_previa/cineruta_login.html y cineruta_inicio.html. Luego busca
+«nolan», abre la ficha, publica una reseña de ejemplo y la califica
+(cineruta_ficha.html), y avanza una película en Explorar (cineruta_explorar.html).
 """
 
 from __future__ import annotations
@@ -36,9 +38,11 @@ PLANTILLA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 padding:1.6rem 1rem">{cuerpo}</main></body></html>"""
 
 
-def guardar(at, nombre: str) -> None:
-    partes = []
-    for m in at.markdown:
+def guardar(at, nombre: str, bloque=None) -> None:
+    """Escribe el HTML de los markdown de la app (o solo los de una pestaña)."""
+    # El CSS de la app se inyecta fuera de las pestañas: se antepone a mano.
+    partes = [m.value for m in at.markdown if "<style" in str(m.value)][:1] if bloque else []
+    for m in (bloque or at).markdown:
         partes.append(str(m.value) if str(m.value).lstrip().startswith("<")
                       else f"<p>{m.value}</p>")
     SALIDA.mkdir(parents=True, exist_ok=True)
@@ -56,3 +60,21 @@ next(b for b in at.button if b.label == "Crear cuenta").click().run()
 next(b for b in at.button if b.label == "Probar con un CSV de ejemplo").click().run()
 assert not at.exception, at.exception
 guardar(at, "cineruta_inicio.html")
+
+# Ficha (pestaña Buscar): datos, histograma, reseña publicada y calificación.
+at.text_input(key="buscar_q").input("nolan").run()
+ver = next(b for b in at.button if b.key and b.key.startswith("ver_"))
+movieId = int(ver.key.split("_")[1])
+ver.click().run()
+at.text_area(key=f"bus_resena_{movieId}_0").input(
+    "Un rompecabezas precioso: la música y el montaje te mantienen atento hasta el final.")
+next(b for b in at.button if b.label == "Publicar reseña").click().run()
+at.selectbox(key=f"bus_nota_{movieId}").set_value(4.5)
+next(b for b in at.button if b.label == "Guardar calificación").click().run()
+assert not at.exception, at.exception
+guardar(at, "cineruta_ficha.html", at.tabs[1])
+
+# Explorar: segunda película de la cola (tras «Siguiente»).
+next(b for b in at.button if b.label == "Siguiente →").click().run()
+assert not at.exception, at.exception
+guardar(at, "cineruta_explorar.html", at.tabs[2])

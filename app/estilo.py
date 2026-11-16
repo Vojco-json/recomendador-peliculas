@@ -134,6 +134,64 @@ def _css() -> str:
   border-left:2px solid var(--cr-turquesa); padding-left:6px; }}
 .tarjeta .fuente {{ color:var(--cr-texto); font-size:.7rem; margin-top:auto; opacity:.8; }}
 @media (max-width:640px) {{ .rejilla {{ grid-template-columns:1fr; }} }}
+
+/* ---- buscar ---- */
+.cr-sub {{ font-size:1.1rem !important; margin:1.1rem 0 .5rem !important; padding-bottom:.3rem;
+  border-bottom:1px solid var(--cr-borde); }}
+.cr-resultado .cr-caratula {{ flex:none; }}
+.cr-resultado .cr-caratula img {{ width:100%; }}
+.cr-resultado .como {{ color:var(--cr-turquesa); font-size:.72rem; margin:.15rem 0 .3rem; }}
+
+/* ---- ficha ---- */
+.cr-poster {{ width:100%; max-width:300px; aspect-ratio:2/3; object-fit:cover; border-radius:6px;
+  border:1px solid var(--cr-borde); display:block; margin-bottom:1rem; }}
+.cr-ficha-titulo {{ font-size:2rem !important; margin:0 0 .3rem !important; line-height:1.15; }}
+.cr-ficha-meta {{ color:var(--cr-texto); font-size:.95rem; margin-bottom:.7rem; }}
+.cr-dato {{ font-size:.9rem; color:var(--cr-titulo); margin:.25rem 0; }}
+.cr-dato span {{ display:inline-block; min-width:7.5rem; color:var(--cr-texto);
+  text-transform:uppercase; font-size:.7rem; letter-spacing:1px; }}
+.cr-dato b {{ color:var(--cr-ambar); margin-right:.3rem; }}
+.cr-sinopsis {{ color:var(--cr-titulo) !important; line-height:1.55; margin:.8rem 0; opacity:.92; }}
+.chip.favor {{ border-color:var(--cr-turquesa); color:var(--cr-turquesa); }}
+.chip.contra {{ border-color:var(--cr-coral); color:var(--cr-coral); }}
+.cr-histo {{ background:var(--cr-superficie); border:1px solid var(--cr-borde); border-radius:8px;
+  padding:.7rem .8rem .5rem; max-width:300px; }}
+.cr-histo-cab {{ display:flex; justify-content:space-between; gap:.5rem; font-size:.72rem;
+  color:var(--cr-texto); margin-bottom:.4rem; flex-wrap:wrap; }}
+.cr-histo-cab b {{ color:var(--cr-ambar); font-size:.95rem; }}
+.cr-barras {{ display:flex; align-items:flex-end; gap:3px; height:70px; }}
+.cr-barras .b {{ flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end;
+  align-items:center; }}
+.cr-barras i {{ display:block; width:100%; background:var(--cr-ambar); border-radius:2px 2px 0 0;
+  opacity:.85; }}
+.cr-barras span {{ font-size:.58rem; color:var(--cr-texto); margin-top:2px; }}
+.cr-exp {{ background:var(--cr-superficie); border:1px solid var(--cr-borde);
+  border-left:4px solid var(--cr-turquesa); border-radius:8px; padding:.8rem 1rem; margin:1rem 0; }}
+.cr-exp.no {{ border-left-color:var(--cr-coral); }}
+.cr-veredicto {{ font-weight:700; text-transform:uppercase; letter-spacing:1px; font-size:.75rem;
+  color:var(--cr-turquesa); }}
+.cr-exp.no .cr-veredicto {{ color:var(--cr-coral); }}
+.cr-exp-peli {{ color:var(--cr-titulo); font-family:{FUENTE_TITULOS}; font-size:1.05rem; }}
+.cr-exp p {{ color:var(--cr-titulo) !important; font-size:.9rem; margin:.35rem 0; opacity:.9; }}
+.cr-exp-fila {{ margin-top:.25rem; }}
+.cr-exp-fila > span {{ font-size:.68rem; text-transform:uppercase; letter-spacing:1px;
+  color:var(--cr-texto); margin-right:.4rem; }}
+.cr-para-ti h3 {{ font-size:1.15rem; margin:0 0 .5rem; padding-bottom:.3rem;
+  border-bottom:1px solid var(--cr-borde); }}
+.cr-par {{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }}
+.cr-par .cr-exp {{ margin:0; }}
+.cr-resenas {{ display:flex; flex-direction:column; gap:10px; }}
+.cr-resenas.vacio {{ color:var(--cr-texto); font-size:.9rem; }}
+.cr-resena {{ border-bottom:1px solid var(--cr-borde); padding:.3rem 0 .6rem; }}
+.cr-resena .cab {{ display:flex; gap:.6rem; align-items:baseline; font-size:.8rem; }}
+.cr-resena .cab b {{ color:var(--cr-titulo); }}
+.cr-resena p {{ margin:.25rem 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }}
+.cr-atrib {{ margin-top:1.2rem; font-size:.72rem; color:var(--cr-texto); opacity:.8; }}
+@media (max-width:640px) {{
+  .cr-par {{ grid-template-columns:1fr; }}
+  .cr-ficha-titulo {{ font-size:1.5rem !important; }}
+  .cr-poster, .cr-histo {{ max-width:100%; }}
+}}
 </style>
 """
 

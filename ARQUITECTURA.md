@@ -93,7 +93,7 @@ Requisitos: 32, 35, 37, 42, 47, 48 · Archivos: recomendador/precalculo.py, scri
 - Criterio: llm.py ya no define los 4 símbolos y la suite previa sigue pasando
 - Prueba de aceptacion: Precálculos Spark sobre la muestra mini (corte, LSH, personas, populares por tipo): el comando «.venv/Scripts/python -m pytest -q tests/test_precalculo.py» debe terminar sin error
 - Prueba de aceptacion: Regresión del chat tras la limpieza de llm.py: el comando «.venv/Scripts/python -m pytest -q tests/test_llm_redactor.py tests/test_bateria.py» debe terminar sin error
-### 7. 2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos [pendiente]
+### 7. 2. Cuentas, límite de 20/min, reseñas moderadas, eventos Kafka y tipo de espectador de usuarios nuevos [verificado]
 Objetivo: Crear cuentas.py (bcrypt + SQLite, userId > 162541, Limitador de 20 acciones/min por sesión), moderacion.py (máx. 500 caracteres y filtro de palabras ofensivas), eventos.py (ratings → topic 'ratings' sin cambiar el formato; reseñas → topic 'resenas'; key userId; respaldo directo a estado.db con aviso), extender streaming.py para el topic 'resenas', crear scripts/moderar_resenas.py y agregar a perfiles.py vector_crudo/tipo_usuario para asignar el centroide más cercano con el mismo escalado. Agregar bcrypt y segno a requirements.txt.
 Requisitos: 33, 41, 44, 46, 49, 50, 51, 52 · Archivos: recomendador/cuentas.py, recomendador/moderacion.py, recomendador/palabras_ofensivas.txt, recomendador/eventos.py, recomendador/streaming.py, recomendador/estado.py, recomendador/perfiles.py, scripts/moderar_resenas.py, requirements.txt, tests/test_cuentas.py, tests/test_eventos.py, tests/test_tipo_nuevo.py · Depende de: -
 - Criterio: La contraseña se guarda solo como hash bcrypt; el login con clave incorrecta falla y con la correcta devuelve el userId
@@ -107,7 +107,7 @@ Requisitos: 33, 41, 44, 46, 49, 50, 51, 52 · Archivos: recomendador/cuentas.py,
 - Prueba de aceptacion: Cuentas bcrypt, userIds > 162541 y límite de 20 por minuto: el comando «.venv/Scripts/python -m pytest -q tests/test_cuentas.py» debe terminar sin error
 - Prueba de aceptacion: Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas y moderación local: el comando «.venv/Scripts/python -m pytest -q tests/test_eventos.py tests/test_streaming.py» debe terminar sin error
 - Prueba de aceptacion: Tipo de espectador del centroide más cercano para usuarios nuevos, con el mismo escalado: el comando «.venv/Scripts/python -m pytest -q tests/test_tipo_nuevo.py» debe terminar sin error
-### 8. 3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb [pendiente]
+### 8. 3. Capa de lectura: catálogo, buscador, ficha, explicación 'Para ti' y TMDb [verificado]
 Objetivo: Crear recomendador/catalogo_app.py (solo lectura de parquets y estado.db, con caché): buscar por título o persona sin tildes; ficha (incluye las reseñas no ocultas); filas_inicio con 'Para ti' (fold-in), 'Populares entre espectadores como tú' (según tipo_usuario) y 'Porque te gustó X' (vecinos); explicar con veredicto, la más parecida calificada alto y la calificada baja, tags a favor/en contra y persona en común. Crear tmdb.py: póster, sinopsis y tráiler con caché, o SVG generado sin clave.
 Requisitos: 35, 36, 37, 38, 39, 48, 52 · Archivos: recomendador/catalogo_app.py, recomendador/tmdb.py, tests/test_catalogo_app.py, tests/test_tmdb.py · Depende de: 6, 7
 - Criterio: catalogo_app no importa pyspark (comprobado con sys.modules)
@@ -119,7 +119,7 @@ Requisitos: 35, 36, 37, 38, 39, 48, 52 · Archivos: recomendador/catalogo_app.py
 - Criterio: 20 llamadas a ficha() y filas_inicio() con caché caliente tardan menos de 2 s en total
 - Prueba de aceptacion: Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini: el comando «.venv/Scripts/python -m pytest -q tests/test_catalogo_app.py» debe terminar sin error
 - Prueba de aceptacion: TMDb con caché y respaldo sin clave: el comando «.venv/Scripts/python -m pytest -q tests/test_tmdb.py» debe terminar sin error
-### 9. 4. App CineRuta: estilo propio, login, onboarding e Inicio [pendiente]
+### 9. 4. App CineRuta: estilo propio, login, onboarding e Inicio [verificado]
 Objetivo: Reestructurar app/app.py como 'CineRuta': estilo en app/estilo.py con la paleta propia; pantalla de login/registro; onboarding (calificar ~10 populares o importar CSV de Letterboxd) con fold-in y tipo de espectador al instante; pestañas Inicio | Buscar | Explorar | Chat. Inicio muestra las tres filas y el tipo de espectador del usuario. El chat pasa a su pestaña sin cambiar su lógica. Cada acción (calificar, reseñar, mensaje de chat, importar) pasa por el Limitador.
 Requisitos: 32, 33, 34, 35, 51, 52, 53 · Archivos: app/app.py, app/estilo.py, app/vistas/login.py, app/vistas/onboarding.py, app/vistas/inicio.py, app/vistas/chat.py, muestras/letterboxd_mini.csv, tests/test_app_letterboxd.py, tests/test_app.py · Depende de: 7, 8
 - Criterio: Con AppTest, un usuario sin sesión ve solo el login/registro y el nombre 'CineRuta'

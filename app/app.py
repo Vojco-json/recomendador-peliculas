@@ -33,9 +33,8 @@ from recomendador.catalogo_app import Catalogo  # noqa: E402
 from recomendador.enriquecimiento import ATRIBUCION_TMDB  # noqa: E402
 from recomendador.herramientas import Herramientas  # noqa: E402
 from recomendador.tmdb import TMDb  # noqa: E402
-from vistas import chat, inicio, login, onboarding  # noqa: E402
-from vistas.comun import (CLAVE_LIMITADOR, CLAVE_USUARIO, Contexto, esc,  # noqa: E402
-                          fila_html)
+from vistas import buscar, chat, explorar, inicio, login, onboarding  # noqa: E402
+from vistas.comun import CLAVE_LIMITADOR, CLAVE_USUARIO, Contexto, esc  # noqa: E402
 
 st.set_page_config(page_title=f"{estilo.NOMBRE_APP} · recomendaciones de películas",
                    page_icon="🎬", layout="wide")
@@ -143,33 +142,6 @@ def barra_lateral(ctx: Contexto) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Pestañas sencillas (Buscar y Explorar se amplían en el paquete siguiente)
-# --------------------------------------------------------------------------- #
-
-def pestana_buscar(ctx: Contexto) -> None:
-    consulta = st.text_input("Busca por título, director o actor", key="buscar_q",
-                             placeholder="Ej.: Nolan, Tom Hanks, Toy Story")
-    if not consulta:
-        return
-    resultados = ctx.cat.buscar(consulta)
-    if not resultados:
-        st.info("No encontramos películas con esa búsqueda.")
-        return
-    st.markdown(fila_html(ctx, f"Resultados para «{consulta}»", resultados, "buscar"),
-                unsafe_allow_html=True)
-
-
-def pestana_explorar(ctx: Contexto) -> None:
-    st.caption("Una película a la vez, con por qué podría (o no) gustarte.")
-    t = ctx.cat.tarjeta_para_ti(ctx.user_id)
-    for clave in ("probable", "improbable"):
-        e = t.get(clave)
-        if e:
-            st.markdown(f"**{esc(e.get('titulo', ''))}** — {esc(e.get('veredicto', ''))}  \n"
-                        f"{esc(e.get('texto', ''))}")
-
-
-# --------------------------------------------------------------------------- #
 # Página
 # --------------------------------------------------------------------------- #
 
@@ -191,9 +163,9 @@ else:
         with t_inicio:
             inicio.mostrar(ctx)
         with t_buscar:
-            pestana_buscar(ctx)
+            buscar.mostrar(ctx)
         with t_explorar:
-            pestana_explorar(ctx)
+            explorar.mostrar(ctx)
         with t_chat:
             chat.mostrar(ctx)
 
