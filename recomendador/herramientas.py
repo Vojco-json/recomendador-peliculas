@@ -302,11 +302,22 @@ class Herramientas:
         return _popularidad(str(ruta), _mtime(ruta), self.corte_epoch)
 
     def _votos(self) -> dict[int, int]:
-        """{movieId: número de ratings antes del corte}."""
+        """{movieId: número de ratings antes del corte}.
+
+        Se llama por cada candidata (cientos de miles de veces al armar la cola de
+        Explorar): el resultado se memoriza en la instancia y el archivo se revisa
+        (stat) como máximo cada 2 s, en vez de en cada llamada.
+        """
+        import time
+
+        ahora = time.monotonic()
+        memo = getattr(self, "_votos_memo", None)
+        if memo is not None and ahora - memo[0] < 2.0:
+            return memo[1]
         ruta = self.datos / "ratings.csv"
-        if not ruta.exists():
-            return {}
-        return _votos(str(ruta), _mtime(ruta), self.corte_epoch)
+        votos = _votos(str(ruta), _mtime(ruta), self.corte_epoch) if ruta.exists() else {}
+        self._votos_memo = (ahora, votos)          # asignación atómica: segura entre hilos
+        return votos
 
     def _peso_hibrido(self) -> float:
         """Peso ALS del híbrido elegido en la validación (metricas.json), o 0.5."""

@@ -241,6 +241,16 @@ import sys
 from streamlit.testing.v1 import AppTest
 from recomendador import eventos
 eventos._productor_defecto = lambda *a, **k: None       # Kafka caído: respaldo directo
+
+
+def ir_a(at, seccion):
+    # Elige una sección de la navegación (solo se ejecuta la sección activa).
+    radio = at.radio(key="seccion")
+    if radio.value != seccion:
+        radio.set_value(seccion).run()
+    return at
+
+
 at = AppTest.from_file("app/app.py", default_timeout=120)
 at.run()
 at.text_input(key="reg_nombre").input("dani_spark")

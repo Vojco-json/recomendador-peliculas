@@ -160,6 +160,11 @@ class TMDb:
             parquet = ruta_parquet_defecto()
         self.ruta_parquet = Path(parquet) if parquet else None
         self._parquet: dict | None = None
+        self._cache_explicita = cache is not None
+
+    def _sin_tmdb(self) -> bool:
+        """True si no hay clave y se usa la caché por defecto: todo queda generado."""
+        return not self.disponible and not self._cache_explicita
 
     def precalentado(self) -> dict[int, dict]:
         """Fichas de tmdb.parquet (se leen una vez por proceso)."""
@@ -173,7 +178,15 @@ class TMDb:
 
     # ---- fichas -------------------------------------------------------- #
     def detalle(self, tmdb_id) -> dict | None:
-        """Ficha de TMDb: primero tmdb.parquet, luego la caché SQLite y la red."""
+        """Ficha de TMDb: primero tmdb.parquet, luego la caché SQLite y la red.
+
+        Sin TMDB_API_KEY y con la caché por defecto (la de la app) no se usa nada de
+        TMDb: la app muestra carátulas generadas, sin sinopsis ni tráiler (requisito
+        48), aunque la caché compartida tenga fichas de una corrida anterior con clave.
+        Una caché explícita (``cache=``) sí se reutiliza sin clave (uso sin red).
+        """
+        if self._sin_tmdb():
+            return None
         try:
             dato = self.precalentado().get(int(tmdb_id))
             if dato is not None:
@@ -185,6 +198,28 @@ class TMDb:
         except Exception as exc:  # caché dañada, respuesta rara...
             log.warning("TMDb detalle falló (%s)", exc)
             return None
+
+    def precargar(self, peliculas, hilos: int = 8) -> None:
+        """Pide en paralelo las fichas que faltan (ni en tmdb.parquet ni en caché).
+
+        Una grilla de 20 carátulas sin precalentar hacía 20 pedidos en serie (~10 s);
+        en paralelo queda en lo que tarda el más lento. La caché SQLite es segura entre
+        hilos, así que después cada carátula se dibuja sin esperar.
+        """
+        if not self.disponible:
+            return
+        try:
+            previas = self.precalentado()
+            ids = {int(p["tmdbId"]) for p in peliculas
+                   if p.get("tmdbId") and int(p["tmdbId"]) not in previas}
+        except (TypeError, ValueError, KeyError):
+            return
+        if len(ids) <= 1:
+            return
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(hilos, len(ids))) as ex:
+            list(ex.map(self.detalle, ids))
 
     def poster(self, pelicula: dict) -> str:
         """URL del póster de TMDb o, si no hay, una carátula SVG generada.
@@ -265,6 +300,8 @@ class TMDb:
             tmdb_id = int(tmdb_id)
         except (TypeError, ValueError):
             return None
+        if self._sin_tmdb() and self.cache_videos == CACHE_VIDEOS:
+            return None                         # app sin clave: sin tráiler (requisito 48)
         cache = self._leer_videos()
         clave = str(tmdb_id)
         if clave in cache:

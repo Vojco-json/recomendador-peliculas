@@ -233,8 +233,7 @@ def test_sin_controles_para_ocultar(entorno):
 
 def _paso(at) -> tuple[str, str]:
     """(texto 'Película i de n', movieId de la explicación mostrada)."""
-    # Todas las pestañas se dibujan a la vez: se mira solo lo que viene después del
-    # indicador de Explorar (la tarjeta 'Para ti' de Inicio va antes).
+    # Se mira solo lo que viene después del indicador de Explorar.
     html = _html(at)
     paso = re.search(r'class="cr-paso">(Película \d+ de \d+)<', html)
     assert paso, "Explorar no mostró el indicador de película"
@@ -248,6 +247,7 @@ def _paso(at) -> tuple[str, str]:
 
 def test_explorar_siguiente_cambia_de_pelicula(entorno):
     at, _ = _sesion_con_notas("lalo_explora")
+    ir_a(at, "Explorar")                 # solo se ejecuta la sección activa
     paso1, peli1 = _paso(at)
     assert paso1.startswith("Película 1 de")
     html = _html(at)

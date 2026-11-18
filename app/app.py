@@ -38,6 +38,8 @@ for ruta in (str(RAIZ), str(CARPETA_APP)):
 import estilo  # noqa: E402
 from recomendador import config, cuentas, demo, estado, llm, proveedores  # noqa: E402
 from recomendador import genome as genome_npy  # noqa: E402
+from recomendador import pedido as pedido_mod  # noqa: E402
+from recomendador import perfiles as perfiles_mod  # noqa: E402
 from recomendador.catalogo_app import Catalogo  # noqa: E402
 from recomendador.enriquecimiento import ATRIBUCION_TMDB  # noqa: E402
 from recomendador.herramientas import Herramientas  # noqa: E402
@@ -78,6 +80,12 @@ def _calentar(cat: Catalogo, herr: Herramientas, tmdb: TMDb) -> None:
              ("vecinos", cat._vecinos), ("populares por tipo", cat._populares_tipo),
              ("factores", cat._factores), ("ratings y votos", herr._votos),
              ("catálogo del chat", herr.catalogo), ("genome", lambda: genome_npy.cargar(herr.datos)),
+             # Índice de personas del chat (~500 mil nombres normalizados con 25M): sin
+             # esto, el primer mensaje del chat tardaba más de 10 s en armarlo.
+             ("personas del chat", lambda: pedido_mod.cargar_personas(
+                 herr.artefactos / "app" / "personas.parquet")),
+             # perfiles.parquet (gustos del contexto del chat): ~0,6 s la primera lectura.
+             ("perfiles", lambda: perfiles_mod.perfil_usuario(0, herr.artefactos)),
              ("TMDb", tmdb.precalentado)]
     for nombre, paso in pasos:
         t0 = time.perf_counter()

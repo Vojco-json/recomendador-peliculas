@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from . import ficha
-from .comun import Contexto, caratula_html, esc
+from .comun import Contexto, caratula_html, esc, precargar_posters
 
 COLUMNAS = 5
 CLAVE_FICHA = "buscar_ficha"      # st.session_state: (consulta, movieId) abierta
@@ -40,6 +40,7 @@ def mostrar(ctx: Contexto) -> None:
         return
     st.markdown(f'<h3 class="cr-sub">{len(resultados)} resultados para «{esc(consulta)}»</h3>',
                 unsafe_allow_html=True)
+    precargar_posters(ctx, resultados)          # pósters faltantes: en paralelo, no en serie
     for i in range(0, len(resultados), COLUMNAS):
         columnas = st.columns(COLUMNAS)
         for col, r in zip(columnas, resultados[i:i + COLUMNAS]):

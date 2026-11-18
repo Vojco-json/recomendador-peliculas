@@ -37,12 +37,12 @@ def at(monkeypatch, artefactos, ruta_mini, tmp_path):
     monkeypatch.setattr(cuentas, "ruta_defecto", lambda: tmp_path / "cuentas.db")
     app = AppTest.from_file(str(APP), default_timeout=120)
     app.run()
-    ir_a(app, "Chat")
     app.text_input(key="reg_nombre").input("chat_ui")
     app.text_input(key="reg_clave").input("secreta123")
     app.text_input(key="reg_clave2").input("secreta123")
     next(b for b in app.button if b.label == "Crear cuenta").click().run()
     next(b for b in app.button if b.label == "Probar con un CSV de ejemplo").click().run()
+    ir_a(app, "Chat")                    # tras el onboarding aparece la navegación
     assert not app.exception, app.exception
     return app
 

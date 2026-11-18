@@ -46,6 +46,13 @@ def esc(texto) -> str:
 # Carátulas
 # --------------------------------------------------------------------------- #
 
+def precargar_posters(ctx: Contexto, pelis) -> None:
+    """Pide en paralelo a TMDb los pósters que faltan antes de dibujar una grilla."""
+    precargar = getattr(ctx.tmdb, "precargar", None)
+    if precargar is not None:
+        precargar([p for p in pelis if p])
+
+
 def caratula_html(ctx: Contexto, peli: dict) -> str:
     """Una carátula 2:3 (póster de TMDb o SVG generado) con título y año."""
     src = ctx.tmdb.poster_src(peli)
@@ -57,6 +64,7 @@ def caratula_html(ctx: Contexto, peli: dict) -> str:
 
 def fila_html(ctx: Contexto, titulo: str, pelis: list[dict], clave: str = "") -> str:
     """Fila con título y carril horizontal desplazable de carátulas."""
+    precargar_posters(ctx, pelis)
     caratulas = "".join(caratula_html(ctx, p) for p in pelis if p)
     return (f'<section class="cr-fila" data-fila="{esc(clave)}"><h3>{esc(titulo)}</h3>'
             f'<div class="cr-carril">{caratulas}</div></section>')
