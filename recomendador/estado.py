@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Iterable
@@ -101,6 +102,58 @@ def conectar(ruta) -> sqlite3.Connection:
     return con
 
 
+class _ConexionLectura(sqlite3.Connection):
+    """Conexión reutilizable: ``close()`` no la cierra (la comparten las lecturas del hilo)."""
+
+    def close(self) -> None:  # noqa: D401 - se ignora a propósito
+        pass
+
+    def cerrar_de_verdad(self) -> None:
+        super().close()
+
+
+_LECTORES = threading.local()          # {ruta: conexión} por hilo
+_ESQUEMA_LISTO: set[str] = set()       # rutas cuyo esquema ya se verificó en este proceso
+_CERROJO_ESQUEMA = threading.Lock()
+
+
+def lector(ruta) -> sqlite3.Connection:
+    """Conexión de SOLO LECTURA a estado.db, una por hilo y reutilizable.
+
+    - El esquema completo se ejecuta una sola vez por proceso y ruta (no en cada consulta).
+    - ``PRAGMA query_only`` impide escribir por esta conexión.
+    - Llamar a ``close()`` no la cierra: así el código existente (``con.close()`` tras
+      leer) sigue funcionando y la conexión se reutiliza en la siguiente lectura.
+    - En modo autocommit cada SELECT ve lo último confirmado por los escritores (WAL).
+    """
+    clave = str(Path(ruta).resolve())
+    if clave not in _ESQUEMA_LISTO:
+        with _CERROJO_ESQUEMA:
+            if clave not in _ESQUEMA_LISTO:
+                conectar(ruta).close()                  # crea tablas que falten
+                _ESQUEMA_LISTO.add(clave)
+    conexiones = getattr(_LECTORES, "conexiones", None)
+    if conexiones is None:
+        conexiones = _LECTORES.conexiones = {}
+    con = conexiones.get(clave)
+    if con is None:
+        con = sqlite3.connect(clave, timeout=30, factory=_ConexionLectura,
+                              isolation_level=None)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA busy_timeout=30000")
+        con.execute("PRAGMA query_only=1")
+        conexiones[clave] = con
+    return con
+
+
+def olvidar_lectores() -> None:
+    """Cierra las conexiones de lectura del hilo actual (pruebas que borran la base)."""
+    for con in (getattr(_LECTORES, "conexiones", None) or {}).values():
+        con.cerrar_de_verdad()
+    _LECTORES.conexiones = {}
+    _ESQUEMA_LISTO.clear()
+
+
 def modo_journal(con: sqlite3.Connection) -> str:
     return con.execute("PRAGMA journal_mode").fetchone()[0].lower()
 
@@ -157,7 +210,44 @@ def guardar_eventos(con: sqlite3.Connection, eventos: Iterable[dict],
             nuevos.append(e)
     if commit:
         con.commit()
+    if nuevos:
+        _GENERACION[0] += 1             # invalida las firmas memorizadas de esta recarga
     return nuevos
+
+
+# --------------------------------------------------------------------------- #
+# Firma de los eventos de un usuario (clave de las cachés por usuario de la app)
+# --------------------------------------------------------------------------- #
+
+_GENERACION = [0]                      # sube con cada evento escrito por este proceso
+_RECARGA = threading.local()           # token de la recarga de Streamlit en curso
+
+
+def marcar_recarga() -> None:
+    """La app lo llama al empezar cada recarga: dentro de ella la firma de cada usuario
+    se lee de estado.db UNA sola vez (salvo que este proceso escriba un evento)."""
+    _RECARGA.token = object()
+    _RECARGA.firmas = {}
+
+
+def firma_usuario(ruta, userId: int) -> tuple[int, int | None]:
+    """(cantidad de eventos, último timestamp) del usuario en estado.db.
+
+    Fuera de una recarga marcada (pruebas, scripts) siempre consulta la base.
+    """
+    uid = int(userId)
+    firmas = getattr(_RECARGA, "firmas", None)
+    if firmas is not None and uid in firmas and firmas[uid][0] == _GENERACION[0]:
+        return firmas[uid][1]
+    if not Path(ruta).exists():
+        firma = (0, None)
+    else:
+        fila = lector(ruta).execute(
+            "SELECT COUNT(*), MAX(timestamp) FROM eventos WHERE userId=?", (uid,)).fetchone()
+        firma = (int(fila[0]), None if fila[1] is None else int(fila[1]))
+    if firmas is not None:
+        firmas[uid] = (_GENERACION[0], firma)
+    return firma
 
 
 def eventos_usuario(con: sqlite3.Connection, userId: int) -> list[tuple[int, float]]:

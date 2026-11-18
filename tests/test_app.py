@@ -12,6 +12,8 @@ import json
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from base_mini import ir_a
+
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, llm
 from recomendador.herramientas import Herramientas
@@ -72,9 +74,9 @@ def test_app_reglas_usuario_1(entorno):
     assert "think:** `false`" in texto
     assert "Sin actualizaciones en vivo" in texto
     assert 'class="cr-caratula"' in texto                 # filas de carátulas de Inicio
-    assert [t.label for t in at.tabs] == ["Inicio", "Buscar", "Explorar", "Chat"]
+    assert list(at.radio(key="seccion").options) == ["Inicio", "Buscar", "Explorar", "Chat"]
 
-    at.chat_input[0].set_value(PEDIDO).run()
+    ir_a(at, "Chat").chat_input[0].set_value(PEDIDO).run()
     assert not at.exception, at.exception
     respuesta = at.session_state["chat_1"][-1]
     ids = [r["movieId"] for r in respuesta["recomendaciones"]]
@@ -95,7 +97,7 @@ def test_app_aviso_si_ollama_no_responde(entorno, monkeypatch):
     assert not at.exception, at.exception
     # El aviso aparece en la barra lateral al cargar, antes de escribir en el chat.
     assert llm.AVISO_REGLAS in [w.value for w in at.sidebar.warning]
-    at.chat_input[0].set_value(PEDIDO).run()
+    ir_a(at, "Chat").chat_input[0].set_value(PEDIDO).run()
     assert not at.exception, at.exception
     assert llm.AVISO_REGLAS in [w.value for w in at.main.warning]
     assert at.session_state["chat_1"][-1]["recomendaciones"]
@@ -105,7 +107,7 @@ def test_pestana_chat_drama_policial_entendi(entorno):
     """C6: la pestaña Chat responde el pedido con la línea «Entendí:» y tarjetas."""
     at = _app_usuario_1()
     at.run()
-    at.chat_input[0].set_value("drama policial con un twist final").run()
+    ir_a(at, "Chat").chat_input[0].set_value("drama policial con un twist final").run()
     assert not at.exception, at.exception
     respuesta = at.session_state["chat_1"][-1]
     assert respuesta["role"] == "assistant"

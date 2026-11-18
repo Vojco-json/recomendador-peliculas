@@ -1,8 +1,10 @@
 """Póster, sinopsis y tráiler de TMDb para la app, con caché JSON y respaldo sin clave.
 
-- Con ``TMDB_API_KEY``: póster y sinopsis vía ``enriquecimiento.ClienteTMDb``
-  (caché ``tmdb_cache.json``) y tráiler de YouTube vía /movie/{id}/videos
-  (caché ``tmdb_videos.json``). Cada película se consulta a la red una sola vez.
+- Primero ``artefactos/<perfil>/app/tmdb.parquet`` (lo genera
+  scripts/precalentar_tmdb.py): póster, título y sinopsis sin esperar a la red.
+- Lo que falte, con ``TMDB_API_KEY``: póster y sinopsis vía ``enriquecimiento.ClienteTMDb``
+  y tráiler de YouTube vía /movie/{id}/videos, ambos guardados en la caché SQLite segura
+  entre hilos ``artefactos/tmdb_cache.sqlite``. Cada película se pide a la red una vez.
 - Sin clave (o sin red): ``poster`` devuelve una carátula SVG generada con el título y
   el color del género principal, ``sinopsis`` y ``trailer`` devuelven None sin errores.
 - La app muestra siempre ``ATRIBUCION_TMDB`` al pie.
@@ -20,13 +22,40 @@ from html import escape
 from pathlib import Path
 
 from . import config
-from .enriquecimiento import ATRIBUCION_TMDB, CACHE_TMDB, ClienteTMDb
+from .enriquecimiento import ATRIBUCION_TMDB, CACHE_TMDB, CacheSQLite, ClienteTMDb
 
 log = logging.getLogger(__name__)
 
 URL_VIDEOS_TMDB = "https://api.themoviedb.org/3/movie/{tmdb_id}/videos"
 URL_YOUTUBE = "https://www.youtube.com/watch?v={clave}"
-CACHE_VIDEOS = config.ARTEFACTOS / "tmdb_videos.json"
+CACHE_VIDEOS = CACHE_TMDB                 # tráileres: espacio «videos» de la caché SQLite
+NOMBRE_PARQUET = "tmdb.parquet"
+
+
+def ruta_parquet_defecto() -> Path:
+    return config.artefactos_activos() / "app" / NOMBRE_PARQUET
+
+
+def leer_parquet(ruta) -> dict[int, dict]:
+    """{tmdbId: ficha} desde tmdb.parquet ({} si no existe o está dañado)."""
+    ruta = Path(ruta)
+    if not ruta.exists():
+        return {}
+    try:
+        import pandas as pd
+
+        df = pd.read_parquet(ruta)
+    except Exception as exc:  # parquet a medio escribir o dañado: se sigue con la red
+        log.warning("No se pudo leer %s: %s", ruta, exc)
+        return {}
+    salida = {}
+    for f in df.to_dict("records"):
+        f = {k: (None if isinstance(v, float) and v != v else v) for k, v in f.items()}
+        salida[int(f["tmdbId"])] = {
+            "tmdbId": int(f["tmdbId"]), "titulo": f.get("titulo"),
+            "sinopsis": f.get("sinopsis"), "idioma_sinopsis": f.get("idioma_sinopsis"),
+            "poster_url": f.get("poster_url"), "atribucion": ATRIBUCION_TMDB}
+    return salida
 IDIOMAS_VIDEOS = ("es-ES", "en-US")
 
 # Paleta de MoviePredict por género (fondo de la carátula generada).
@@ -107,13 +136,15 @@ class TMDb:
     """Póster, sinopsis y tráiler con caché; nunca lanza excepciones a la app.
 
     api_key:      por defecto TMDB_API_KEY del entorno (vacía = sin clave).
-    cache:        caché de fichas (la misma de enriquecimiento: tmdb_cache.json).
-    cache_videos: caché de tráileres (tmdb_videos.json).
+    cache:        caché de fichas (por defecto la SQLite de enriquecimiento; una ruta
+                  .json usa el formato JSON antiguo).
+    cache_videos: caché de tráileres (por defecto la misma SQLite, espacio «videos»).
+    parquet:      tmdb.parquet precalentado (por defecto el de los artefactos activos).
     sesion:       objeto con ``get`` (requests o un doble de pruebas).
     """
 
     def __init__(self, api_key: str | None = None, cache=None, cache_videos=None,
-                 sesion=None, timeout: float = 8.0):
+                 sesion=None, timeout: float = 8.0, parquet=None):
         self.api_key = (api_key if api_key is not None
                         else os.environ.get("TMDB_API_KEY")) or None
         self.timeout = timeout
@@ -122,7 +153,19 @@ class TMDb:
                                    timeout=timeout, sesion=sesion)
         self.cliente.api_key = self.api_key           # "" -> None: sin clave
         self.cache_videos = Path(cache_videos) if cache_videos else CACHE_VIDEOS
-        self._videos: dict | None = None
+        self._videos = None
+        # tmdb.parquet precalentado: por defecto solo en la configuración de producción
+        # (sin caché explícita), para que las pruebas no dependan de artefactos reales.
+        if parquet is None and cache is None:
+            parquet = ruta_parquet_defecto()
+        self.ruta_parquet = Path(parquet) if parquet else None
+        self._parquet: dict | None = None
+
+    def precalentado(self) -> dict[int, dict]:
+        """Fichas de tmdb.parquet (se leen una vez por proceso)."""
+        if self._parquet is None:
+            self._parquet = leer_parquet(self.ruta_parquet) if self.ruta_parquet else {}
+        return self._parquet
 
     @property
     def disponible(self) -> bool:
@@ -130,6 +173,13 @@ class TMDb:
 
     # ---- fichas -------------------------------------------------------- #
     def detalle(self, tmdb_id) -> dict | None:
+        """Ficha de TMDb: primero tmdb.parquet, luego la caché SQLite y la red."""
+        try:
+            dato = self.precalentado().get(int(tmdb_id))
+            if dato is not None:
+                return dato
+        except (TypeError, ValueError):
+            return None
         try:
             return self.cliente.detalle(tmdb_id)
         except Exception as exc:  # caché dañada, respuesta rara...
@@ -156,7 +206,9 @@ class TMDb:
         return (dato or {}).get("sinopsis") or None
 
     # ---- tráiler ------------------------------------------------------- #
-    def _leer_videos(self) -> dict:
+    def _leer_videos(self):
+        if self._videos is None and self.cache_videos.suffix.lower() != ".json":
+            self._videos = CacheSQLite(self.cache_videos, espacio="videos")
         if self._videos is None:
             try:
                 self._videos = json.loads(self.cache_videos.read_text(encoding="utf-8"))
@@ -165,6 +217,8 @@ class TMDb:
         return self._videos
 
     def _guardar_videos(self) -> None:
+        if isinstance(self._videos, CacheSQLite):
+            return                              # SQLite ya escribió la fila
         try:
             self.cache_videos.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.cache_videos.with_suffix(".tmp")

@@ -10,8 +10,10 @@ Tres piezas independientes, sin scraping:
 
 2. TMDb: ``ClienteTMDb`` pide ``GET /3/movie/{tmdbId}`` con ``language=es-ES`` y, si falta
    la sinopsis o el póster, completa con ``en-US``. Las respuestas quedan en una caché
-   JSON (``artefactos/tmdb_cache.json``). Sin ``TMDB_API_KEY`` devuelve None sin errores
-   ni llamadas de red.
+   SQLite segura entre hilos (``artefactos/tmdb_cache.sqlite``, ver ``CacheSQLite``);
+   la antigua ``tmdb_cache.json`` se importa una vez. Una ruta ``.json`` explícita sigue
+   usando el formato JSON (compatibilidad). Sin ``TMDB_API_KEY`` devuelve None sin
+   errores ni llamadas de red.
 
 3. Letterboxd: lee el CSV de exportación (Date, Name, Year, Letterboxd URI, Rating),
    empareja con movies.csv por título normalizado y año (±1), y construye el perfil de
@@ -28,6 +30,8 @@ import hashlib
 import json
 import logging
 import re
+import sqlite3
+import threading
 import time
 import unicodedata
 from datetime import datetime, timezone
@@ -53,7 +57,8 @@ COLUMNAS_ENRIQUECIDAS = ["movieId", "titulo", "anio", "generos", "duracion_min",
 URL_TMDB = "https://api.themoviedb.org/3/movie/{tmdb_id}"
 URL_POSTER_TMDB = "https://image.tmdb.org/t/p/w342{ruta}"
 URL_BUSQUEDA_TMDB = "https://api.themoviedb.org/3/search/movie"
-CACHE_TMDB = config.ARTEFACTOS / "tmdb_cache.json"
+CACHE_TMDB = config.ARTEFACTOS / "tmdb_cache.sqlite"
+CACHE_TMDB_JSON_ANTIGUA = config.ARTEFACTOS / "tmdb_cache.json"
 CLAVE_BUSQUEDAS = "_busquedas"   # búsquedas /search/movie dentro de la misma caché
 IDIOMAS_TMDB = ("es-ES", "en-US")
 
@@ -287,6 +292,99 @@ def descargar_imdb(destino=None, archivos=ARCHIVOS_IMDB, forzar: bool = False,
 # 2. TMDb
 # --------------------------------------------------------------------------- #
 
+class CacheSQLite:
+    """Caché clave -> JSON en SQLite (modo WAL), segura con varios hilos y procesos.
+
+    Reemplaza a ``tmdb_cache.json``, que se reescribía entera con cada película nueva y
+    podía corromperse con varios usuarios a la vez. Se usa como un dict: ``in``, ``get``,
+    ``[]``, ``[]=`` (escribe al tiro, una fila), ``items()`` y ``setdefault``. Cada
+    ``espacio`` es una sub-caché independiente (fichas, búsquedas, tráileres).
+    Una conexión por hilo; las escrituras son INSERT OR REPLACE de una sola fila.
+    """
+
+    def __init__(self, ruta, espacio: str = "fichas"):
+        self.ruta = Path(ruta)
+        self.espacio = espacio
+        self._local = threading.local()
+
+    def _con(self) -> sqlite3.Connection:
+        con = getattr(self._local, "con", None)
+        if con is None:
+            self.ruta.parent.mkdir(parents=True, exist_ok=True)
+            con = sqlite3.connect(str(self.ruta), timeout=30, isolation_level=None)
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA busy_timeout=30000")
+            con.execute("CREATE TABLE IF NOT EXISTS cache (espacio TEXT NOT NULL, "
+                        "clave TEXT NOT NULL, valor TEXT NOT NULL, "
+                        "PRIMARY KEY (espacio, clave))")
+            self._local.con = con
+        return con
+
+    def get(self, clave, defecto=None):
+        fila = self._con().execute("SELECT valor FROM cache WHERE espacio=? AND clave=?",
+                                   (self.espacio, str(clave))).fetchone()
+        return defecto if fila is None else json.loads(fila[0])
+
+    def __contains__(self, clave) -> bool:
+        return self._con().execute("SELECT 1 FROM cache WHERE espacio=? AND clave=?",
+                                   (self.espacio, str(clave))).fetchone() is not None
+
+    def __getitem__(self, clave):
+        valor = self.get(clave, _FALTA)
+        if valor is _FALTA:
+            raise KeyError(clave)
+        return valor
+
+    def __setitem__(self, clave, valor) -> None:
+        self._con().execute("INSERT OR REPLACE INTO cache(espacio, clave, valor) "
+                            "VALUES (?, ?, ?)",
+                            (self.espacio, str(clave), json.dumps(valor, ensure_ascii=False)))
+
+    def items(self):
+        filas = self._con().execute("SELECT clave, valor FROM cache WHERE espacio=?",
+                                    (self.espacio,)).fetchall()
+        return [(k, json.loads(v)) for k, v in filas]
+
+    def __len__(self) -> int:
+        return self._con().execute("SELECT COUNT(*) FROM cache WHERE espacio=?",
+                                   (self.espacio,)).fetchone()[0]
+
+    def setdefault(self, clave, defecto=None):
+        if clave == CLAVE_BUSQUEDAS:            # las búsquedas van en su propio espacio
+            return CacheSQLite(self.ruta, espacio=CLAVE_BUSQUEDAS)
+        if clave not in self:
+            self[clave] = defecto
+            return defecto
+        return self[clave]
+
+    def importar_json(self, ruta_json) -> int:
+        """Copia una caché JSON antigua (una sola vez: si esta caché está vacía)."""
+        ruta_json = Path(ruta_json)
+        if len(self) or not ruta_json.exists():
+            return 0
+        try:
+            datos = json.loads(ruta_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return 0
+        n = 0
+        con = self._con()
+        con.execute("BEGIN")
+        for clave, valor in datos.items():
+            if clave == CLAVE_BUSQUEDAS and isinstance(valor, dict):
+                for c2, v2 in valor.items():
+                    con.execute("INSERT OR IGNORE INTO cache VALUES (?, ?, ?)",
+                                (CLAVE_BUSQUEDAS, c2, json.dumps(v2, ensure_ascii=False)))
+            else:
+                con.execute("INSERT OR IGNORE INTO cache VALUES (?, ?, ?)",
+                            (self.espacio, clave, json.dumps(valor, ensure_ascii=False)))
+            n += 1
+        con.execute("COMMIT")
+        return n
+
+
+_FALTA = object()
+
+
 class ClienteTMDb:
     """Póster y sinopsis desde la API v3 de TMDb, con caché local en JSON.
 
@@ -307,14 +405,19 @@ class ClienteTMDb:
         self.cache_path = Path(cache) if cache else CACHE_TMDB
         self.timeout = timeout
         self._sesion = sesion
-        self._cache: dict | None = None
+        self._cache = None
+        self._es_sqlite = self.cache_path.suffix.lower() != ".json"
 
     @property
     def disponible(self) -> bool:
         return bool(self.api_key)
 
     # ---- caché ---------------------------------------------------------- #
-    def _leer_cache(self) -> dict:
+    def _leer_cache(self):
+        if self._cache is None and self._es_sqlite:
+            self._cache = CacheSQLite(self.cache_path)
+            if self.cache_path == CACHE_TMDB:
+                self._cache.importar_json(CACHE_TMDB_JSON_ANTIGUA)
         if self._cache is None:
             try:
                 self._cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
@@ -323,6 +426,8 @@ class ClienteTMDb:
         return self._cache
 
     def _guardar_cache(self) -> None:
+        if self._es_sqlite:
+            return                              # SQLite ya escribió cada clave
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         temporal = self.cache_path.with_suffix(".tmp")
         temporal.write_text(json.dumps(self._cache, ensure_ascii=False, indent=1),

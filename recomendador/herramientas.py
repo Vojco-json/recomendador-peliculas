@@ -33,6 +33,7 @@ from pathlib import Path
 import numpy as np
 
 from . import config, estado, foldin, perfiles, titulos
+from . import genome as genome_npy
 from .datos import fecha_a_epoch
 from .enriquecimiento import (NOMBRE_ENRIQUECIDAS, ClienteTMDb, separar_titulo_anio,
                               titulo_legible)
@@ -134,20 +135,17 @@ def _votos(ruta: str, _mtime: float, corte_epoch: int) -> dict[int, int]:
 @lru_cache(maxsize=8)
 def _genome(ruta_tags: str, ruta_scores: str, tags: tuple[str, ...], _m1: float,
             _m2: float) -> dict[str, dict[int, float]]:
-    """{tag: {movieId: relevancia}} solo para los tags pedidos (lee genome por partes,
-    porque en 25M genome-scores.csv tiene ~15 millones de filas)."""
-    import pandas as pd
-
+    """{tag: {movieId: relevancia}} solo para los tags pedidos, desde la matriz compacta
+    genome.npy (se construye una sola vez desde genome-scores.csv; ver genome.py)."""
     if not Path(ruta_tags).exists() or not Path(ruta_scores).exists():
         return {}
-    gt = pd.read_csv(ruta_tags)
-    ids = {int(i): str(t).lower() for i, t in zip(gt["tagId"], gt["tag"])
-           if str(t).lower() in tags}
-    salida: dict[str, dict[int, float]] = {t: {} for t in ids.values()}
-    for parte in pd.read_csv(ruta_scores, chunksize=5_000_000):
-        parte = parte[parte["tagId"].isin(list(ids))]
-        for m, t, r in zip(parte["movieId"], parte["tagId"], parte["relevance"]):
-            salida[ids[int(t)]][int(m)] = float(r)
+    g = genome_npy.cargar(Path(ruta_scores).parent)
+    if g is None:
+        return {}
+    salida = g.relevancias(tags)
+    for t in tags:                       # tags pedidos que no existen en genome: vacío
+        if t in g.col_tag:
+            salida.setdefault(t, {})
     return salida
 
 
@@ -204,11 +202,12 @@ class Herramientas:
     # Fuentes
     # ------------------------------------------------------------------ #
     def _con(self) -> sqlite3.Connection | None:
-        """Conexión de solo lectura al estado en vivo, o None si no existe."""
+        """Conexión de solo lectura al estado en vivo (reutilizada por hilo), o None si
+        no existe. Su ``close()`` no la cierra: ver estado.lector."""
         if not self.estado_db.exists():
             return None
         try:
-            return estado.conectar(self.estado_db)
+            return estado.lector(self.estado_db)
         except sqlite3.Error as exc:
             log.warning("No se pudo abrir %s: %s", self.estado_db, exc)
             return None
@@ -238,8 +237,27 @@ class Herramientas:
         return [{"movieId": int(m[k]), "rating": float(r[k]), "timestamp": int(t[k])}
                 for k in range(i, j) if t[k] < self.corte_epoch]
 
+    def firma(self, userId: int) -> tuple[int, int | None]:
+        """(cantidad, último timestamp) de los eventos en vivo del usuario: clave de las
+        cachés por usuario (cambia solo cuando el usuario califica)."""
+        return estado.firma_usuario(self.estado_db, int(userId))
+
     def _ratings_usuario(self, userId: int) -> dict[int, dict]:
-        """{movieId: {rating, timestamp, fuente}}: historial + eventos en vivo (estos mandan)."""
+        """{movieId: {rating, timestamp, fuente}}: historial + eventos en vivo (estos mandan).
+
+        Queda en caché por (userId, firma de sus eventos)."""
+        uid = int(userId)
+        clave = (uid, self.firma(uid))
+        memo = self.__dict__.setdefault("_memo_ratings", {})
+        if clave in memo:
+            return dict(memo[clave])
+        salida = self._ratings_usuario_sin_cache(uid)
+        if len(memo) > 5000:
+            memo.clear()
+        memo[clave] = salida
+        return dict(salida)
+
+    def _ratings_usuario_sin_cache(self, userId: int) -> dict[int, dict]:
         salida = {f["movieId"]: {**f, "fuente": "historial"} for f in self._historial(userId)}
         con = self._con()
         if con is not None:

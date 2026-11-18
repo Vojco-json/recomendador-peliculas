@@ -13,6 +13,8 @@ import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from base_mini import ir_a
+
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, estado, eventos
 from recomendador.catalogo_app import IMPROBABLE, PROBABLE
@@ -76,7 +78,7 @@ def _sesion_con_notas(nombre: str) -> tuple[AppTest, int]:
 
 def _abrir_ficha_nolan(at) -> int:
     """Busca 'nolan' y abre la ficha del primer resultado; devuelve su movieId."""
-    at.text_input(key="buscar_q").input("nolan").run()
+    ir_a(at, "Buscar").text_input(key="buscar_q").input("nolan").run()
     assert not at.exception, at.exception
     html = _html(at)
     assert "resultados para «nolan»" in html
@@ -138,7 +140,7 @@ def test_buscar_nolan_y_ficha_sin_tmdb(entorno):
 
 def test_buscar_ignora_tildes_y_mayusculas(entorno):
     at, _ = _sesion_con_notas("gabi_tildes")
-    at.text_input(key="buscar_q").input("NÓLÁN").run()
+    ir_a(at, "Buscar").text_input(key="buscar_q").input("NÓLÁN").run()
     assert not at.exception, at.exception
     assert "Director: Christopher Nolan" in _html(at)
 

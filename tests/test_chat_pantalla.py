@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from base_mini import ir_a
+
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, eventos
 
@@ -35,6 +37,7 @@ def at(monkeypatch, artefactos, ruta_mini, tmp_path):
     monkeypatch.setattr(cuentas, "ruta_defecto", lambda: tmp_path / "cuentas.db")
     app = AppTest.from_file(str(APP), default_timeout=120)
     app.run()
+    ir_a(app, "Chat")
     app.text_input(key="reg_nombre").input("chat_ui")
     app.text_input(key="reg_clave").input("secreta123")
     app.text_input(key="reg_clave2").input("secreta123")
@@ -54,7 +57,7 @@ def test_chips_aviso_y_barra_lateral(at):
     assert any("servicio externo" in c.value for c in at.caption)
     assert any(b.label == "Nueva conversación" for b in at.button)
 
-    at.chat_input(key="chat_entrada").set_value("drama policial con un twist final").run()
+    ir_a(at, "Chat").chat_input(key="chat_entrada").set_value("drama policial con un twist final").run()
     assert not at.exception, at.exception
 
     chips = [b.label for b in at.button if b.key and b.key.startswith("chip_")]

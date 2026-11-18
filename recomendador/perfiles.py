@@ -625,15 +625,12 @@ def _features_cache(ruta_datos: str, tags: tuple[str, ...], _mtime: float):
     if not tags or not (ruta / "genome-tags.csv").exists() \
             or not (ruta / "genome-scores.csv").exists():
         return feats
-    gt = pd.read_csv(ruta / "genome-tags.csv")
-    id_por_tag = {str(t).lower(): int(i) for i, t in zip(gt["tagId"], gt["tag"])}
-    ids = {id_por_tag[t]: t for t in tags if t in id_por_tag}
-    relevancias: dict[int, dict[str, float]] = {}
-    # genome-scores de 25M tiene ~15M filas: se lee por partes y solo los tags usados.
-    for parte in pd.read_csv(ruta / "genome-scores.csv", chunksize=2_000_000):
-        parte = parte[parte["tagId"].isin(list(ids))]
-        for m, t, r in zip(parte["movieId"], parte["tagId"], parte["relevance"]):
-            relevancias.setdefault(int(m), {})[ids[int(t)]] = float(r)
+    # genome-scores de 25M tiene ~15M filas: se usa la matriz compacta genome.npy
+    # (construida una sola vez con pyarrow) y solo las columnas de los tags usados.
+    from . import genome as genome_npy
+
+    g = genome_npy.cargar(ruta)
+    relevancias = g.por_pelicula([t.lower() for t in tags]) if g is not None else {}
     for m, rel in relevancias.items():
         generos = feats.get(m, (frozenset(), None))[0]
         feats[m] = (generos, rel)

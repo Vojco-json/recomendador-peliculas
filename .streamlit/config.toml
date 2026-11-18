@@ -9,3 +9,12 @@ textColor = "#F2F2F2"
 
 [browser]
 gatherUsageStats = false
+
+# Producción (expo con muchos usuarios): sin vigilar archivos ni recargar al guardar,
+# barra de herramientas mínima y sin estadísticas de uso.
+[server]
+fileWatcherType = "none"
+runOnSave = false
+
+[client]
+toolbarMode = "minimal"

@@ -195,6 +195,23 @@ class Catalogo:
                                estado_db=self.estado_db, corte=corte)
         self.corte = self._h.corte
 
+    # ---- caché por usuario --------------------------------------------- #
+    def _por_usuario(self, nombre: str, userId, fn, *extra):
+        """Resultado de ``fn()`` cacheado por (nombre, userId, cantidad y último timestamp
+        de sus eventos). Se invalida solo cuando el usuario califica (cambia la firma)."""
+        if userId is None:
+            return fn()
+        uid = int(userId)
+        clave = (nombre, uid, self._h.firma(uid), *extra)
+        memo = self.__dict__.setdefault("_memo_usuario", {})
+        if clave in memo:
+            return memo[clave]
+        valor = fn()
+        if len(memo) > 5000:
+            memo.clear()
+        memo[clave] = valor
+        return valor
+
     # ---- fuentes ------------------------------------------------------- #
     def _ruta_app(self, nombre: str) -> Path:
         return self.artefactos / CARPETA_APP / nombre
@@ -313,7 +330,7 @@ class Catalogo:
         """Reseñas públicas (no ocultas) de estado.db, de la más nueva a la más vieja."""
         if not self.estado_db.exists():
             return []
-        con = estado.conectar(self.estado_db)
+        con = estado.lector(self.estado_db)
         try:
             filas = estado.resenas_pelicula(con, int(movieId), limite)
         finally:
@@ -335,6 +352,10 @@ class Catalogo:
 
     # ---- tipo de espectador ------------------------------------------- #
     def tipo(self, userId: int, ratings: dict | None = None) -> dict | None:
+        """Tipo de espectador vigente (en caché por usuario; ver _tipo_sin_cache)."""
+        return self._por_usuario("tipo", userId, lambda: self._tipo_sin_cache(userId, ratings))
+
+    def _tipo_sin_cache(self, userId: int, ratings: dict | None = None) -> dict | None:
         """Tipo de espectador vigente.
 
         - Usuario de MovieLens sin eventos en vivo: su cluster de perfiles.parquet.
@@ -391,6 +412,16 @@ class Catalogo:
         return self.orden_para_ti(ratings, excluir)[:n]
 
     def filas_inicio(self, userId: int | None, n: int = N_FILA) -> list[dict]:
+        """Filas del Inicio (en caché por usuario; ver _filas_inicio_sin_cache)."""
+        return self._por_usuario("filas", userId,
+                                 lambda: self._filas_inicio_sin_cache(userId, n), n)
+
+    def _orden_usuario(self, userId: int) -> list[tuple[int, float]]:
+        """orden_para_ti del usuario (sin vistas), en caché por usuario."""
+        return self._por_usuario("orden", userId,
+                                 lambda: self.orden_para_ti(self.ratings_usuario(userId)))
+
+    def _filas_inicio_sin_cache(self, userId: int | None, n: int = N_FILA) -> list[dict]:
         """Filas de carátulas de la página de inicio.
 
         Cada fila: {'clave', 'titulo', 'peliculas': [ficha_corta], ...}. Sin
@@ -402,7 +433,8 @@ class Catalogo:
         filas = []
 
         # 1. Para ti (fold-in ALS con historial + eventos en vivo).
-        recs = [m for m, _ in self._para_ti(ratings, n, vistas)]
+        recs = ([m for m, _ in self._orden_usuario(userId)][:n] if userId is not None
+                else [m for m, _ in self._para_ti(ratings, n, vistas)])
         if not recs:
             recs = [m for m in pel["populares"] if m not in vistas][:n]
         filas.append({"clave": FILA_PARA_TI, "titulo": "Para ti",
@@ -562,6 +594,11 @@ class Catalogo:
         return " ".join(partes)
 
     def tarjeta_para_ti(self, userId: int, candidatas: int = 50) -> dict:
+        """Tarjeta 'Para ti' (en caché por usuario; ver _tarjeta_sin_cache)."""
+        return self._por_usuario("tarjeta", userId,
+                                 lambda: self._tarjeta_sin_cache(userId, candidatas), candidatas)
+
+    def _tarjeta_sin_cache(self, userId: int, candidatas: int = 50) -> dict:
         """Tarjeta 'Para ti': una película probable y una improbable, ambas explicadas.
 
         - Probable: la primera del orden híbrido del chat (orden_para_ti), que ya pone
@@ -576,7 +613,7 @@ class Catalogo:
         fac = self._factores()
         fichas = self._peliculas()["fichas"]
         probable = improbable = None
-        orden = self.orden_para_ti(ratings) if ratings else []
+        orden = self._orden_usuario(userId) if ratings else []
         if orden:
             probable = orden[0][0]
             ids, matriz, _, _ = fac

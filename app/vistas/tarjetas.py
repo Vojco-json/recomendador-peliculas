@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 
 from recomendador import config, llm, proveedores
@@ -67,7 +70,7 @@ def _clave(e: dict) -> str:
     return f"{e['movieId']}|{e['veredicto']}|{e['texto']}"
 
 
-def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, str]:
+def _redactar_bloqueante(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, str]:
     """Texto de la explicación y su origen ('llm' o 'plantilla'). Nunca lanza excepciones.
 
     Con el proveedor 'api' usa LLM_MODELO_TARJETAS y la caché COMPARTIDA por proceso
@@ -109,7 +112,7 @@ def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, s
     return salida
 
 
-def redactar_par(tarjeta: dict, post=None) -> dict:
+def _redactar_par_bloqueante(tarjeta: dict, post=None) -> dict:
     """Inicio: redacta la probable y la improbable en UNA sola llamada al LLM.
 
     Devuelve {'probable': texto, 'improbable': texto}; lo que falte o no pase la
@@ -119,7 +122,7 @@ def redactar_par(tarjeta: dict, post=None) -> dict:
     textos = {k: tarjeta[k]["texto"] for k in claves}
     if str(config.LLM_PROVIDER).lower() != "api" or not claves:
         if str(config.LLM_PROVIDER).lower() == "ollama":
-            return {k: redactar(tarjeta[k])[0] for k in claves}
+            return {k: _redactar_bloqueante(tarjeta[k])[0] for k in claves}
         return textos
     pendientes = []
     for k in claves:
@@ -148,6 +151,56 @@ def redactar_par(tarjeta: dict, post=None) -> dict:
             proveedores.cache_set(_clave(tarjeta[k]), salida)
         textos[k] = salida[0]
     return textos
+
+
+# --------------------------------------------------------------------------- #
+# Tope de espera: la página nunca espera más de TOPE_TARJETA_S al LLM
+# --------------------------------------------------------------------------- #
+
+TOPE_TARJETA_S = float(os.environ.get("LLM_TOPE_TARJETA_S", "3"))
+_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="redaccion")
+_EN_CURSO: dict[str, Future] = {}
+_CERROJO = threading.Lock()
+
+
+def _con_tope(clave: str, trabajo):
+    """Corre ``trabajo`` en segundo plano y espera como máximo TOPE_TARJETA_S.
+
+    Si no llega a tiempo devuelve None (la vista muestra la plantilla), pero la llamada
+    sigue y su resultado queda en la caché compartida para la próxima vez. Una misma
+    clave no se pide dos veces en paralelo.
+    """
+    with _CERROJO:
+        fut = _EN_CURSO.get(clave)
+        if fut is None:
+            fut = _POOL.submit(trabajo)
+            _EN_CURSO[clave] = fut
+            fut.add_done_callback(lambda _f, c=clave: _EN_CURSO.pop(c, None))
+    try:
+        return fut.result(timeout=TOPE_TARJETA_S)
+    except Exception:  # tope vencido o error: plantilla
+        return None
+
+
+def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, str]:
+    """Texto de la explicación y su origen ('llm' o 'plantilla'), con tope de 3 s."""
+    if str(config.LLM_PROVIDER).lower() == "reglas":
+        return e["texto"], "plantilla"
+    guardado = proveedores.cache_get(_clave(e))
+    if guardado is not None:
+        return guardado
+    salida = _con_tope(_clave(e), lambda: _redactar_bloqueante(e, memoria, cliente))
+    return salida or (e["texto"], "plantilla")
+
+
+def redactar_par(tarjeta: dict, post=None) -> dict:
+    """Probable e improbable en UNA llamada, con tope de 3 s (si no, plantillas)."""
+    claves = [k for k in ("probable", "improbable") if tarjeta.get(k)]
+    plantillas = {k: tarjeta[k]["texto"] for k in claves}
+    if not claves or str(config.LLM_PROVIDER).lower() == "reglas":
+        return plantillas
+    clave = "par|" + "|".join(_clave(tarjeta[k]) for k in claves)
+    return _con_tope(clave, lambda: _redactar_par_bloqueante(tarjeta, post)) or plantillas
 
 
 # --------------------------------------------------------------------------- #

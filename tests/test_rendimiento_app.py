@@ -16,6 +16,8 @@ import time
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from base_mini import ir_a
+
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, eventos
 
@@ -64,7 +66,7 @@ def test_paginas_en_menos_de_2_s(entorno):
     at.run()                                         # calentamiento de cachés
 
     tiempos = {"Inicio + Buscar + Explorar (recarga)": _medir(at)}
-    at.text_input(key="buscar_q").input("nolan")
+    ir_a(at, "Buscar").text_input(key="buscar_q").input("nolan")
     tiempos["Buscar 'nolan'"] = _medir(at)
     ver = [b for b in at.button if b.key and b.key.startswith("ver_")]
     assert ver, "la búsqueda no devolvió resultados"

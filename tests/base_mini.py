@@ -49,3 +49,14 @@ def crear_artefactos_moviepredict(spark, ruta_mini, salida) -> Path:
     precalculo.ejecutar(spark, ruta_mini, salida, CORTE,
                         imdb_dir=config.RAIZ / "muestras" / "imdb-mini", log=lambda *_: None)
     return salida
+
+
+def ir_a(at, seccion: str):
+    """Elige una sección de la app (solo se ejecuta la sección activa) y recarga."""
+    try:
+        radio = at.radio(key="seccion")
+    except KeyError:                     # login u onboarding: no hay navegación
+        return at
+    if radio.value != seccion:
+        radio.set_value(seccion).run()
+    return at

@@ -14,6 +14,8 @@ import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from base_mini import ir_a
+
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, estado, eventos, perfiles
 
@@ -93,7 +95,7 @@ def _calificar_onboarding(at) -> dict[int, float]:
 
 def _comprobar_inicio(at, artefactos, ruta_mini, notas: dict) -> None:
     html = _html(at)
-    assert {"Inicio", "Buscar", "Explorar", "Chat"} <= {t.label for t in at.tabs}
+    assert {"Inicio", "Buscar", "Explorar", "Chat"} <= set(at.radio(key="seccion").options)
     assert "Primer paso" not in html
     for clave, titulo in FILAS.items():
         bloque = re.search(rf'<section class="cr-fila" data-fila="{clave}"><h3>(.*?)</h3>'
@@ -120,7 +122,7 @@ def test_sin_sesion_solo_login(entorno):
     claves = {t.key for t in at.text_input}
     assert {"login_nombre", "login_clave", "reg_nombre", "reg_clave"} <= claves
     assert [t.label for t in at.tabs] == ["Entrar", "Crear cuenta"]
-    assert not at.chat_input and not at.selectbox            # ni chat ni onboarding
+    assert not ir_a(at, "Chat").chat_input and not at.selectbox            # ni chat ni onboarding
     assert not at.sidebar.markdown and not at.sidebar.button   # sin barra lateral
     html = _html(at)
     assert "MoviePredict" in html and '<section class="cr-fila"' not in html
@@ -131,7 +133,7 @@ def test_registro_onboarding_e_inicio(entorno, artefactos, ruta_mini):
     at = AppTest.from_file(str(APP), default_timeout=90)
     uid = _registrar(at, "ana_onb")
     assert uid > cuentas.ULTIMO_USERID_MOVIELENS
-    assert "Primer paso" in _html(at) and not at.chat_input     # onboarding
+    assert "Primer paso" in _html(at) and not ir_a(at, "Chat").chat_input     # onboarding
     notas = _calificar_onboarding(at)
     assert _eventos(entorno, uid) == notas                      # las 10 quedaron
     _comprobar_inicio(at, artefactos, ruta_mini, notas)
@@ -188,12 +190,12 @@ def test_accion_21_rechazada_en_la_app(entorno):
     uid = _registrar(at, "caro_lim")
     _calificar_onboarding(at)
     for i in range(10):
-        at.chat_input[0].set_value(f"algo corto y liviano {i}").run()
+        ir_a(at, "Chat").chat_input[0].set_value(f"algo corto y liviano {i}").run()
         assert not at.exception, at.exception
     historial = at.session_state[f"chat_{uid}"]
     assert len(historial) == 20
     assert not [w for w in at.warning if "límite" in str(w.value)]
-    at.chat_input[0].set_value("drama policial con un twist final").run()
+    ir_a(at, "Chat").chat_input[0].set_value("drama policial con un twist final").run()
     assert not at.exception, at.exception
     avisos = [w.value for w in at.warning if "Llegaste al límite de 20" in str(w.value)]
     assert avisos and "no se registró" in avisos[0]
@@ -246,8 +248,8 @@ at.text_input(key="reg_clave").input("secreta123")
 at.text_input(key="reg_clave2").input("secreta123")
 next(b for b in at.button if b.label == "Crear cuenta").click().run()
 next(b for b in at.button if b.label == "Probar con un CSV de ejemplo").click().run()
-at.text_input(key="buscar_q").input("nolan").run()
-at.chat_input[0].set_value("drama policial con un twist final").run()
+ir_a(at, "Buscar").text_input(key="buscar_q").input("nolan").run()
+ir_a(at, "Chat").chat_input[0].set_value("drama policial con un twist final").run()
 assert not at.exception, at.exception
 assert "cr-fila" in "".join(str(m.value) for m in at.markdown)
 cargados = sorted(m for m in sys.modules if m.startswith("pyspark"))
