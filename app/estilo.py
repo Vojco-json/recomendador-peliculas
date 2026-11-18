@@ -7,6 +7,10 @@ texto sobre este archivo). El CSS se inyecta una sola vez por ejecución con ``i
 
 from __future__ import annotations
 
+import base64
+from functools import lru_cache
+from pathlib import Path
+
 NOMBRE_APP = "MoviePredict"
 LEMA = "Tu ruta por el cine, guiada por tus gustos"
 
@@ -19,10 +23,14 @@ PALETA = {
     "borde": "#34404c",          # bordes y separadores
     "texto": "#aab4be",          # texto corriente
     "titulo": "#f3f5f7",         # títulos y texto destacado
-    "ambar": "#f0b23a",          # acento principal: botones, estrellas, barras
-    "turquesa": "#3cb4a8",       # 'probablemente te guste', enlaces, estado en vivo
+    "cian": "#07ECF8",           # acento principal (cian del logo): botones, foco, marca
+    "azul": "#0D73C5",           # secundario (azul del logo): insignias, bordes activos
+    "ambar": "#f0b23a",          # estrellas, nota IMDb e histograma de notas
+    "turquesa": "#3cb4a8",       # 'probablemente te guste', estado en vivo
     "coral": "#e5675c",          # 'puede que no', avisos
 }
+
+RUTA_LOGO = Path(__file__).resolve().parent / "recursos" / "logo_moviepredict.png"
 
 FUENTE_TEXTO = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 FUENTE_TITULOS = 'Georgia, "Times New Roman", serif'
@@ -36,6 +44,7 @@ def _css() -> str:
   --cr-fondo:{p['fondo']}; --cr-superficie:{p['superficie']}; --cr-borde:{p['borde']};
   --cr-texto:{p['texto']}; --cr-titulo:{p['titulo']}; --cr-ambar:{p['ambar']};
   --cr-turquesa:{p['turquesa']}; --cr-coral:{p['coral']};
+  --cr-cian:{p['cian']}; --cr-azul:{p['azul']};
 }}
 /* ---- base ---- */
 .stApp, [data-testid="stAppViewContainer"] {{ background:var(--cr-fondo); color:var(--cr-texto);
@@ -53,10 +62,11 @@ def _css() -> str:
 .stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {{
   background:var(--cr-superficie); color:var(--cr-titulo); border:1px solid var(--cr-borde);
   border-radius:6px; }}
-.stButton > button:hover, .stFormSubmitButton > button:hover {{ border-color:var(--cr-ambar);
-  color:var(--cr-ambar); }}
+.stButton > button:hover, .stFormSubmitButton > button:hover {{ border-color:var(--cr-cian);
+  color:var(--cr-cian); }}
+.stButton > button:focus-visible {{ outline:2px solid var(--cr-azul); outline-offset:2px; }}
 .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {{
-  background:var(--cr-ambar); color:var(--cr-fondo); border-color:var(--cr-ambar);
+  background:var(--cr-cian); color:var(--cr-fondo); border-color:var(--cr-cian);
   font-weight:700; }}
 .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button[kind="primary"]:hover {{
   filter:brightness(1.08); color:var(--cr-fondo); }}
@@ -65,14 +75,19 @@ def _css() -> str:
 .stTabs [data-baseweb="tab-list"] {{ gap:.4rem; border-bottom:1px solid var(--cr-borde); }}
 .stTabs [data-baseweb="tab"] {{ color:var(--cr-texto); padding:.4rem .9rem; }}
 .stTabs [aria-selected="true"] {{ color:var(--cr-titulo); }}
-.stTabs [data-baseweb="tab-highlight"] {{ background:var(--cr-ambar); }}
+.stTabs [data-baseweb="tab-highlight"] {{ background:var(--cr-cian); }}
 
-/* ---- marca ---- */
-.cr-marca {{ display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap;
+/* ---- marca (logo PNG con fondo transparente) ---- */
+.cr-marca {{ display:flex; align-items:center; gap:.9rem; flex-wrap:wrap;
   margin:0 0 .8rem; }}
 .cr-logo {{ font-family:{FUENTE_TITULOS}; font-size:2.1rem; color:var(--cr-titulo);
-  line-height:1; }}
-.cr-logo b {{ color:var(--cr-ambar); font-weight:400; }}
+  line-height:1; display:flex; align-items:center; }}
+.cr-logo img {{ height:52px; width:auto; max-width:min(320px, 70vw); display:block; }}
+[data-testid="stSidebar"] .cr-logo img {{ height:40px; }}
+.cr-logo b {{ color:var(--cr-cian); font-weight:400; }}
+/* Texto solo para lectores de pantalla (el logo ya lleva alt) */
+.cr-oculto {{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);
+  white-space:nowrap; }}
 .cr-lema {{ color:var(--cr-texto); font-size:.9rem; }}
 .cr-pie {{ margin-top:2.5rem; padding-top:1rem; border-top:1px solid var(--cr-borde);
   color:var(--cr-texto); font-size:.75rem; text-align:center; opacity:.85; }}
@@ -85,7 +100,7 @@ def _css() -> str:
 
 /* ---- tipo de espectador ---- */
 .cr-tipo {{ display:inline-block; padding:.3rem .8rem; border-radius:999px;
-  background:var(--cr-ambar); color:var(--cr-fondo); font-weight:700; font-size:.9rem; }}
+  background:var(--cr-azul); color:#ffffff; font-weight:700; font-size:.9rem; }}
 .cr-tipo.vacio {{ background:var(--cr-borde); color:var(--cr-titulo); }}
 .cr-tipo-linea {{ margin:.2rem 0 1rem; color:var(--cr-texto); font-size:.9rem; }}
 .cr-vivo {{ color:var(--cr-turquesa); font-size:.82rem; }}
@@ -101,7 +116,12 @@ def _css() -> str:
 .cr-caratula img {{ width:132px; aspect-ratio:2/3; object-fit:cover; border-radius:4px;
   border:1px solid var(--cr-borde); display:block; background:var(--cr-superficie);
   transition:border-color .15s, transform .15s; }}
-.cr-caratula:hover img {{ border-color:var(--cr-ambar); transform:translateY(-2px); }}
+.cr-caratula:hover img, .cr-caratula:focus-visible img {{ border-color:var(--cr-cian);
+  transform:translateY(-2px); box-shadow:0 0 0 1px var(--cr-azul); }}
+.tarjeta[data-movie]:hover {{ border-color:var(--cr-cian); }}
+/* resultados de Buscar: rejilla de carátulas dentro del componente clicable */
+.cr-resultados {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:14px; }}
 .cr-caratula .t {{ color:var(--cr-titulo); font-size:.8rem; line-height:1.2; margin-top:.35rem;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
 .cr-caratula .a {{ color:var(--cr-texto); font-size:.72rem; }}
@@ -111,7 +131,7 @@ def _css() -> str:
 }}
 
 /* ---- onboarding ---- */
-.cr-paso {{ color:var(--cr-ambar); font-size:.78rem; text-transform:uppercase;
+.cr-paso {{ color:var(--cr-cian); font-size:.78rem; text-transform:uppercase;
   letter-spacing:1.2px; font-weight:700; }}
 .cr-onb img {{ width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:4px;
   border:1px solid var(--cr-borde); }}
@@ -123,7 +143,7 @@ def _css() -> str:
 .tarjeta {{ background:var(--cr-superficie); border:1px solid var(--cr-borde); border-radius:8px;
   padding:12px 14px; display:flex; flex-direction:column; gap:6px; min-height:150px; }}
 .tarjeta img {{ width:100%; border-radius:4px; aspect-ratio:2/3; object-fit:cover; }}
-.tarjeta .rank {{ color:var(--cr-ambar); font-weight:700; font-size:.8rem; }}
+.tarjeta .rank {{ color:var(--cr-cian); font-weight:700; font-size:.8rem; }}
 .tarjeta .titulo {{ color:var(--cr-titulo); font-weight:700; font-size:1rem; line-height:1.25; }}
 .tarjeta .meta {{ color:var(--cr-texto); font-size:.8rem; }}
 .chip {{ display:inline-block; background:var(--cr-fondo); color:var(--cr-texto);
@@ -212,13 +232,30 @@ def _logo_html(nombre: str) -> str:
     return f"{nombre[:corte]}<b>{nombre[corte:]}</b>"
 
 
+@lru_cache(maxsize=1)
+def logo_src() -> str | None:
+    """El logo PNG como data URI (se lee una vez por proceso); None si falta el archivo."""
+    try:
+        return "data:image/png;base64," + base64.b64encode(RUTA_LOGO.read_bytes()).decode()
+    except OSError:
+        return None
+
+
 def cabecera_html() -> str:
     """Logotipo y lema (la cabecera de todas las pantallas).
 
-    El logo se arma desde NOMBRE_APP: la primera palabra en peso normal y el resto
-    en negrita ("Movie<b>Predict</b>"), así un cambio de nombre no deja restos.
+    Muestra app/recursos/logo_moviepredict.png con alt=NOMBRE_APP. El nombre en texto
+    ("Movie<b>Predict</b>", armado desde NOMBRE_APP) queda solo para lectores de pantalla
+    (aria-hidden porque el alt ya lo anuncia) y como respaldo visible si falta el PNG.
     """
-    return (f'<div class="cr-marca"><span class="cr-logo">{_logo_html(NOMBRE_APP)}</span>'
+    texto = _logo_html(NOMBRE_APP)
+    src = logo_src()
+    if src is None:
+        logo = texto
+    else:
+        logo = (f'<img src="{src}" alt="{NOMBRE_APP}">'
+                f'<span class="cr-oculto" aria-hidden="true">{texto}</span>')
+    return (f'<div class="cr-marca"><span class="cr-logo">{logo}</span>'
             f'<span class="cr-lema">{LEMA}</span></div>')
 
 

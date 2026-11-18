@@ -13,7 +13,7 @@ import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import ir_a
+from base_mini import clic_caratula, html_pagina, ir_a
 
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, estado, eventos
@@ -48,7 +48,8 @@ def entorno(monkeypatch, artefactos, ruta_mini, tmp_path):
 # --------------------------------------------------------------------------- #
 
 def _html(at) -> str:
-    return "\n".join(str(m.value) for m in at.markdown)
+    """Markdown + HTML de los componentes de carátulas clicables."""
+    return html_pagina(at)
 
 
 def _textos(at) -> str:
@@ -83,11 +84,12 @@ def _abrir_ficha_nolan(at) -> int:
     html = _html(at)
     assert "resultados para «nolan»" in html
     assert "Director: Christopher Nolan" in html
-    ver = [b for b in at.button if b.key and b.key.startswith("ver_")]
-    assert ver, "buscar 'nolan' no devolvió resultados"
-    movieId = int(ver[0].key.split("_")[1])
-    ver[0].click().run()
+    ids = re.findall(r'class="cr-caratula" data-movie="(\d+)"', html)
+    assert ids, "buscar 'nolan' no devolvió carátulas clicables"
+    movieId = int(ids[0])
+    clic_caratula(at, movieId, "Buscar")       # lo mismo que hace el clic en la carátula
     assert not at.exception, at.exception
+    assert at.session_state["ficha_abierta"] == {"movieId": movieId, "origen": "Buscar"}
     return movieId
 
 
@@ -134,8 +136,9 @@ def test_buscar_nolan_y_ficha_sin_tmdb(entorno):
     assert at.text_area(key=f"bus_resena_{movieId}_0").max_chars == 500
     assert "Reseñas (0)" in html
     # Volver a los resultados.
-    _boton(at, "← Volver a los resultados").click().run()
+    _boton(at, "← Volver").click().run()
     assert "resultados para «nolan»" in _html(at)
+    assert "ficha_abierta" not in at.session_state
 
 
 def test_buscar_ignora_tildes_y_mayusculas(entorno):

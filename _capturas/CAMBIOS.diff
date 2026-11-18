@@ -1,371 +1,364 @@
-4db20ca Ronda 1: Avancé buena parte del paquete de rendimiento, pero no lo terminé: se me acabó el presupuesto de la ronda. Quedan 3 pruebas de la app sin adaptar a la
+7d84aa2 Ronda 1: Las 3 pruebas que fallaban (Explorar «siguiente», sin pyspark, chips del chat) ya pasan con las pruebas adaptadas a la navegación por radio (`ir_a`).
 
- .streamlit/config.toml          |   31 +-
- ESPEC.md                        |   18 +-
- _capturas/CAMBIOS.diff          |  596 +++++++-------
- _capturas/PRUEBAS.txt           |  169 ++--
- app/app.py                      |   66 +-
- app/vistas/tarjetas.py          |   59 +-
- recomendador/catalogo_app.py    | 1265 +++++++++++++++--------------
- recomendador/enriquecimiento.py | 1679 +++++++++++++++++++++------------------
- recomendador/estado.py          |  668 +++++++++-------
- recomendador/genome.py          |  154 ++++
- recomendador/herramientas.py    |   48 +-
- recomendador/perfiles.py        |   15 +-
- recomendador/tmdb.py            |  522 ++++++------
- scripts/precalentar_tmdb.py     |  130 +++
- tests/base_mini.py              |  113 +--
- tests/test_app.py               |   10 +-
- tests/test_app_ficha.py         |  546 ++++++-------
- tests/test_app_letterboxd.py    |   16 +-
- tests/test_chat_pantalla.py     |  165 ++--
- tests/test_rendimiento_app.py   |  182 ++---
- 20 files changed, 3615 insertions(+), 2837 deletions(-)
+ ESPEC.md                       |  34 +--
+ _capturas/CAMBIOS.diff         | 658 +++++++++++++++++++++--------------------
+ _capturas/PRUEBAS.txt          | 175 +++++------
+ app/app.py                     |   8 +
+ app/vistas/buscar.py           |   3 +-
+ app/vistas/comun.py            |   8 +
+ recomendador/herramientas.py   |  19 +-
+ recomendador/tmdb.py           |  39 ++-
+ scripts/medir_app.py           | 202 +++++++++++++
+ tests/test_app_ficha.py        |   4 +-
+ tests/test_app_letterboxd.py   |  10 +
+ tests/test_chat_pantalla.py    |   2 +-
+ tests/test_genome_npy.py       |  96 ++++++
+ tests/test_medir_app.py        |  45 +++
+ tests/test_precalentar_tmdb.py |  97 ++++++
+ 15 files changed, 955 insertions(+), 445 deletions(-)
 
-diff --git a/.streamlit/config.toml b/.streamlit/config.toml
-index ff4f94b..f1b5446 100644
---- a/.streamlit/config.toml
-+++ b/.streamlit/config.toml
-@@ -1,11 +1,20 @@
--# Tema oscuro con la paleta del póster. Streamlit lee este archivo cuando se
--# ejecuta «streamlit run app/app.py» desde la raíz del proyecto.
--[theme]
--base = "dark"
--primaryColor = "#E50914"
--backgroundColor = "#141414"
--secondaryBackgroundColor = "#1E1E1E"
--textColor = "#F2F2F2"
--
--[browser]
--gatherUsageStats = false
-+# Tema oscuro con la paleta del póster. Streamlit lee este archivo cuando se
-+# ejecuta «streamlit run app/app.py» desde la raíz del proyecto.
-+[theme]
-+base = "dark"
-+primaryColor = "#E50914"
-+backgroundColor = "#141414"
-+secondaryBackgroundColor = "#1E1E1E"
-+textColor = "#F2F2F2"
-+
-+[browser]
-+gatherUsageStats = false
-+
-+# Producción (expo con muchos usuarios): sin vigilar archivos ni recargar al guardar,
-+# barra de herramientas mínima y sin estadísticas de uso.
-+[server]
-+fileWatcherType = "none"
-+runOnSave = false
-+
-+[client]
-+toolbarMode = "minimal"
 diff --git a/ESPEC.md b/ESPEC.md
-index 43da3e9..aa2339d 100644
+index aa2339d..9f31f54 100644
 --- a/ESPEC.md
 +++ b/ESPEC.md
-@@ -19,8 +19,9 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
- 9. Convertir el chat en una conversación natural con contexto, apoyada siempre en los datos del sistema (ALS, perfil y catálogo), y cambiar el LLM local por APIs gratuitas compatibles con OpenAI para atender a varios usuarios a la vez. Sin reentrenar el batch. A. Proveedores 1. Nuevo proveedor "api", por defecto, con cadena de respaldo: Groq (https://api.groq.com/openai/v1, clave GROQ_API_KEY) -> Gemini (https://generativelanguage.googleapis.com/v1beta/openai/, clave GEMINI_API_KEY, solo si existe) -> modo reglas. Ante un 429, un error de red o más de 15 s se pasa al siguiente sin mostrar errores. Llamadas con requests (ya instalado), sin dependencias nuevas. Ollama queda como opción configurable. 2. Las claves solo se leen de variables de entorno; nunca se escriben en código, artefactos, log …(pedido resumido)
- 10. Continuar lo pendient
- 11. Continuar lo pendiente
-+12. Rendimiento para la expo con muchos usuarios a la vez, sin cambiar funcionalidades ni reentrenar el batch: 1. Medición: scripts/medir_app.py mide con AppTest y los artefactos REALES de 25M, con un usuario de prueba de 10 calificaciones, la primera carga y cada interacción (cambiar de sección, abrir una ficha, calificar, un mensaje de chat en modo reglas), con detalle por función (cProfile) en artefactos/medicion_app.txt. Se corre antes y después; el resumen trae la tabla de tiempos. 2. Ejecutar solo la sección activa: reemplazar st.tabs de app.py, que ejecuta Inicio, Buscar, Explorar y Chat en cada recarga, por una navegación que ejecute solo la sección elegida, manteniendo la sesión, el chat y la cola de Explorar. Agregar .streamlit/config.toml para producción (fileWatcherType none, runOnSave false, toolbar mínima, sin estadísticas de uso). 3. TMDb sin esperas al navegar: scripts/precalentar_tmdb.py descarga en paralelo (8 hilos, con reintentos ante 429) póster, título y sinopsis en español, con respaldo en inglés, de las películas con 20 o más votos antes del corte, y los guarda en artefactos/25m/app/tmdb.parquet. tmdb.py lo consulta primero; lo que falte se pide a la red y se guarda en una caché SQLite segura entre hilos que reemplaza a tmdb_cache.json (hoy se reescribe entera en cada película nueva y puede corromperse con varios usuarios). El script lo corre el usuario después; las pruebas usan un cliente simulado. 4. Genome en memoria: genome-scores.csv se convierte una sola vez (pyarrow) en una matriz compacta, artefactos/25m/app/genome.npy con sus índices, que herramientas._genome y perfiles.features_tipo usan en vez de leer el CSV de 416 MB por partes (hoy cada combinación nueva de tags del chat lo vuelve a leer). Si el archivo no existe, se construye la primera vez que se necesita. 5. Calentamiento: al arrancar la app, un hilo en segundo plano precarga ratings, votos, genome, factores, catálogo, personas y TMDb, para que el primer visitante no espere. 6. Caché por usuario: el orden híbrido, las filas del Inicio, el tipo de espectador, la tarjeta "Para ti" y la cola de Explorar se calculan una vez por (userId, cantidad y último timestamp de sus eventos) y se invalidan cuando califica. 7. SQLite: lecturas de estado.db con una conexión de solo lectura reutilizable por hilo, sin ejecutar el esquema completo en cada consulta, y sin lecturas repetidas dentro de una misma recarga. 8. La redacción de tarjetas con el LLM tiene un tope de 3 s; si no llega a tiempo, se muestra la plantilla y la redacción queda en caché. 9. Metas con los 25M: cada interacción bajo 1 s con la caché caliente y la primera carga bajo 5 s después del calentamiento. Todas las pruebas existentes siguen pasando.
- 
--## Requisitos (estado actual, 86 en total)
-+## Requisitos (estado actual, 97 en total)
- - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
- - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
- - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
-@@ -77,7 +78,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+@@ -53,7 +53,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [verificado] 29. La interfaz debe mostrar etiquetas textuales ('afinidad alta/media') en lugar de estrellas numéricas
+ - [verificado] 30. El script spark_utils.py debe configurar heartbeatInterval a 60s y network.timeout a 600s para evitar bloqueos
+ - [verificado] 31. Las explicaciones de las tarjetas deben rotar las películas de referencia para evitar repeticiones constantes
+-- [verificado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet
++- [observado] 32. Migrar la arquitectura a Lambda: Spark procesa datos en batch (25M/IMDb) y Kafka + Structured Streaming manejan eventos en tiempo real; la app Streamlit solo consume resultados precalculados almacenados en Parquet — La app ya no garantiza que solo lee resultados precalculados: test_app_letterboxd::test_navegar_no_importa_pyspark FALLA (PRUEBAS.txt, líneas 49, 76 y 93; aparecen trazas de py4j). Hay que revisar si el hilo de calentamiento o genome.py terminan importando pyspark.
+ - [verificado] 33. Implementar autenticación local con registro y login usando bcrypt en SQLite, asignando nuevos userIds superiores a 162541
+ - [verificado] 34. En el primer ingreso del usuario, permitir calificar ~10 películas populares o importar datos desde CSV de Letterboxd para generar recomendaciones inmediatas
+ - [verificado] 35. Diseñar la página de inicio con filas de carátulas: 'Para ti', 'Populares entre espectadores como tú' (agregación Spark) y 'Porque te gustó X' (vecinos calculados con LSH sobre factores ALS)
+@@ -61,12 +61,12 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [verificado] 37. Crear ficha de película estilo Letterboxd con póster/sinopsis de TMDb (si hay API), año, géneros, duración, nota IMDb, director, reparto cruzado vía links.csv, histograma de notas, tags principales, reseñas y botones de calificación/reseña
+ - [verificado] 38. Diseñar la tarjeta 'Para ti' mostrando una película probable ('probablemente te guste') y una improbable ('puede que no'), ambas con etiquetas de tags a favor/en contra y director/actor en común
+ - [verificado] 39. Integrar reproductor de tráiler de YouTube extraído de TMDb; si no hay API, mostrar carátula generada por color de género con atribución a TMDb al pie
+-- [verificado] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno
++- [observado] 40. Implementar modo 'Explorar' con navegación secuencial (carátula -> info -> tráiler -> siguiente) para descubrir contenido uno por uno — test_app_ficha::test_explorar_siguiente_cambia_de_pelicula FALLA (PRUEBAS.txt, líneas 57, 86 y 109): con la navegación por radio, 'siguiente' en Explorar ya no cambia de película (o la prueba no se adaptó con ir_a). Hay que corregirlo y conservar la cola en session_state.
+ - [verificado] 41. Configurar publicación de cada calificación y reseña en Kafka (topic 'ratings', key 'userId'); si Kafka falla, guardar localmente y mostrar aviso al usuario
+ - [verificado] 42. Limpieza: recomendador/llm.py ya no contiene _validar, completar_args, como_dict ni MAX_RONDAS_HERRAMIENTAS, y la suite existente sigue pasando
+ - [verificado] 43. El chat (en la pestaña Chat y en pedido.py) entiende pedidos por persona ('algo de Nolan', 'con Tom Hanks') usando directores y actores de IMDb sin importar tildes. La persona cuenta como una condición del orden por niveles y aparece en la línea 'Entendí:'
+ - [verificado] 44. Modo público (MODO_PUBLICO=1, para Cloudflare Tunnel): login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado responde la plantilla de reglas), no se expone ningún control de administración, y el póster incluye una figura QR hacia la variable 
+-- [verificado] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar
++- [observado] 45. Cada página (Inicio, Buscar, Ficha, Explorar) carga en menos de 2 s con la muestra mini, usando datos precalculados y caché. La app nunca importa pyspark al navegar — Pasa la parte de tiempos ('Rendimiento': 2 pasan), pero falla la de 'nunca importa pyspark al navegar' (test_navegar_no_importa_pyspark).
+ - [verificado] 46. Los usuarios pueden escribir reseñas desde la ficha. Se publican en Kafka (topic ratings, key userId) con el mismo respaldo directo y se muestran en la ficha de la película
+ - [verificado] 47. El histograma 0,5–5, el promedio, los votos y los populares por tipo se calculan con Spark (groupBy) solo con ratings anteriores a FECHA_CORTE y se guardan en parquet
+ - [verificado] 48. La app muestra al pie la atribución a TMDb y, sin TMDB_API_KEY, funciona sin errores: carátulas generadas (título y color por género), sin sinopsis ni tráiler
+@@ -78,7 +78,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
  - [verificado] 54. Cambiar el nombre de la aplicación de 'CineRuta' a 'MoviePredict' en todos los archivos (títulos de página, cabeceras, pies, README, figuras y scripts de prueba)
  - [verificado] 55. Actualizar las variables de entorno y configuraciones globales para reflejar el nuevo nombre 'MoviePredict'
  - [verificado] 56. Asegurar que ninguna referencia al nombre anterior 'CineRuta' permanezca en el código fuente o documentación
--- [observado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador — PRUEBAS.txt: 'Suite completa (regresión)' termina con código 1 y la salida truncada no deja ver qué prueba falla. Puede ser solo test_carga, pero hay que confirmarlo. Corre la suite con -p no:warnings -q -rf y adjunta el resumen.
-+- [verificado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador
+-- [verificado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador
++- [observado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador — Suite completa: 3 failed, 511 passed (PRUEBAS.txt, línea 112). La suite ya no está entera en verde.
  - [verificado] 58. El script entrenar_batch.py debe guardar los parámetros de producción ('params_produccion') en metricas.json, incluyendo ALS implícito (implicitPrefs=True), rank y alpha del modelo híbrido, regParam=0.1, maxIter=10 y seed=42
  - [verificado] 59. La función _params_base debe leer 'params_produccion' de metricas.json; si no existe, debe construir los parámetros desde metricas['hibrido'] usando ALS implícito con el rank y alpha correspondientes
  - [verificado] 60. El reentrenamiento periódico del streaming sigue activo y reentrena ALS con la base anterior al corte más los eventos, usando los parámetros del modelo evaluado (ALS implícito con el rank y alpha del híbrido). Esta tarea no vuelve a correr entrenar_batch.py.
-@@ -106,4 +107,15 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+@@ -103,19 +103,19 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+ - [verificado] 79. Las películas recomendadas salen solo de Herramientas.recomendar con las condiciones del estado, excluyendo mostradas y descartadas, y se muestran como tarjetas. El LLM nunca elige películas.
+ - [verificado] 80. Contexto compacto del usuario en cada turno: tipo de espectador y gustos (perfil_gustos), sus 10 mejor calificadas, las películas mostradas con sus condiciones y explicación (Catalogo.explicar) y, al preguntar por una película, su ficha completa.
+ - [verificado] 81. La respuesta la redacta el modelo del chat en tono conversacional y solo con esos datos; si falta un dato lo dice. Todo título nombrado debe estar en el contexto entregado (validado como en las tarjetas); si no, se usa la plantilla.
+-- [verificado] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo.
++- [observado] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo. — test_chat_pantalla::test_chips_aviso_y_barra_lateral FALLA en la suite completa (PRUEBAS.txt, línea 111). Hay que adaptar o corregir los chips, el aviso y la barra lateral con la nueva navegación.
  - [verificado] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
- - [verificado] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
+-- [verificado] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
++- [observado] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante. — Lo cubre test_chips_aviso_y_barra_lateral, que falla (aviso y barra lateral del proveedor). Hay que verificarlo con la navegación nueva.
  - [verificado] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
--- [observado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores. — PRUEBAS.txt línea 139: FALLA 'Carga: 20 sesiones de AppTest a la vez, cada recarga bajo 2 s' (código 1). Hay que hacer pasar tests/test_carga.py: precargar y cachear los datos compartidos (st.cache_resource, parquet ya cargado), evitar trabajo pesado por recarga y medir el tiempo de cada página sin incluir el arranque inicial de AppTest. Después adjunta la salida con -rf.
+ - [verificado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores.
+-- [pendiente] 87. Reemplazar st.tabs por navegación de pestañas que ejecute solo el componente activo, manteniendo estado en sesión
+-- [pendiente] 88. Configurar .streamlit/config.toml con fileWatcherType none, runOnSave false y toolbar mínima para producción
+-- [pendiente] 89. Escribir scripts/precalentar_tmdb.py (lo corre el usuario después, NO esta tarea): descarga en paralelo (8 hilos, reintentos ante 429) póster, título y sinopsis en español, con respaldo en inglés, de las películas con 20 o más votos antes del corte, a artefactos/25m/app/tmdb.parquet. tmdb.py consulta ese archivo antes que la red. Pruebas con cliente simulado.
+-- [pendiente] 90. Reemplazar tmdb_cache.json por caché SQLite segura entre hilos para evitar corrupción con múltiples usuarios
+-- [pendiente] 91. Convertir una sola vez genome-scores.csv (pyarrow) en una matriz compacta artefactos/25m/app/genome.npy con sus índices; herramientas._genome y perfiles.features_tipo la usan en vez de leer el CSV de 416 MB por partes. Si no existe, se construye la primera vez que se necesita.
+-- [pendiente] 92. Al arrancar la app, un hilo en segundo plano precarga ratings, votos, genome, factores, catálogo, personas y TMDb, para que el primer visitante no espere.
+-- [pendiente] 93. Caché por usuario: orden híbrido, filas del Inicio, tipo de espectador, tarjeta 'Para ti' y cola de Explorar se calculan una vez por (userId, cantidad y último timestamp de sus eventos) y se invalidan solo cuando califica.
+-- [pendiente] 94. Lecturas de estado.db con una conexión de solo lectura reutilizable por hilo, sin ejecutar el esquema completo en cada consulta, y sin lecturas repetidas dentro de una misma recarga.
+-- [pendiente] 95. Limitar redacción de tarjetas LLM a 3s; si falla, mostrar plantilla y guardar en caché
+-- [pendiente] 96. scripts/medir_app.py mide con AppTest y los artefactos REALES de 25M, con un usuario de prueba de 10 calificaciones, la primera carga y cada interacción (cambiar de sección, abrir ficha, calificar, mensaje de chat en modo reglas), con cProfile en artefactos/medicion_app.txt; se corre antes y después y el resumen trae la tabla.
+-- [pendiente] 97. Metas con los 25M: cada interacción bajo 1 s con la caché caliente y la primera carga bajo 5 s después del calentamiento. Todas las pruebas existentes siguen pasando.
 \ No newline at end of file
-+- [verificado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores.
-+- [pendiente] 87. Reemplazar st.tabs por navegación de pestañas que ejecute solo el componente activo, manteniendo estado en sesión
-+- [pendiente] 88. Configurar .streamlit/config.toml con fileWatcherType none, runOnSave false y toolbar mínima para producción
-+- [pendiente] 89. Escribir scripts/precalentar_tmdb.py (lo corre el usuario después, NO esta tarea): descarga en paralelo (8 hilos, reintentos ante 429) póster, título y sinopsis en español, con respaldo en inglés, de las películas con 20 o más votos antes del corte, a artefactos/25m/app/tmdb.parquet. tmdb.py consulta ese archivo antes que la red. Pruebas con cliente simulado.
-+- [pendiente] 90. Reemplazar tmdb_cache.json por caché SQLite segura entre hilos para evitar corrupción con múltiples usuarios
-+- [pendiente] 91. Convertir una sola vez genome-scores.csv (pyarrow) en una matriz compacta artefactos/25m/app/genome.npy con sus índices; herramientas._genome y perfiles.features_tipo la usan en vez de leer el CSV de 416 MB por partes. Si no existe, se construye la primera vez que se necesita.
-+- [pendiente] 92. Al arrancar la app, un hilo en segundo plano precarga ratings, votos, genome, factores, catálogo, personas y TMDb, para que el primer visitante no espere.
-+- [pendiente] 93. Caché por usuario: orden híbrido, filas del Inicio, tipo de espectador, tarjeta 'Para ti' y cola de Explorar se calculan una vez por (userId, cantidad y último timestamp de sus eventos) y se invalidan solo cuando califica.
-+- [pendiente] 94. Lecturas de estado.db con una conexión de solo lectura reutilizable por hilo, sin ejecutar el esquema completo en cada consulta, y sin lecturas repetidas dentro de una misma recarga.
-+- [pendiente] 95. Limitar redacción de tarjetas LLM a 3s; si falla, mostrar plantilla y guardar en caché
-+- [pendiente] 96. scripts/medir_app.py mide con AppTest y los artefactos REALES de 25M, con un usuario de prueba de 10 calificaciones, la primera carga y cada interacción (cambiar de sección, abrir ficha, calificar, mensaje de chat en modo reglas), con cProfile en artefactos/medicion_app.txt; se corre antes y después y el resumen trae la tabla.
-+- [pendiente] 97. Metas con los 25M: cada interacción bajo 1 s con la caché caliente y la primera carga bajo 5 s después del calentamiento. Todas las pruebas existentes siguen pasando.
++- [observado] 87. Reemplazar st.tabs por navegación de pestañas que ejecute solo el componente activo, manteniendo estado en sesión — El radio 'seccion' está implementado (código app/app.py, según el informe), pero quedan 3 pruebas fallando: Explorar siguiente, no importar pyspark y los chips del chat. No mantiene la funcionalidad verificada.
++- [verificado] 88. Configurar .streamlit/config.toml con fileWatcherType none, runOnSave false y toolbar mínima para producción
++- [observado] 89. Escribir scripts/precalentar_tmdb.py (lo corre el usuario después, NO esta tarea): descarga en paralelo (8 hilos, reintentos ante 429) póster, título y sinopsis en español, con respaldo en inglés, de las películas con 20 o más votos antes del corte, a artefactos/25m/app/tmdb.parquet. tmdb.py consulta ese archivo antes que la red. Pruebas con cliente simulado. — El constructor lo declara parcial: el script existe, pero no confirma pruebas con cliente simulado para precalentar_tmdb ni para la lectura de tmdb.parquet. Hay que agregar una prueba con cliente simulado (8 hilos, 429 con reintento, respaldo en inglés, solo películas con 20 o más votos).
++- [verificado] 90. Reemplazar tmdb_cache.json por caché SQLite segura entre hilos para evitar corrupción con múltiples usuarios
++- [observado] 91. Convertir una sola vez genome-scores.csv (pyarrow) en una matriz compacta artefactos/25m/app/genome.npy con sus índices; herramientas._genome y perfiles.features_tipo la usan en vez de leer el CSV de 416 MB por partes. Si no existe, se construye la primera vez que se necesita. — genome.py existe, pero el constructor reconoce que no corrió pruebas específicas. Hay que agregar una prueba con la muestra mini: construcción de genome.npy e índices, mismos valores que el CSV y uso desde herramientas._genome y perfiles.features_tipo.
++- [verificado] 92. Al arrancar la app, un hilo en segundo plano precarga ratings, votos, genome, factores, catálogo, personas y TMDb, para que el primer visitante no espere.
++- [verificado] 93. Caché por usuario: orden híbrido, filas del Inicio, tipo de espectador, tarjeta 'Para ti' y cola de Explorar se calculan una vez por (userId, cantidad y último timestamp de sus eventos) y se invalidan solo cuando califica.
++- [verificado] 94. Lecturas de estado.db con una conexión de solo lectura reutilizable por hilo, sin ejecutar el esquema completo en cada consulta, y sin lecturas repetidas dentro de una misma recarga.
++- [verificado] 95. Limitar redacción de tarjetas LLM a 3s; si falla, mostrar plantilla y guardar en caché
++- [observado] 96. scripts/medir_app.py mide con AppTest y los artefactos REALES de 25M, con un usuario de prueba de 10 calificaciones, la primera carga y cada interacción (cambiar de sección, abrir ficha, calificar, mensaje de chat en modo reglas), con cProfile en artefactos/medicion_app.txt; se corre antes y después y el resumen trae la tabla. — scripts/medir_app.py no existe (glob vacío). Hay que crearlo con AppTest, artefactos 25M, un usuario de 10 calificaciones, cProfile y salida en artefactos/medicion_app.txt, con la tabla de tiempos.
++- [observado] 97. Metas con los 25M: cada interacción bajo 1 s con la caché caliente y la primera carga bajo 5 s después del calentamiento. Todas las pruebas existentes siguen pasando. — No hay medición con 25M y la suite completa da 3 failed (PRUEBAS.txt, línea 112).
 \ No newline at end of file
 diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
-index f735861..e9bbbc7 100644
+index e9bbbc7..ea0e9f1 100644
 --- a/_capturas/CAMBIOS.diff
 +++ b/_capturas/CAMBIOS.diff
-@@ -1,313 +1,345 @@
--ab86124 Ronda 1: Cambié el proveedor LLM por defecto a «api»: Groq, luego Gemini (solo si existe su clave) y al final el modo reglas. Está en recomendador/proveedores.
-+f92a312 Ronda 2: La suite completa ahora pasa: 514 passed en 342 s con -q -rf -p no:warnings, código 0 y sin fallas. Requisito 86: el código 1 sin salida venía de que
+@@ -1,345 +1,371 @@
+-f92a312 Ronda 2: La suite completa ahora pasa: 514 passed en 342 s con -q -rf -p no:warnings, código 0 y sin fallas. Requisito 86: el código 1 sin salida venía de que
++4db20ca Ronda 1: Avancé buena parte del paquete de rendimiento, pero no lo terminé: se me acabó el presupuesto de la ronda. Quedan 3 pruebas de la app sin adaptar a la
  
-- ESPEC.md                     |  66 ++--
-- _capturas/CAMBIOS.diff       | 909 +++++++++++++++++++++----------------------
-- _capturas/PRUEBAS.txt        | 123 +++---
-- app/app.py                   |  11 +-
-- app/vistas/chat.py           |  79 +++-
-- app/vistas/inicio.py         |  82 ++--
-- app/vistas/tarjetas.py       | 124 ++++--
-- recomendador/config.py       |  13 +-
-- recomendador/conversacion.py | 501 ++++++++++++++++++++++++
-- recomendador/llm.py          |  60 ++-
-- recomendador/proveedores.py  | 165 ++++++++
-- tests/test_carga.py          |  70 ++++
-- tests/test_conversacion.py   | 218 +++++++++++
-- tests/test_modo_publico.py   | 404 +++++++++----------
-- tests/test_proveedores.py    | 139 +++++++
-- 15 files changed, 2106 insertions(+), 858 deletions(-)
-+ ESPEC.md                    |  40 +--
-+ _capturas/CAMBIOS.diff      | 731 +++++++++++++++++---------------------------
-+ _capturas/PRUEBAS.txt       | 127 ++++----
-+ app/vistas/chat.py          |  26 +-
-+ tests/test_carga.py         |  41 ++-
-+ tests/test_chat_pantalla.py |  81 +++++
-+ 6 files changed, 508 insertions(+), 538 deletions(-)
+- ESPEC.md                    |  40 +--
+- _capturas/CAMBIOS.diff      | 731 +++++++++++++++++---------------------------
+- _capturas/PRUEBAS.txt       | 127 ++++----
+- app/vistas/chat.py          |  26 +-
+- tests/test_carga.py         |  41 ++-
+- tests/test_chat_pantalla.py |  81 +++++
+- 6 files changed, 508 insertions(+), 538 deletions(-)
++ .streamlit/config.toml          |   31 +-
++ ESPEC.md                        |   18 +-
++ _capturas/CAMBIOS.diff          |  596 +++++++-------
++ _capturas/PRUEBAS.txt           |  169 ++--
++ app/app.py                      |   66 +-
++ app/vistas/tarjetas.py          |   59 +-
++ recomendador/catalogo_app.py    | 1265 +++++++++++++++--------------
++ recomendador/enriquecimiento.py | 1679 +++++++++++++++++++++------------------
++ recomendador/estado.py          |  668 +++++++++-------
++ recomendador/genome.py          |  154 ++++
++ recomendador/herramientas.py    |   48 +-
++ recomendador/perfiles.py        |   15 +-
++ recomendador/tmdb.py            |  522 ++++++------
++ scripts/precalentar_tmdb.py     |  130 +++
++ tests/base_mini.py              |  113 +--
++ tests/test_app.py               |   10 +-
++ tests/test_app_ficha.py         |  546 ++++++-------
++ tests/test_app_letterboxd.py    |   16 +-
++ tests/test_chat_pantalla.py     |  165 ++--
++ tests/test_rendimiento_app.py   |  182 ++---
++ 20 files changed, 3615 insertions(+), 2837 deletions(-)
  
++diff --git a/.streamlit/config.toml b/.streamlit/config.toml
++index ff4f94b..f1b5446 100644
++--- a/.streamlit/config.toml
+++++ b/.streamlit/config.toml
++@@ -1,11 +1,20 @@
++-# Tema oscuro con la paleta del póster. Streamlit lee este archivo cuando se
++-# ejecuta «streamlit run app/app.py» desde la raíz del proyecto.
++-[theme]
++-base = "dark"
++-primaryColor = "#E50914"
++-backgroundColor = "#141414"
++-secondaryBackgroundColor = "#1E1E1E"
++-textColor = "#F2F2F2"
++-
++-[browser]
++-gatherUsageStats = false
+++# Tema oscuro con la paleta del póster. Streamlit lee este archivo cuando se
+++# ejecuta «streamlit run app/app.py» desde la raíz del proyecto.
+++[theme]
+++base = "dark"
+++primaryColor = "#E50914"
+++backgroundColor = "#141414"
+++secondaryBackgroundColor = "#1E1E1E"
+++textColor = "#F2F2F2"
+++
+++[browser]
+++gatherUsageStats = false
+++
+++# Producción (expo con muchos usuarios): sin vigilar archivos ni recargar al guardar,
+++# barra de herramientas mínima y sin estadísticas de uso.
+++[server]
+++fileWatcherType = "none"
+++runOnSave = false
+++
+++[client]
+++toolbarMode = "minimal"
  diff --git a/ESPEC.md b/ESPEC.md
--index eb62821..c96deb4 100644
-+index c96deb4..43da3e9 100644
+-index c96deb4..43da3e9 100644
++index 43da3e9..aa2339d 100644
  --- a/ESPEC.md
  +++ b/ESPEC.md
--@@ -2,22 +2,25 @@
-- Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe en cada ronda).
-- 
-- ## Pedidos del usuario (textuales, en orden)
---1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del futuro: la app y las herramientas del chat leen el historial del usuario solo con ratings anteriores a FECHA_CORTE, más los eventos en vivo. perfilar_usuarios se ejecuta con --hasta FECHA_CORTE (actualizar correr_25m.ps1). El productor parte por defecto en FECHA_CORTE. Prueba: en modo demo ningún dato mostrado ni usado tiene timestamp >= corte, salvo los eventos en vivo. 2. Puntaje combinado en vez de filtros duros: orden final = afinidad ALS + coincidencia con el pedido (cuántos de los géneros, tags y condiciones pedidos cumple cada película, usando géneros y genome tags). Las que cumplen todo van primero; nunca una lista vacía. Si falta un dato (por ejemplo, la duración sin IMDb), esa condición no se puede evaluar y se avisa. El chat dice qué condiciones cumple cada recomendación y cuáles no se pudieron cumplir. 3. Interpretación del pedido: detectar géneros, duración, y ánimo u ocasión ("para llorar", "para ver en familia", "algo liviano", "que me haga pensar", "con giro final"), mapeados a géneros y genome tags. Tolerante a errores de tipeo y a pedidos en inglés. En modo Ollama se aplica siempre, aunque el modelo no pase los filtros, y se agrega una regla al prompt de sistema. 4. Nueva herramienta buscar_pelicula(titulo): sin importar tildes ni mayúsculas, títulos en español o inglés, coincidencia aproximada. Si lo nombrado no está en el catálogo (por ejemplo, una serie), la respuesta lo dice en una frase y recomienda igual según el resto del pedido. 5. Red de seguridad: si el usuario pide recomendaciones de cualquier forma y el modelo no devuelve ninguna película válida, el código llama a recomendar con lo detectado en el texto y muestra esas tarjetas. El chat nunca termina en "No pude obtener recomendaciones" si hay películas en el catálogo. 6. demo.json con rutas relativas a la carpeta del proyecto. 7. Rehacer la figura tipos_espectador del póster: barras horizontales legibles, sin etiquetas superpuestas. 8. Batería de 30 pedidos variados (géneros, combinaciones de géneros, ánimos, ocasiones, "corto", títulos inexistentes como "algo como El mecanismo", errores de tipeo, inglés, mensajes ambiguos), en modo reglas y con un LLM simulado: cada uno termina en al menos una recomendación válida o, si no es un pedido de recomendación, en una respuesta normal. 9. Pruebas automáticas para cada punto.
--+1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del futuro: la app y las herramientas del chat leen el historial del usuario solo con ratings anteriores a FECHA_CORTE, más los eventos en vivo. perfilar_usuarios se ejecuta con --hasta FECHA_CORTE (actualizar correr_25m.ps1). El productor parte por defecto en FECHA_CORTE. Prueba: en modo demo ningún dato mostrado ni usado tiene timestamp >= corte, salvo los eventos en vivo. 2. Puntaje combinado en vez de filtros duros: orden final = afinidad ALS + coincidencia con el pedido (cuántos de los géneros, …(pedido resumido)
-- 2. Ajuste al plan: 1. El corte se aplica en todos los modos, no solo en demo: el historial del usuario siempre es ratings anteriores a FECHA_CORTE más los eventos en vivo, porque el modelo se entrenó solo hasta el corte.
-- 2. Coincidencia primero, pero agrupada en niveles (número de condiciones que cumple la película); dentro de cada nivel se ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es el del híbrido actual.
-- 3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
-- El resto del plan está aprobado.
---3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, tags y condiciones. 5. Las explicaciones no repiten la misma película de referencia en todas las tarjetas, y el puntaje ALS se muestra como "afinidad alta/media" y no como un número tipo estrellas. 6. En recomendador/spark_utils.py, en modo local: spark.executor.heartbeatInterval=60s y spark.network.timeout=600s. 7. Script scripts/probar_pedidos.py que, con los artefactos reales, imprime el top-5 de una lista de pedidos (entre ellos "drama policial con un twist épico" y "algo como de drama policial con un twist épico"), para que yo lo revise. Agregar los casos a la batería con datos de la muestra mini.
--+3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, ta …(pedido resumido)
-- 4. El LLM solo redacta la respuesta final. (1) La interpretación del pedido (pedido.py) es la única fuente de los filtros: el modelo ya no elige filtros ni películas. Recibe la lista final de recomendaciones con sus datos (condiciones que cumple, película parecida que el usuario calificó, afinidad) y solo escribe el texto. (2) Si Ollama falla o tarda más de 20 s, se usa la plantilla del modo reglas. (3) Línea "Entendí: …" con las condiciones finales en cada respuesta. (4) Prueba: "drama policial con un twist final" con un LLM simulado que intenta omitir Crime o agregar duración; los filtros finales deben ser Crime+Drama, tags de giro y sin duración.
---5. Convertir la app Streamlit en una app tipo Letterboxd con recomendaciones, sin romper lo verificado. El chat queda como pestaña. Arquitectura Lambda: batch con Spark sobre el histórico, velocidad con Kafka + Structured Streaming para eventos de usuarios, y la app solo lee resultados precalculados (no ejecuta Spark al navegar). Todo cálculo sobre los 25M o IMDb se hace con Spark, no pandas. Corridas de 25M como scripts que ejecuto yo; pruebas con la muestra mini. 1. Cuentas locales: registro y login con bcrypt en SQLite; userId nuevo mayor a 162541. 2. Primer ingreso: calificar unas 10 populares o importar CSV de Letterboxd; recomendaciones al instante por fold-in. 3. Inicio con filas de carátulas: "Para ti", "Populares entre espectadores como tú" (agregación Spark por tipo, antes del corte) y "Porque te gustó X" (vecinos precalculados con Spark ML BucketedRandomProjectionLSH sobre factores ALS, en parquet). 4. Buscador por título y por persona (director o actor), sin importar tildes. 5. Ficha tipo Letterboxd: póster y sinopsis de TMDb (TMDB_API_KEY), año, géneros, duración, nota IMDb, director y reparto (title.crew, title.principals y name.basics de IMDb cruzados con Spark vía links.csv), histograma 0,5-5 y promedio (groupBy Spark antes del corte, en parquet), tags principales, reseñas de usuarios, y botones para calificar y reseñar. 6. Tarjeta "Para ti": "probablemente te guste" o "puede que no"; la más parecida que calificó alto y la que calificó bajo, con tags a favor y en contra y director o actor en común. Texto con datos; el LLM solo redacta. 7. Tráiler de YouTube desde TMDb. Sin clave: carátulas generadas (título y color por género), sin sinopsis ni tráiler, sin errores. Atribución a TMDb al pie. 8. Modo explorar: una película a la vez: carátula, info personalizada, tráiler, siguiente. 9. Cada calificación y reseña se publica en Kafka (topic ratings, key userId) y la procesa Structured Streaming; si Kafka no responde, se guarda directo y se avisa. 10. Chat como pestaña con la misma lógica (pedido.py; el LLM solo redacta); entiende pedidos por persona ("algo de Nolan"). 11. Modo público para Cloudflare Tunnel: login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado, plantilla), nada de administración expuesto, y figura con QR a la URL pública (variable URL_PUBLICA) para el póster. 12. Cada página carga en menos de 2 s con datos precalculados y en caché. 13. Limpieza: quitar de llm.py el código sin uso (_validar, completar_args, como_dict, MAX_RONDAS_HERRAMIENTAS). 14. Pruebas automáticas de cada punto.
--+5. Convertir la app Streamlit en una app tipo Letterboxd con recomendaciones, sin romper lo verificado. El chat queda como pestaña. Arquitectura Lambda: batch con Spark sobre el histórico, velocidad con Kafka + Structured Streaming para eventos de usuarios, y la app solo lee resultados precalculados (no ejecuta Spark al navegar). Todo cálculo sobre los 25M o IMDb se hace con Spark, no pandas. Corridas de 25M como scripts que ejecuto yo; pruebas con la muestra mini. 1. Cuentas locales: registro y login con bcrypt en SQLite; userId nuevo mayor a 162541. 2. Primer ingreso: calificar unas 10 populares o importar CSV de Letterboxd; recomendaciones al instante por fold-in. 3. Inicio con filas de carátulas: "Para ti", "Populares entre espectadores como tú" (agregación Spark por tipo, antes del corte …(pedido resumido)
-- 6. Ajuste al plan: 1. Reseñas públicas para todos, máximo 500 caracteres, con un filtro básico de palabras ofensivas. La moderación (ocultar una reseña) se hace con un script local, nunca desde la app.
-- 2. Límite de 20 acciones por minuto por sesión.
-- 3. Usar los tipos de espectador existentes (clusters de perfilar_usuarios). Los usuarios nuevos de la app reciben el tipo del centroide más cercano según sus calificaciones del onboarding (mismo escalado del KMeans) y se actualiza cuando califican más.
-- Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato de "ratings"). La app se llama "CineRuta" y usa una paleta propia: oscura, inspirada en Letterboxd pero sin sus colores de marca exactos. El resto del plan está aprobado.
-- 7. Renombrar la app de "CineRuta" a "MoviePredict" en todo el proyecto (título de página, cabecera, pie, README, figuras y pruebas). Sin otros cambios.
---8. Corregir 3 problemas, sin otros cambios y sin reentrenar el batch: 1. Reentrenamiento del streaming: streaming._params_base hoy lee metricas.json["params"] (ALS explícito rank 10). Debe usar los parámetros del modelo evaluado: ALS implícito (implicitPrefs=True) con el rank y alpha de metricas.json["hibrido"], regParam 0.1, maxIter 10, seed 42. Que entrenar_batch.py guarde además "params_produccion" en metricas.json, y que _params_base la lea o, si no existe, la arme desde metricas["hibrido"]. Prueba con la muestra mini: los factores reentrenados tienen el rank del híbrido y salen de implicitPrefs. 2. Fila "Para ti" del Inicio, tarjeta "Para ti" y cola de Explorar: usar el mismo orden que el chat (Herramientas.orden_hibrido: z del fold-in + z de log(1+votos), candidatas con 50 o más votos antes del corte y el resto solo como respaldo). La probable es la primera de ese orden; la improbable se elige solo entre candidatas con 50 o más votos. Pruebas con la muestra mini. 3. Logo: app/estilo.py línea 209 escribe a mano Cine<b>Ruta</b>; generarlo desde NOMBRE_APP (Movie<b>Predict</b>). tests/test_nombre_app.py debe revisar también el HTML de la cabecera sin etiquetas.
--+8. Corregir 3 problemas, sin otros cambios y sin reentrenar el batch: 1. Reentrenamiento del streaming: streaming._params_base hoy lee metricas.json["params"] (ALS explícito rank 10). Debe usar los parámetros del modelo evaluado: ALS implícito (implicitPrefs=True) con el rank y alpha de metricas.json["hibrido"], regParam 0.1, maxIter 10, seed 42. Que entrenar_batch.py guarde además "params_produccion" en metricas.json, y que _params_base la lea o, si no existe, la arme desde metricas["hibrido"]. Prueba con la muestra mini: los factores reentrenados tienen el rank del híbrido y salen de implicitPrefs. 2. Fila "Para ti" del Inicio, tarjeta "Para ti" y cola de Explorar: usar el mismo orden que el chat (Herramientas.orden_hibrido: z del fold-in + z de log(1+votos), candidatas con 50 o más votos a …(pedido resumido)
--+9. Convertir el chat en una conversación natural con contexto, apoyada siempre en los datos del sistema (ALS, perfil y catálogo), y cambiar el LLM local por APIs gratuitas compatibles con OpenAI para atender a varios usuarios a la vez. Sin reentrenar el batch. A. Proveedores 1. Nuevo proveedor "api", por defecto, con cadena de respaldo: Groq (https://api.groq.com/openai/v1, clave GROQ_API_KEY) -> Gemini (https://generativelanguage.googleapis.com/v1beta/openai/, clave GEMINI_API_KEY, solo si existe) -> modo reglas. Ante un 429, un error de red o más de 15 s se pasa al siguiente sin mostrar errores. Llamadas con requests (ya instalado), sin dependencias nuevas. Ollama queda como opción configurable. 2. Las claves solo se leen de variables de entorno; nunca se escriben en código, artefactos, log …(pedido resumido)
--+10. Continuar lo pendient
--+11. Continuar lo pendiente
-- 
---## Requisitos (estado actual, 67 en total)
--+## Requisitos (estado actual, 86 en total)
-- - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
-- - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
-- - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
--@@ -71,27 +74,36 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-- - [verificado] 51. Límite de 20 acciones por minuto por sesión (calificar, reseñar, mensaje de chat, importar CSV). La acción 21 dentro del minuto se rechaza con un aviso y no se registra
-- - [verificado] 52. Los usuarios nuevos reciben el tipo de espectador (cluster de perfilar_usuarios) del centroide más cercano, calculado desde sus calificaciones del onboarding con las mismas features y el mismo escalado del KMeans (media y std de tipos.json). Se recalcula cada vez que califican más y define la fila '
-- - [verificado] 53. La app se llama 'CineRuta' (título de página, cabecera y pie) y usa una paleta oscura propia definida en app/estilo.py, que no contiene los colores de marca de Letterboxd (#14181c, #2c3440, #00e054, #ff8000, #40bcf4)
---- [observado] 54. Cambiar el nombre de la aplicación de 'CineRuta' a 'MoviePredict' en todos los archivos (títulos de página, cabeceras, pies, README, figuras y scripts de prueba) — La cabecera visible sigue diciendo 'CineRuta'. El logo está escrito a mano en app/estilo.py:209 como 'Cine<b>Ruta</b>' y no usa NOMBRE_APP. Se ve en las capturas 1 y 2 y en el texto 1, línea 1 ('CineRuta'). Solo el pie y la bienvenida dicen MoviePredict. Hay que generar el logo desde NOMBRE_APP (por ejemplo 'Movie<b>Predict</b>') y volver a capturar el login y el Inicio.
--+- [verificado] 54. Cambiar el nombre de la aplicación de 'CineRuta' a 'MoviePredict' en todos los archivos (títulos de página, cabeceras, pies, README, figuras y scripts de prueba)
-+@@ -77,7 +77,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-+ - [verificado] 54. Cambiar el nombre de la aplicación de 'CineRuta' a 'MoviePredict' en todos los archivos (títulos de página, cabeceras, pies, README, figuras y scripts de prueba)
+-@@ -77,7 +77,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
++@@ -19,8 +19,9 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
++ 9. Convertir el chat en una conversación natural con contexto, apoyada siempre en los datos del sistema (ALS, perfil y catálogo), y cambiar el LLM local por APIs gratuitas compatibles con OpenAI para atender a varios usuarios a la vez. Sin reentrenar el batch. A. Proveedores 1. Nuevo proveedor "api", por defecto, con cadena de respaldo: Groq (https://api.groq.com/openai/v1, clave GROQ_API_KEY) -> Gemini (https://generativelanguage.googleapis.com/v1beta/openai/, clave GEMINI_API_KEY, solo si existe) -> modo reglas. Ante un 429, un error de red o más de 15 s se pasa al siguiente sin mostrar errores. Llamadas con requests (ya instalado), sin dependencias nuevas. Ollama queda como opción configurable. 2. Las claves solo se leen de variables de entorno; nunca se escriben en código, artefactos, log …(pedido resumido)
++ 10. Continuar lo pendient
++ 11. Continuar lo pendiente
+++12. Rendimiento para la expo con muchos usuarios a la vez, sin cambiar funcionalidades ni reentrenar el batch: 1. Medición: scripts/medir_app.py mide con AppTest y los artefactos REALES de 25M, con un usuario de prueba de 10 calificaciones, la primera carga y cada interacción (cambiar de sección, abrir una ficha, calificar, un mensaje de chat en modo reglas), con detalle por función (cProfile) en artefactos/medicion_app.txt. Se corre antes y después; el resumen trae la tabla de tiempos. 2. Ejecutar solo la sección activa: reemplazar st.tabs de app.py, que ejecuta Inicio, Buscar, Explorar y Chat en cada recarga, por una navegación que ejecute solo la sección elegida, manteniendo la sesión, el chat y la cola de Explorar. Agregar .streamlit/config.toml para producción (fileWatcherType none, runOnSave false, toolbar mínima, sin estadísticas de uso). 3. TMDb sin esperas al navegar: scripts/precalentar_tmdb.py descarga en paralelo (8 hilos, con reintentos ante 429) póster, título y sinopsis en español, con respaldo en inglés, de las películas con 20 o más votos antes del corte, y los guarda en artefactos/25m/app/tmdb.parquet. tmdb.py lo consulta primero; lo que falte se pide a la red y se guarda en una caché SQLite segura entre hilos que reemplaza a tmdb_cache.json (hoy se reescribe entera en cada película nueva y puede corromperse con varios usuarios). El script lo corre el usuario después; las pruebas usan un cliente simulado. 4. Genome en memoria: genome-scores.csv se convierte una sola vez (pyarrow) en una matriz compacta, artefactos/25m/app/genome.npy con sus índices, que herramientas._genome y perfiles.features_tipo usan en vez de leer el CSV de 416 MB por partes (hoy cada combinación nueva de tags del chat lo vuelve a leer). Si el archivo no existe, se construye la primera vez que se necesita. 5. Calentamiento: al arrancar la app, un hilo en segundo plano precarga ratings, votos, genome, factores, catálogo, personas y TMDb, para que el primer visitante no espere. 6. Caché por usuario: el orden híbrido, las filas del Inicio, el tipo de espectador, la tarjeta "Para ti" y la cola de Explorar se calculan una vez por (userId, cantidad y último timestamp de sus eventos) y se invalidan cuando califica. 7. SQLite: lecturas de estado.db con una conexión de solo lectura reutilizable por hilo, sin ejecutar el esquema completo en cada consulta, y sin lecturas repetidas dentro de una misma recarga. 8. La redacción de tarjetas con el LLM tiene un tope de 3 s; si no llega a tiempo, se muestra la plantilla y la redacción queda en caché. 9. Metas con los 25M: cada interacción bajo 1 s con la caché caliente y la primera carga bajo 5 s después del calentamiento. Todas las pruebas existentes siguen pasando.
++ 
++-## Requisitos (estado actual, 86 en total)
+++## Requisitos (estado actual, 97 en total)
++ - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
++ - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
++ - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano', 'que me haga pensar', 'con giro final') en español e inglés, tolerando errores de tipeo (por ejemplo 'comdia', 'teror
++@@ -77,7 +78,7 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+  - [verificado] 54. Cambiar el nombre de la aplicación de 'CineRuta' a 'MoviePredict' en todos los archivos (títulos de página, cabeceras, pies, README, figuras y scripts de prueba)
   - [verificado] 55. Actualizar las variables de entorno y configuraciones globales para reflejar el nuevo nombre 'MoviePredict'
---- [observado] 56. Asegurar que ninguna referencia al nombre anterior 'CineRuta' permanezca en el código fuente o documentación — Queda la referencia 'Cine<b>Ruta</b>' en app/estilo.py:209. tests/test_nombre_app.py no la detecta porque busca la cadena 'cineruta' seguida y aquí el nombre está partido por una etiqueta HTML. Hay que corregir el logo y agregar a la prueba una comprobación del HTML que genera la cabecera, por ejemplo que el texto de la marca, sin etiquetas, sea 'MoviePredict'. Conviene revisar también el lema 'Tu
--+- [verificado] 56. Asegurar que ninguna referencia al nombre anterior 'CineRuta' permanezca en el código fuente o documentación
-- - [verificado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador
---- [pendiente] 58. El script entrenar_batch.py debe guardar los parámetros de producción ('params_produccion') en metricas.json, incluyendo ALS implícito (implicitPrefs=True), rank y alpha del modelo híbrido, regParam=0.1, maxIter=10 y seed=42
---- [pendiente] 59. La función _params_base debe leer 'params_produccion' de metricas.json; si no existe, debe construir los parámetros desde metricas['hibrido'] usando ALS implícito con el rank y alpha correspondientes
---- [pendiente] 60. El reentrenamiento periódico del streaming sigue activo y reentrena ALS con la base anterior al corte más los eventos, usando los parámetros del modelo evaluado (ALS implícito con el rank y alpha del híbrido). Esta tarea no vuelve a correr entrenar_batch.py.
---- [pendiente] 61. La fila 'Para ti' en la página de inicio, la tarjeta 'Para ti' y la cola de Explorar deben usar el orden exacto de Herramientas.orden_hibrido (z del fold-in + z de log(1+votos))
---- [pendiente] 62. Las candidatas para 'Para ti' y 'Explorar' deben provenir exclusivamente de películas con 50 o más votos antes del corte; las de menos de 50 solo aparecerán como respaldo final
---- [pendiente] 63. La película 'probable' en la tarjeta 'Para ti' será la primera del orden híbrido calculado
---- [pendiente] 64. La película 'improbable' en la tarjeta 'Para ti' se seleccionará únicamente entre el conjunto de candidatas con 50 o más votos
---- [pendiente] 65. El archivo app/estilo.py debe generar dinámicamente el logo usando la variable NOMBRE_APP (ej. Movie<b>Predict</b>) en lugar de escribir texto estático
---- [pendiente] 66. tests/test_nombre_app.py quita las etiquetas HTML de cabecera_html() y verifica que el texto visible contenga 'MoviePredict' y no 'CineRuta', sin distinguir mayúsculas.
---- [pendiente] 67. El sistema debe garantizar que ninguna referencia al nombre anterior 'CineRuta' persista en el código fuente, documentación o archivos de estilo
---
---## Bitacora (lo mas reciente primero)
---- 2026-11-16T13:15 ronda 1 [revisor]: veredicto corregir, nota 5/10, 55/57 verificados. Requisito 54: La cabecera visible sigue diciendo 'CineRuta'. El logo está escrito a mano en app/estilo.py:209 como 'Cine<b>Ruta</b>' y no usa NOMBRE_APP. Se ve en las capturas 1 y 2 y en el texto 1, línea 1 ('CineRuta'). Solo el pie y la bienvenida dicen MoviePredict. Hay que generar el logo desde NOMBRE_APP (por ejemplo 'Movie<b>Predict</b>') y volver a capturar el login y el Inicio. | Requisito 56: Queda la referencia 'Cine<b>Ruta</b>' en app/estilo.py:209. tests/test_nombre_app.py no la detecta porque busca la cadena 'cineruta' seguida y aquí el nombre está partido por una etiqueta HTML. Ha
---- 2026-11-16T13:14 ronda - [delegado]: pruebas automáticas 46/46 ✅; 3 prueba(s) nueva(s); version 985f253
---- 2026-11-16T12:45 ronda 1 [constructor]: Renombré la app de 'CineRuta' a 'MoviePredict' en todo el proyecto. Cambié 23 archivos de código, pruebas, scripts y el README con un script temporal que trabaja en bytes, para no alterar los finales de línea, y que se borró al terminar. El script de vista previa ahora se llama scripts/vista_previa_moviepredict.py y genera moviepredict_*.html; borré los HTML viejos cineruta_*.html. No hay variables de entorno ni figuras del póster que lleven el nombre: el título de página, la cabecera y el pie salen de estilo.NOMBRE_APP. Agregué tests/test_nombre_app.py. La suite completa pasó con 483 pruebas, antes de agregar las 2 nuevas, que también pasan.
---- 2026-11-16T10:28 ronda 2 [revisor paquete 11]: aprobado (pruebas que fallan 0, requisitos verificados 5): General: C7: la suite completa pasa (483 passed, PRUEBAS.txt), así que no hay regresiones. | General: No hay captura de la app en MODO_PUBLICO (pantalla de login) ni del qr_publico.png generado. La evidencia de estos puntos visuales viene solo de las pruebas AppTest y del código. | General: Detalle menor de diseño: en verif_1 (1280 px), la ficha de la vista previa estática deja vacía la mitad derecha de la pantalla (carátula, histograma y datos van en una sola columna). Convendría ponerlos en do
---- 2026-11-16T10:27 ronda - [delegado]: pruebas automáticas 46/46 ✅; 4 prueba(s) nueva(s); version 7adb34b
---- 2026-11-16T09:57 ronda 2 [constructor paquete 11]: Agregué personas en pedido.py: 'algo de Nolan' y 'con Tom Hanks' se entienden sin importar tildes. La persona cuenta como condición en los niveles y aparece en 'Entendí:'. Agregué el modo público: login obligatorio, sin controles de administración y el LLM de a una solicitud con plantilla inmediata si está ocupado. También agregué el QR hacia URL_PUBLICA, actualicé el README y reescribí vista_previa_app.py. Las 3 pruebas de aceptación pasan y la suite completa también (483 passed).
---- 2026-11-16T09:45 ronda 1 [revisor paquete 10]: aprobado (pruebas que fallan 0, requisitos verificados 10): General: La prueba de aceptación tests/test_app_ficha.py pasa (9 passed) y la suite completa también (461 passed), según PRUEBAS.txt. | General: Las capturas son HTML estático: aplanan columnas y pestañas. La ficha aparece apilada (carátula arriba, datos abajo) aunque el código usa st.columns([1, 2.4]), y el sidebar muestra markdown sin renderizar ('**Modo:**'). No hay captura de la app Streamlit real ni a 700 px que confirme el layout en dos columnas; conviene verificarlo en vivo. | General: Ta
---- 2026-11-16T09:44 ronda - [delegado]: pruebas automáticas 43/43 ✅; 2 prueba(s) nueva(s); version 9351f50
-+ - [verificado] 56. Asegurar que ninguna referencia al nombre anterior 'CineRuta' permanezca en el código fuente o documentación
-+-- [verificado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador
-++- [observado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador — PRUEBAS.txt: 'Suite completa (regresión)' termina con código 1 y la salida truncada no deja ver qué prueba falla. Puede ser solo test_carga, pero hay que confirmarlo. Corre la suite con -p no:warnings -q -rf y adjunta el resumen.
-+ - [verificado] 58. El script entrenar_batch.py debe guardar los parámetros de producción ('params_produccion') en metricas.json, incluyendo ALS implícito (implicitPrefs=True), rank y alpha del modelo híbrido, regParam=0.1, maxIter=10 y seed=42
-+ - [verificado] 59. La función _params_base debe leer 'params_produccion' de metricas.json; si no existe, debe construir los parámetros desde metricas['hibrido'] usando ALS implícito con el rank y alpha correspondientes
-+ - [verificado] 60. El reentrenamiento periódico del streaming sigue activo y reentrena ALS con la base anterior al corte más los eventos, usando los parámetros del modelo evaluado (ALS implícito con el rank y alpha del híbrido). Esta tarea no vuelve a correr entrenar_batch.py.
-+@@ -88,22 +88,22 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
-+ - [verificado] 65. El archivo app/estilo.py debe generar dinámicamente el logo usando la variable NOMBRE_APP (ej. Movie<b>Predict</b>) en lugar de escribir texto estático
-+ - [verificado] 66. tests/test_nombre_app.py quita las etiquetas HTML de cabecera_html() y verifica que el texto visible contenga 'MoviePredict' y no 'CineRuta', sin distinguir mayúsculas.
-+ - [verificado] 67. El sistema debe garantizar que ninguna referencia al nombre anterior 'CineRuta' persista en el código fuente, documentación o archivos de estilo
-+-- [pendiente] 68. Implementar proveedor 'api' por defecto con fallback automático: Groq -> Gemini -> modo reglas, manejando errores 429, red o latencia >15s sin mostrar mensajes de error al usuario
-+-- [pendiente] 69. Leer todas las claves API (GROQ_API_KEY, GEMINI_API_KEY) exclusivamente desde variables de entorno; prohibir su escritura en código fuente, artefactos, logs o respuestas del modelo
-+-- [pendiente] 70. Configurar modelos por defecto: LLM_MODELO_CHAT='openai/gpt-oss-120b' y LLM_MODELO_TARJETAS='llama-3.1-8b-instant', ambos configurables vía entorno
-+-- [pendiente] 71. Implementar concurrencia LLM_CONCURRENCIA=5 para reemplazar el semáforo fijo, permitiendo atender múltiples usuarios simultáneamente
-+-- [pendiente] 72. Presupuesto configurable (LLM_MAX_POR_MINUTO, LLM_MAX_POR_DIA): cuando QUEDA menos del 30 % del cupo del minuto, las tarjetas usan la plantilla y lo que queda se reserva para el chat; al agotar el tope diario, todo pasa a modo reglas.
-+-- [pendiente] 73. Las tarjetas ('Para ti', ficha, Explorar) deben usar LLM_MODELO_TARJETAS con caché compartida por proceso (clave: película + veredicto + texto), no por sesión
-+-- [pendiente] 74. El chat debe guardar historial y estado de conversación SOLO en st.session_state (memoria RAM), eliminándose al recargar, cerrar sesión o pulsar 'Nueva conversación'
-+-- [pendiente] 75. Interpretar cada mensaje del chat mediante llamada al modelo que recibe últimos 8 mensajes + contexto usuario, devolviendo JSON estricto con intención y cambios de estado
-+-- [pendiente] 76. Vocabulario cerrado: géneros de MovieLens, tags que existan en genome-tags y personas de personas.parquet; las películas referidas solo pueden ser las ya mostradas (por número o título) o las que encuentre buscar_pelicula. El código valida y aplica; lo inválido se ignora.
-+-- [pendiente] 77. Siete intenciones: nuevo_pedido reemplaza las condiciones; ajuste agrega o cambia una y mantiene el resto; mas repite sin repetir mostradas; descartar saca la película de la conversación sin calificarla; pregunta_pelicula, pregunta_perfil y charla responden sin cambiar condiciones.
-+-- [pendiente] 78. El Inicio redacta la tarjeta probable y la improbable en una sola llamada al LLM.
-+-- [pendiente] 79. Las películas recomendadas salen solo de Herramientas.recomendar con las condiciones del estado, excluyendo mostradas y descartadas, y se muestran como tarjetas. El LLM nunca elige películas.
-+-- [pendiente] 80. Contexto compacto del usuario en cada turno: tipo de espectador y gustos (perfil_gustos), sus 10 mejor calificadas, las películas mostradas con sus condiciones y explicación (Catalogo.explicar) y, al preguntar por una película, su ficha completa.
-+-- [pendiente] 81. La respuesta la redacta el modelo del chat en tono conversacional y solo con esos datos; si falta un dato lo dice. Todo título nombrado debe estar en el contexto entregado (validado como en las tarjetas); si no, se usa la plantilla.
-+-- [pendiente] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo.
-+-- [pendiente] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
-+-- [pendiente] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
-+-- [pendiente] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
-+-- [pendiente] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores.
+  - [verificado] 56. Asegurar que ninguna referencia al nombre anterior 'CineRuta' permanezca en el código fuente o documentación
+--- [verificado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador
+-+- [observado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador — PRUEBAS.txt: 'Suite completa (regresión)' termina con código 1 y la salida truncada no deja ver qué prueba falla. Puede ser solo test_carga, pero hay que confirmarlo. Corre la suite con -p no:warnings -q -rf y adjunta el resumen.
++-- [observado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador — PRUEBAS.txt: 'Suite completa (regresión)' termina con código 1 y la salida truncada no deja ver qué prueba falla. Puede ser solo test_carga, pero hay que confirmarlo. Corre la suite con -p no:warnings -q -rf y adjunta el resumen.
+++- [verificado] 57. Verificar que los cambios no rompan las 117 pruebas existentes ni alteren la funcionalidad del recomendador
+  - [verificado] 58. El script entrenar_batch.py debe guardar los parámetros de producción ('params_produccion') en metricas.json, incluyendo ALS implícito (implicitPrefs=True), rank y alpha del modelo híbrido, regParam=0.1, maxIter=10 y seed=42
+  - [verificado] 59. La función _params_base debe leer 'params_produccion' de metricas.json; si no existe, debe construir los parámetros desde metricas['hibrido'] usando ALS implícito con el rank y alpha correspondientes
+  - [verificado] 60. El reentrenamiento periódico del streaming sigue activo y reentrena ALS con la base anterior al corte más los eventos, usando los parámetros del modelo evaluado (ALS implícito con el rank y alpha del híbrido). Esta tarea no vuelve a correr entrenar_batch.py.
+-@@ -88,22 +88,22 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
+- - [verificado] 65. El archivo app/estilo.py debe generar dinámicamente el logo usando la variable NOMBRE_APP (ej. Movie<b>Predict</b>) en lugar de escribir texto estático
+- - [verificado] 66. tests/test_nombre_app.py quita las etiquetas HTML de cabecera_html() y verifica que el texto visible contenga 'MoviePredict' y no 'CineRuta', sin distinguir mayúsculas.
+- - [verificado] 67. El sistema debe garantizar que ninguna referencia al nombre anterior 'CineRuta' persista en el código fuente, documentación o archivos de estilo
+--- [pendiente] 68. Implementar proveedor 'api' por defecto con fallback automático: Groq -> Gemini -> modo reglas, manejando errores 429, red o latencia >15s sin mostrar mensajes de error al usuario
+--- [pendiente] 69. Leer todas las claves API (GROQ_API_KEY, GEMINI_API_KEY) exclusivamente desde variables de entorno; prohibir su escritura en código fuente, artefactos, logs o respuestas del modelo
+--- [pendiente] 70. Configurar modelos por defecto: LLM_MODELO_CHAT='openai/gpt-oss-120b' y LLM_MODELO_TARJETAS='llama-3.1-8b-instant', ambos configurables vía entorno
+--- [pendiente] 71. Implementar concurrencia LLM_CONCURRENCIA=5 para reemplazar el semáforo fijo, permitiendo atender múltiples usuarios simultáneamente
+--- [pendiente] 72. Presupuesto configurable (LLM_MAX_POR_MINUTO, LLM_MAX_POR_DIA): cuando QUEDA menos del 30 % del cupo del minuto, las tarjetas usan la plantilla y lo que queda se reserva para el chat; al agotar el tope diario, todo pasa a modo reglas.
+--- [pendiente] 73. Las tarjetas ('Para ti', ficha, Explorar) deben usar LLM_MODELO_TARJETAS con caché compartida por proceso (clave: película + veredicto + texto), no por sesión
+--- [pendiente] 74. El chat debe guardar historial y estado de conversación SOLO en st.session_state (memoria RAM), eliminándose al recargar, cerrar sesión o pulsar 'Nueva conversación'
+--- [pendiente] 75. Interpretar cada mensaje del chat mediante llamada al modelo que recibe últimos 8 mensajes + contexto usuario, devolviendo JSON estricto con intención y cambios de estado
+--- [pendiente] 76. Vocabulario cerrado: géneros de MovieLens, tags que existan en genome-tags y personas de personas.parquet; las películas referidas solo pueden ser las ya mostradas (por número o título) o las que encuentre buscar_pelicula. El código valida y aplica; lo inválido se ignora.
+--- [pendiente] 77. Siete intenciones: nuevo_pedido reemplaza las condiciones; ajuste agrega o cambia una y mantiene el resto; mas repite sin repetir mostradas; descartar saca la película de la conversación sin calificarla; pregunta_pelicula, pregunta_perfil y charla responden sin cambiar condiciones.
+--- [pendiente] 78. El Inicio redacta la tarjeta probable y la improbable en una sola llamada al LLM.
+--- [pendiente] 79. Las películas recomendadas salen solo de Herramientas.recomendar con las condiciones del estado, excluyendo mostradas y descartadas, y se muestran como tarjetas. El LLM nunca elige películas.
+--- [pendiente] 80. Contexto compacto del usuario en cada turno: tipo de espectador y gustos (perfil_gustos), sus 10 mejor calificadas, las películas mostradas con sus condiciones y explicación (Catalogo.explicar) y, al preguntar por una película, su ficha completa.
+--- [pendiente] 81. La respuesta la redacta el modelo del chat en tono conversacional y solo con esos datos; si falta un dato lo dice. Todo título nombrado debe estar en el contexto entregado (validado como en las tarjetas); si no, se usa la plantilla.
+--- [pendiente] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo.
+--- [pendiente] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
+--- [pendiente] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
+--- [pendiente] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
+--- [pendiente] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores.
++@@ -106,4 +107,15 @@ Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato
++ - [verificado] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
++ - [verificado] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
++ - [verificado] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
++-- [observado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores. — PRUEBAS.txt línea 139: FALLA 'Carga: 20 sesiones de AppTest a la vez, cada recarga bajo 2 s' (código 1). Hay que hacer pasar tests/test_carga.py: precargar y cachear los datos compartidos (st.cache_resource, parquet ya cargado), evitar trabajo pesado por recarga y medir el tiempo de cada página sin incluir el arranque inicial de AppTest. Después adjunta la salida con -rf.
  \ No newline at end of file
--+- [verificado] 58. El script entrenar_batch.py debe guardar los parámetros de producción ('params_produccion') en metricas.json, incluyendo ALS implícito (implicitPrefs=True), rank y alpha del modelo híbrido, regParam=0.1, maxIter=10 y seed=42
--+- [verificado] 59. La función _params_base debe leer 'params_produccion' de metricas.json; si no existe, debe construir los parámetros desde metricas['hibrido'] usando ALS implícito con el rank y alpha correspondientes
--+- [verificado] 60. El reentrenamiento periódico del streaming sigue activo y reentrena ALS con la base anterior al corte más los eventos, usando los parámetros del modelo evaluado (ALS implícito con el rank y alpha del híbrido). Esta tarea no vuelve a correr entrenar_batch.py.
--+- [verificado] 61. La fila 'Para ti' en la página de inicio, la tarjeta 'Para ti' y la cola de Explorar deben usar el orden exacto de Herramientas.orden_hibrido (z del fold-in + z de log(1+votos))
--+- [verificado] 62. Las candidatas para 'Para ti' y 'Explorar' deben provenir exclusivamente de películas con 50 o más votos antes del corte; las de menos de 50 solo aparecerán como respaldo final
--+- [verificado] 63. La película 'probable' en la tarjeta 'Para ti' será la primera del orden híbrido calculado
--+- [verificado] 64. La película 'improbable' en la tarjeta 'Para ti' se seleccionará únicamente entre el conjunto de candidatas con 50 o más votos
--+- [verificado] 65. El archivo app/estilo.py debe generar dinámicamente el logo usando la variable NOMBRE_APP (ej. Movie<b>Predict</b>) en lugar de escribir texto estático
--+- [verificado] 66. tests/test_nombre_app.py quita las etiquetas HTML de cabecera_html() y verifica que el texto visible contenga 'MoviePredict' y no 'CineRuta', sin distinguir mayúsculas.
--+- [verificado] 67. El sistema debe garantizar que ninguna referencia al nombre anterior 'CineRuta' persista en el código fuente, documentación o archivos de estilo
--+- [pendiente] 68. Implementar proveedor 'api' por defecto con fallback automático: Groq -> Gemini -> modo reglas, manejando errores 429, red o latencia >15s sin mostrar mensajes de error al usuario
--+- [pendiente] 69. Leer todas las claves API (GROQ_API_KEY, GEMINI_API_KEY) exclusivamente desde variables de entorno; prohibir su escritura en código fuente, artefactos, logs o respuestas del modelo
--+- [pendiente] 70. Configurar modelos por defecto: LLM_MODELO_CHAT='openai/gpt-oss-120b' y LLM_MODELO_TARJETAS='llama-3.1-8b-instant', ambos configurables vía entorno
--+- [pendiente] 71. Implementar concurrencia LLM_CONCURRENCIA=5 para reemplazar el semáforo fijo, permitiendo atender múltiples usuarios simultáneamente
--+- [pendiente] 72. Presupuesto configurable (LLM_MAX_POR_MINUTO, LLM_MAX_POR_DIA): cuando QUEDA menos del 30 % del cupo del minuto, las tarjetas usan la plantilla y lo que queda se reserva para el chat; al agotar el tope diario, todo pasa a modo reglas.
--+- [pendiente] 73. Las tarjetas ('Para ti', ficha, Explorar) deben usar LLM_MODELO_TARJETAS con caché compartida por proceso (clave: película + veredicto + texto), no por sesión
--+- [pendiente] 74. El chat debe guardar historial y estado de conversación SOLO en st.session_state (memoria RAM), eliminándose al recargar, cerrar sesión o pulsar 'Nueva conversación'
--+- [pendiente] 75. Interpretar cada mensaje del chat mediante llamada al modelo que recibe últimos 8 mensajes + contexto usuario, devolviendo JSON estricto con intención y cambios de estado
--+- [pendiente] 76. Vocabulario cerrado: géneros de MovieLens, tags que existan en genome-tags y personas de personas.parquet; las películas referidas solo pueden ser las ya mostradas (por número o título) o las que encuentre buscar_pelicula. El código valida y aplica; lo inválido se ignora.
--+- [pendiente] 77. Siete intenciones: nuevo_pedido reemplaza las condiciones; ajuste agrega o cambia una y mantiene el resto; mas repite sin repetir mostradas; descartar saca la película de la conversación sin calificarla; pregunta_pelicula, pregunta_perfil y charla responden sin cambiar condiciones.
--+- [pendiente] 78. El Inicio redacta la tarjeta probable y la improbable en una sola llamada al LLM.
--+- [pendiente] 79. Las películas recomendadas salen solo de Herramientas.recomendar con las condiciones del estado, excluyendo mostradas y descartadas, y se muestran como tarjetas. El LLM nunca elige películas.
--+- [pendiente] 80. Contexto compacto del usuario en cada turno: tipo de espectador y gustos (perfil_gustos), sus 10 mejor calificadas, las películas mostradas con sus condiciones y explicación (Catalogo.explicar) y, al preguntar por una película, su ficha completa.
--+- [pendiente] 81. La respuesta la redacta el modelo del chat en tono conversacional y solo con esos datos; si falta un dato lo dice. Todo título nombrado debe estar en el contexto entregado (validado como en las tarjetas); si no, se usa la plantilla.
--+- [pendiente] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo.
--+- [pendiente] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
--+- [pendiente] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
--+- [pendiente] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
--+- [pendiente] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores.
-++- [verificado] 68. Implementar proveedor 'api' por defecto con fallback automático: Groq -> Gemini -> modo reglas, manejando errores 429, red o latencia >15s sin mostrar mensajes de error al usuario
-++- [verificado] 69. Leer todas las claves API (GROQ_API_KEY, GEMINI_API_KEY) exclusivamente desde variables de entorno; prohibir su escritura en código fuente, artefactos, logs o respuestas del modelo
-++- [verificado] 70. Configurar modelos por defecto: LLM_MODELO_CHAT='openai/gpt-oss-120b' y LLM_MODELO_TARJETAS='llama-3.1-8b-instant', ambos configurables vía entorno
-++- [verificado] 71. Implementar concurrencia LLM_CONCURRENCIA=5 para reemplazar el semáforo fijo, permitiendo atender múltiples usuarios simultáneamente
-++- [verificado] 72. Presupuesto configurable (LLM_MAX_POR_MINUTO, LLM_MAX_POR_DIA): cuando QUEDA menos del 30 % del cupo del minuto, las tarjetas usan la plantilla y lo que queda se reserva para el chat; al agotar el tope diario, todo pasa a modo reglas.
-++- [verificado] 73. Las tarjetas ('Para ti', ficha, Explorar) deben usar LLM_MODELO_TARJETAS con caché compartida por proceso (clave: película + veredicto + texto), no por sesión
-++- [verificado] 74. El chat debe guardar historial y estado de conversación SOLO en st.session_state (memoria RAM), eliminándose al recargar, cerrar sesión o pulsar 'Nueva conversación'
-++- [verificado] 75. Interpretar cada mensaje del chat mediante llamada al modelo que recibe últimos 8 mensajes + contexto usuario, devolviendo JSON estricto con intención y cambios de estado
-++- [verificado] 76. Vocabulario cerrado: géneros de MovieLens, tags que existan en genome-tags y personas de personas.parquet; las películas referidas solo pueden ser las ya mostradas (por número o título) o las que encuentre buscar_pelicula. El código valida y aplica; lo inválido se ignora.
-++- [verificado] 77. Siete intenciones: nuevo_pedido reemplaza las condiciones; ajuste agrega o cambia una y mantiene el resto; mas repite sin repetir mostradas; descartar saca la película de la conversación sin calificarla; pregunta_pelicula, pregunta_perfil y charla responden sin cambiar condiciones.
-++- [verificado] 78. El Inicio redacta la tarjeta probable y la improbable en una sola llamada al LLM.
-++- [verificado] 79. Las películas recomendadas salen solo de Herramientas.recomendar con las condiciones del estado, excluyendo mostradas y descartadas, y se muestran como tarjetas. El LLM nunca elige películas.
-++- [verificado] 80. Contexto compacto del usuario en cada turno: tipo de espectador y gustos (perfil_gustos), sus 10 mejor calificadas, las películas mostradas con sus condiciones y explicación (Catalogo.explicar) y, al preguntar por una película, su ficha completa.
-++- [verificado] 81. La respuesta la redacta el modelo del chat en tono conversacional y solo con esos datos; si falta un dato lo dice. Todo título nombrado debe estar en el contexto entregado (validado como en las tarjetas); si no, se usa la plantilla.
-++- [verificado] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo.
-++- [verificado] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
-++- [verificado] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
-++- [verificado] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
-++- [observado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores. — PRUEBAS.txt línea 139: FALLA 'Carga: 20 sesiones de AppTest a la vez, cada recarga bajo 2 s' (código 1). Hay que hacer pasar tests/test_carga.py: precargar y cachear los datos compartidos (st.cache_resource, parquet ya cargado), evitar trabajo pesado por recarga y medir el tiempo de cada página sin incluir el arranque inicial de AppTest. Después adjunta la salida con -rf.
+-+- [verificado] 68. Implementar proveedor 'api' por defecto con fallback automático: Groq -> Gemini -> modo reglas, manejando errores 429, red o latencia >15s sin mostrar mensajes de error al usuario
+-+- [verificado] 69. Leer todas las claves API (GROQ_API_KEY, GEMINI_API_KEY) exclusivamente desde variables de entorno; prohibir su escritura en código fuente, artefactos, logs o respuestas del modelo
+-+- [verificado] 70. Configurar modelos por defecto: LLM_MODELO_CHAT='openai/gpt-oss-120b' y LLM_MODELO_TARJETAS='llama-3.1-8b-instant', ambos configurables vía entorno
+-+- [verificado] 71. Implementar concurrencia LLM_CONCURRENCIA=5 para reemplazar el semáforo fijo, permitiendo atender múltiples usuarios simultáneamente
+-+- [verificado] 72. Presupuesto configurable (LLM_MAX_POR_MINUTO, LLM_MAX_POR_DIA): cuando QUEDA menos del 30 % del cupo del minuto, las tarjetas usan la plantilla y lo que queda se reserva para el chat; al agotar el tope diario, todo pasa a modo reglas.
+-+- [verificado] 73. Las tarjetas ('Para ti', ficha, Explorar) deben usar LLM_MODELO_TARJETAS con caché compartida por proceso (clave: película + veredicto + texto), no por sesión
+-+- [verificado] 74. El chat debe guardar historial y estado de conversación SOLO en st.session_state (memoria RAM), eliminándose al recargar, cerrar sesión o pulsar 'Nueva conversación'
+-+- [verificado] 75. Interpretar cada mensaje del chat mediante llamada al modelo que recibe últimos 8 mensajes + contexto usuario, devolviendo JSON estricto con intención y cambios de estado
+-+- [verificado] 76. Vocabulario cerrado: géneros de MovieLens, tags que existan en genome-tags y personas de personas.parquet; las películas referidas solo pueden ser las ya mostradas (por número o título) o las que encuentre buscar_pelicula. El código valida y aplica; lo inválido se ignora.
+-+- [verificado] 77. Siete intenciones: nuevo_pedido reemplaza las condiciones; ajuste agrega o cambia una y mantiene el resto; mas repite sin repetir mostradas; descartar saca la película de la conversación sin calificarla; pregunta_pelicula, pregunta_perfil y charla responden sin cambiar condiciones.
+-+- [verificado] 78. El Inicio redacta la tarjeta probable y la improbable en una sola llamada al LLM.
+-+- [verificado] 79. Las películas recomendadas salen solo de Herramientas.recomendar con las condiciones del estado, excluyendo mostradas y descartadas, y se muestran como tarjetas. El LLM nunca elige películas.
+-+- [verificado] 80. Contexto compacto del usuario en cada turno: tipo de espectador y gustos (perfil_gustos), sus 10 mejor calificadas, las películas mostradas con sus condiciones y explicación (Catalogo.explicar) y, al preguntar por una película, su ficha completa.
+-+- [verificado] 81. La respuesta la redacta el modelo del chat en tono conversacional y solo con esos datos; si falta un dato lo dice. Todo título nombrado debe estar en el contexto entregado (validado como en las tarjetas); si no, se usa la plantilla.
+-+- [verificado] 82. Pantalla del chat: chips con las condiciones activas encima de la entrada, cada una con una × que la quita y recalcula; botón 'Nueva conversación'; la línea 'Entendí:' refleja el estado completo.
+-+- [verificado] 83. Sin API o sin cupo, modo reglas con contexto básico: pedido.py más reglas para 'otra/otras/más' (mas), 'pero/y que/que sea' sin género nuevo (ajuste), 'la primera/segunda/tercera' o títulos mostrados (referencia) y 'ya la vi/no me gustó' (descartar).
+-+- [verificado] 84. Aviso breve en la app de que los mensajes del chat se procesan con un servicio externo; la barra lateral (fuera del modo público) muestra qué proveedor respondió y el cupo restante.
+-+- [verificado] 85. Pruebas sin red con clientes simulados: respaldo ante 429 y timeout, caché compartida, prioridad del chat, tope diario y al menos 10 conversaciones de varios turnos (LLM simulado y modo reglas) con el estado esperado por turno y sin títulos fuera del contexto.
+-+- [observado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores. — PRUEBAS.txt línea 139: FALLA 'Carga: 20 sesiones de AppTest a la vez, cada recarga bajo 2 s' (código 1). Hay que hacer pasar tests/test_carga.py: precargar y cachear los datos compartidos (st.cache_resource, parquet ya cargado), evitar trabajo pesado por recarga y medir el tiempo de cada página sin incluir el arranque inicial de AppTest. Después adjunta la salida con -rf.
+++- [verificado] 86. Prueba de carga: 20 sesiones de AppTest a la vez sobre la muestra mini, con cada página bajo 2 s y sin errores.
+++- [pendiente] 87. Reemplazar st.tabs por navegación de pestañas que ejecute solo el componente activo, manteniendo estado en sesión
+++- [pendiente] 88. Configurar .streamlit/config.toml con fileWatcherType none, runOnSave false y toolbar mínima para producción
+++- [pendiente] 89. Escribir scripts/precalentar_tmdb.py (lo corre el usuario después, NO esta tarea): descarga en paralelo (8 hilos, reintentos ante 429) póster, título y sinopsis en español, con respaldo en inglés, de las películas con 20 o más votos antes del corte, a artefactos/25m/app/tmdb.parquet. tmdb.py consulta ese archivo antes que la red. Pruebas con cliente simulado.
+++- [pendiente] 90. Reemplazar tmdb_cache.json por caché SQLite segura entre hilos para evitar corrupción con múltiples usuarios
+++- [pendiente] 91. Convertir una sola vez genome-scores.csv (pyarrow) en una matriz compacta artefactos/25m/app/genome.npy con sus índices; herramientas._genome y perfiles.features_tipo la usan en vez de leer el CSV de 416 MB por partes. Si no existe, se construye la primera vez que se necesita.
+++- [pendiente] 92. Al arrancar la app, un hilo en segundo plano precarga ratings, votos, genome, factores, catálogo, personas y TMDb, para que el primer visitante no espere.
+++- [pendiente] 93. Caché por usuario: orden híbrido, filas del Inicio, tipo de espectador, tarjeta 'Para ti' y cola de Explorar se calculan una vez por (userId, cantidad y último timestamp de sus eventos) y se invalidan solo cuando califica.
+++- [pendiente] 94. Lecturas de estado.db con una conexión de solo lectura reutilizable por hilo, sin ejecutar el esquema completo en cada consulta, y sin lecturas repetidas dentro de una misma recarga.
+++- [pendiente] 95. Limitar redacción de tarjetas LLM a 3s; si falla, mostrar plantilla y guardar en caché
+++- [pendiente] 96. scripts/medir_app.py mide con AppTest y los artefactos REALES de 25M, con un usuario de prueba de 10 calificaciones, la primera carga y cada interacción (cambiar de sección, abrir ficha, calificar, mensaje de chat en modo reglas), con cProfile en artefactos/medicion_app.txt; se corre antes y después y el resumen trae la tabla.
+++- [pendiente] 97. Metas con los 25M: cada interacción bajo 1 s con la caché caliente y la primera carga bajo 5 s después del calentamiento. Todas las pruebas existentes siguen pasando.
  \ No newline at end of file
  diff --git a/_capturas/CAMBIOS.diff b/_capturas/CAMBIOS.diff
--index f1150a9..892bf27 100644
-+index 892bf27..f735861 100644
+-index 892bf27..f735861 100644
++index f735861..e9bbbc7 100644
  --- a/_capturas/CAMBIOS.diff
  +++ b/_capturas/CAMBIOS.diff
--@@ -1,499 +1,492 @@
---985f253 Ronda 1: Renombré la app de 'CineRuta' a 'MoviePredict' en todo el proyecto. Cambié 23 archivos de código, pruebas, scripts y el README con un script temporal
--+ee8c3a4 Ronda 1: Corregí los tres problemas del pedido 8 sin reentrenar el batch. (1) El logo ahora se arma desde NOMBRE_APP (Movie<b>Predict</b>) y test_nombre_app.py
-+@@ -1,492 +1,313 @@
-+-ee8c3a4 Ronda 1: Corregí los tres problemas del pedido 8 sin reentrenar el batch. (1) El logo ahora se arma desde NOMBRE_APP (Movie<b>Predict</b>) y test_nombre_app.py
-++ab86124 Ronda 1: Cambié el proveedor LLM por defecto a «api»: Groq, luego Gemini (solo si existe su clave) y al final el modo reglas. Está en recomendador/proveedores.
+-@@ -1,492 +1,313 @@
+--ee8c3a4 Ronda 1: Corregí los tres problemas del pedido 8 sin reentrenar el batch. (1) El logo ahora se arma desde NOMBRE_APP (Movie<b>Predict</b>) y test_nombre_app.py
+-+ab86124 Ronda 1: Cambié el proveedor LLM por defecto a «api»: Groq, luego Gemini (solo si existe su clave) y al final el modo reglas. Está en recomendador/proveedores.
++@@ -1,313 +1,345 @@
++-ab86124 Ronda 1: Cambié el proveedor LLM por defecto a «api»: Groq, luego Gemini (solo si existe su clave) y al final el modo reglas. Está en recomendador/proveedores.
+++f92a312 Ronda 2: La suite completa ahora pasa: 514 passed en 342 s con -q -rf -p no:warnings, código 0 y sin fallas. Requisito 86: el código 1 sin salida venía de que
   
--- ARQUITECTURA.md                                    |   4 +-
--- ESPEC.md                                           |  19 +-
--- README.md                                          |   4 +-
--- _capturas/CAMBIOS.diff                             | 699 +++++++++++----------
--- _capturas/INDICE.txt                               |   6 +-
--- _capturas/PRUEBAS.txt                              | 109 ++--
--- _capturas/verif_1.png                              | Bin 126195 -> 27002 bytes
--- _capturas/verif_1_texto.txt                        |  39 +-
--- _capturas/verif_2.png                              | Bin 122045 -> 852318 bytes
--- _capturas/verif_2_texto.txt                        | 129 +++-
--- _capturas/verif_3.png                              | Bin 115344 -> 0 bytes
--- _capturas/verif_3_texto.txt                        |  28 -
--- _capturas/verif_4.png                              | Bin 849718 -> 0 bytes
--- _capturas/verif_4_texto.txt                        | 130 ----
--- app/app.py                                         |   2 +-
--- app/estilo.py                                      |   8 +-
--- app/vistas/__init__.py                             |   2 +-
--- app/vistas/chat.py                                 |   2 +-
--- app/vistas/comun.py                                |   2 +-
--- app/vistas/login.py                                |   2 +-
--- app/vistas/tarjetas.py                             |   4 +-
--- recomendador/catalogo_app.py                       |   2 +-
--- recomendador/cuentas.py                            |   2 +-
--- recomendador/precalculo.py                         |   2 +-
--- recomendador/tmdb.py                               |   2 +-
--- scripts/moderar_resenas.py                         |   2 +-
--- scripts/precalcular_app.py                         |   2 +-
--- scripts/vista_previa_app.py                        |   8 +-
--- ...ia_cineruta.py => vista_previa_moviepredict.py} |  20 +-
--- tests/base_mini.py                                 |   4 +-
--- tests/test_app.py                                  |   6 +-
--- tests/test_app_ficha.py                            |   6 +-
--- tests/test_app_letterboxd.py                       |  16 +-
--- tests/test_modo_publico.py                         |   8 +-
--- tests/test_nombre_app.py                           |  31 +
--- tests/test_red_seguridad.py                        |   2 +-
--- tests/test_rendimiento_app.py                      |   4 +-
--- 37 files changed, 656 insertions(+), 650 deletions(-)
--+ ESPEC.md                     |  29 +-
--+ _capturas/CAMBIOS.diff       | 828 ++++++++++++++++++++++++-------------------
--+ _capturas/INDICE.txt         |   4 +-
--+ _capturas/PRUEBAS.txt        | 114 +++---
--+ _capturas/verif_1.png        | Bin 27002 -> 0 bytes
--+ _capturas/verif_1_texto.txt  |   6 -
--+ _capturas/verif_2.png        | Bin 852318 -> 0 bytes
--+ _capturas/verif_2_texto.txt  | 130 -------
--+ app/estilo.py                |  16 +-
--+ recomendador/batch_als.py    |  12 +
--+ recomendador/catalogo_app.py |  49 ++-
--+ recomendador/streaming.py    |  17 +-
--+ tests/test_batch.py          |   9 +
--+ tests/test_nombre_app.py     |  15 +
--+ tests/test_orden_para_ti.py  |  99 ++++++
--+ 15 files changed, 728 insertions(+), 600 deletions(-)
-+- ESPEC.md                     |  29 +-
-+- _capturas/CAMBIOS.diff       | 828 ++++++++++++++++++++++++-------------------
-+- _capturas/INDICE.txt         |   4 +-
-+- _capturas/PRUEBAS.txt        | 114 +++---
-+- _capturas/verif_1.png        | Bin 27002 -> 0 bytes
-+- _capturas/verif_1_texto.txt  |   6 -
-+- _capturas/verif_2.png        | Bin 852318 -> 0 bytes
-+- _capturas/verif_2_texto.txt  | 130 -------
-+- app/estilo.py                |  16 +-
-+- recomendador/batch_als.py    |  12 +
-+- recomendador/catalogo_app.py |  49 ++-
-+- recomendador/streaming.py    |  17 +-
-+- tests/test_batch.py          |   9 +
-+- tests/test_nombre_app.py     |  15 +
-+- tests/test_orden_para_ti.py  |  99 ++++++
-+- 15 files changed, 728 insertions(+), 600 deletions(-)
-++ ESPEC.md                     |  66 ++--
-++ _capturas/CAMBIOS.diff       | 909 +++++++++++++++++++++----------------------
-++ _capturas/PRUEBAS.txt        | 123 +++---
-++ app/app.py                   |  11 +-
-++ app/vistas/chat.py           |  79 +++-
-++ app/vistas/inicio.py         |  82 
+-- ESPEC.md                     |  29 +-
+-- _capturas/CAMBIOS.diff       | 828 ++++++++++++++++++++++++-------------------
+-- _capturas/INDICE.txt         |   4 +-
+-- _capturas/PRUEBAS.txt        | 114 +++---
+-- _capturas/verif_1.png        | Bin 27002 -> 0 bytes
+-- _capturas/verif_1_texto.txt  |   6 -
+-- _capturas/verif_2.png        | Bin 852318 -> 0 bytes
+-- _capturas/verif_2_texto.txt  | 130 -------
+-- app/estilo.py                |  16 +-
+-- recomendador/batch_als.py    |  12 +
+-- recomendador/catalogo_app.py |  49 ++-
+-- recomendador/streaming.py    |  17 +-
+-- tests/test_batch.py          |   9 +
+-- tests/test_nombre_app.py     |  15 +
+-- tests/test_orden_para_ti.py  |  99 ++++++
+-- 15 files changed, 728 insertions(+), 600 deletions(-)
+-+ ESPEC.md                     |  66 ++--
+-+ _capturas/CAMBIOS.diff       | 909 +++++++++++++++++++++----------------------
+-+ _capturas/PRUEBAS.txt        | 123 +++---
+-+ app/app.py                   |  11 +-
+-+ app/vistas/chat.py           |  79 +++-
+-+ app/vistas/inicio.py         |  82 ++--
+-+ app/vistas/tarjetas.py       | 124 ++++--
+-+ recomendador/config.py       |  13 +-
+-+ recomendador/conversacion.py | 501 ++++++++++++++++++++++++
+-+ recomendador/llm.py          |  60 ++-
+-+ recomendador/proveedores.py  | 165 ++++++++
+-+ tests/test_carga.py          |  70 ++++
+-+ tests/test_conversacion.py   | 218 +++++++++++
+-+ tests/test_modo_publico.py   | 404 +++++++++----------
+-+ tests/test_proveedores.py    | 139 +++++++
+-+ 15 files changed, 2106 insertions(+), 858 deletions(-)
++- ESPEC.md                     |  66 ++--
++- _capturas/CAMBIOS.diff       | 909 +++++++++++++++++++++----------------------
++- _capturas/PRUEBAS.txt        | 123 +++---
++- app/app.py                   |  11 +-
++- app/vistas/chat.py           |  79 +++-
++- app/vistas/inicio.py         |  82 ++--
++- app/vistas/tarjetas.py       | 124 ++++--
++- recomendador/config.py       |  13 +-
++- recomendador/conversacion.py | 501 ++++++++++++++++++++++++
++- recomendador/llm.py          |  60 ++-
++- recomendador/proveedores.py  | 165 ++++++++
++- tests/test_carga.py          |  70 ++++
++- tests/test_conversacion.py   | 218 +++++++++++
++- tests/test_modo_publico.py   | 404 +++++++++----------
++- tests/test_proveedores.py    | 139 +++++++
++- 15 files changed, 2106 insertions(+), 858 deletions(-)
+++ ESPEC.md                    |  40 +--
+++ _capturas/CAMBIOS.diff      | 731 +++++++++++++++++---------------------------
+++ _capturas/PRUEBAS.txt       | 127 ++++----
+++ app/vistas/chat.py          |  26 +-
+++ tests/test_carga.py         |  41 ++-
+++ tests/test_chat_pantalla.py |  81 +++++
+++ 6 files changed, 508 insertions(+), 538 deletions(-)
+  
+  diff --git a/ESPEC.md b/ESPEC.md
+--index aa05c02..eb62821 100644
+-+index eb62821..c96deb4 100644
++-index eb62821..c96deb4 100644
+++index c96deb4..43da3e9 100644
+  --- a/ESPEC.md
+  +++ b/ESPEC.md
+--@@ -15,8 +15,9 @@ El resto del plan está aprobado.
+-+@@ -2,22 +2,25 @@
+-+ Fuente de verdad del proyecto. La mantiene Delegado; NO la edites (se reescribe en cada ronda).
+-+ 
+-+ ## Pedidos del usuario (textuales, en orden)
+-+-1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del futuro: la app y las herramientas del chat leen el historial del usuario solo con ratings anteriores a FECHA_CORTE, más los eventos en vivo. perfilar_usuarios se ejecuta con --hasta FECHA_CORTE (actualizar correr_25m.ps1). El productor parte por defecto en FECHA_CORTE. Prueba: en modo demo ningún dato mostrado ni usado tiene timestamp >= corte, salvo los eventos en vivo. 2. Puntaje combinado en vez de filtros duros: orden final = afinidad ALS + coincidencia con el pedido (cuántos de los géneros, tags y condiciones pedidos cumple cada película, usando géneros y genome tags). Las que cumplen todo van primero; nunca una lista vacía. Si falta un dato (por ejemplo, la duración sin IMDb), esa condición no se puede evaluar y se avisa. El chat dice qué condiciones cumple cada recomendación y cuáles no se pudieron cumplir. 3. Interpretación del pedido: detectar géneros, duración, y ánimo u ocasión ("para llorar", "para ver en familia", "algo liviano", "que me haga pensar", "con giro final"), mapeados a géneros y genome tags. Tolerante a errores de tipeo y a pedidos en inglés. En modo Ollama se aplica siempre, aunque el modelo no pase los filtros, y se agrega una regla al prompt de sistema. 4. Nueva herramienta buscar_pelicula(titulo): sin importar tildes ni mayúsculas, títulos en español o inglés, coincidencia aproximada. Si lo nombrado no está en el catálogo (por ejemplo, una serie), la respuesta lo dice en una frase y recomienda igual según el resto del pedido. 5. Red de seguridad: si el usuario pide recomendaciones de cualquier forma y el modelo no devuelve ninguna película válida, el código llama a recomendar con lo detectado en el texto y muestra esas tarjetas. El chat nunca termina en "No pude obtener recomendaciones" si hay películas en el catálogo. 6. demo.json con rutas relativas a la carpeta del proyecto. 7. Rehacer la figura tipos_espectador del póster: barras horizontales legibles, sin etiquetas superpuestas. 8. Batería de 30 pedidos variados (géneros, combinaciones de géneros, ánimos, ocasiones, "corto", títulos inexistentes como "algo como El mecanismo", errores de tipeo, inglés, mensajes ambiguos), en modo reglas y con un LLM simulado: cada uno termina en al menos una recomendación válida o, si no es un pedido de recomendación, en una respuesta normal. 9. Pruebas automáticas para cada punto.
+-++1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del futuro: la app y las herramientas del chat leen el historial del usuario solo con ratings anteriores a FECHA_CORTE, más los eventos en vivo. perfilar_usuarios se ejecuta con --hasta FECHA_CORTE (actualizar correr_25m.ps1). El productor parte por defecto en FECHA_CORTE. Prueba: en modo demo ningún dato mostrado ni usado tiene timestamp >= corte, salvo los eventos en vivo. 2. Puntaje combinado en vez de filtros duros: orden final = afinidad ALS + coincidencia con el pedido (cuántos de los géneros, …(pedido resumido)
+-+ 2. Ajuste al plan: 1. El corte se aplica en todos los modos, no solo en demo: el historial del usuario siempre es ratings anteriores a FECHA_CORTE más los eventos en vivo, porque el modelo se entrenó solo hasta el corte.
+-+ 2. Coincidencia primero, pero agrupada en niveles (número de condiciones que cumple la película); dentro de cada nivel se ordena por afinidad ALS. Si el pedido no trae condiciones, el orden es el del híbrido actual.
+-+ 3. Coincidencia aproximada contra el título de MovieLens como base. Si existe TMDB_API_KEY, usar además los títulos en español de TMDb con caché; sin clave debe funcionar igual.
+-+ El resto del plan está aprobado.
+-+-3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, tags y condiciones. 5. Las explicaciones no repiten la misma película de referencia en todas las tarjetas, y el puntaje ALS se muestra como "afinidad alta/media" y no como un número tipo estrellas. 6. En recomendador/spark_utils.py, en modo local: spark.executor.heartbeatInterval=60s y spark.network.timeout=600s. 7. Script scripts/probar_pedidos.py que, con los artefactos reales, imprime el top-5 de una lista de pedidos (entre ellos "drama policial con un twist épico" y "algo como de drama policial con un twist épico"), para que yo lo revise. Agregar los casos a la batería con datos de la muestra mini.
+-++3. Corregir la recomendación por niveles (hoy "drama policial con un twist épico" devuelve dramas desconocidos sin crimen ni giro): 1. Cada género pedido cuenta como una condición separada: "drama policial" exige Drama Y Crime para el nivel máximo. 2. Una condición de tag sin datos de genome cuenta como no cumplida para el orden (se sigue informando como "sin datos"). Solo la duración sin IMDb queda neutral. 3. Los candidatos salen del orden híbrido original (ALS + popularidad), solo con películas de 50 votos o más antes del corte. Las de menos votos solo entran como último respaldo. 4. En "algo como X" / "parecida a X": si X empieza con "de" o contiene géneros, ánimos o tags conocidos, es descripción y no título; si se tomó como título y no se encuentra, igual se extraen de X los géneros, ta …(pedido resumido)
+-+ 4. El LLM solo redacta la respuesta final. (1) La interpretación del pedido (pedido.py) es la única fuente de los filtros: el modelo ya no elige filtros ni películas. Recibe la lista final de recomendaciones con sus datos (condiciones que cumple, película parecida que el usuario calificó, afinidad) y solo escribe el texto. (2) Si Ollama falla o tarda más de 20 s, se usa la plantilla del modo reglas. (3) Línea "Entendí: …" con las condiciones finales en cada respuesta. (4) Prueba: "drama policial con un twist final" con un LLM simulado que intenta omitir Crime o agregar duración; los filtros finales deben ser Crime+Drama, tags de giro y sin duración.
+-+-5. Convertir la app Streamlit en una app tipo Letterboxd con recomendaciones, sin romper lo verificado. El chat queda como pestaña. Arquitectura Lambda: batch con Spark sobre el histórico, velocidad con Kafka + Structured Streaming para eventos de usuarios, y la app solo lee resultados precalculados (no ejecuta Spark al navegar). Todo cálculo sobre los 25M o IMDb se hace con Spark, no pandas. Corridas de 25M como scripts que ejecuto yo; pruebas con la muestra mini. 1. Cuentas locales: registro y login con bcrypt en SQLite; userId nuevo mayor a 162541. 2. Primer ingreso: calificar unas 10 populares o importar CSV de Letterboxd; recomendaciones al instante por fold-in. 3. Inicio con filas de carátulas: "Para ti", "Populares entre espectadores como tú" (agregación Spark por tipo, antes del corte) y "Porque te gustó X" (vecinos precalculados con Spark ML BucketedRandomProjectionLSH sobre factores ALS, en parquet). 4. Buscador por título y por persona (director o actor), sin importar tildes. 5. Ficha tipo Letterboxd: póster y sinopsis de TMDb (TMDB_API_KEY), año, géneros, duración, nota IMDb, director y reparto (title.crew, title.principals y name.basics de IMDb cruzados con Spark vía links.csv), histograma 0,5-5 y promedio (groupBy Spark antes del corte, en parquet), tags principales, reseñas de usuarios, y botones para calificar y reseñar. 6. Tarjeta "Para ti": "probablemente te guste" o "puede que no"; la más parecida que calificó alto y la que calificó bajo, con tags a favor y en contra y director o actor en común. Texto con datos; el LLM solo redacta. 7. Tráiler de YouTube desde TMDb. Sin clave: carátulas generadas (título y color por género), sin sinopsis ni tráiler, sin errores. Atribución a TMDb al pie. 8. Modo explorar: una película a la vez: carátula, info personalizada, tráiler, siguiente. 9. Cada calificación y reseña se publica en Kafka (topic ratings, key userId) y la procesa Structured Streaming; si Kafka no responde, se guarda directo y se avisa. 10. Chat como pestaña con la misma lógica (pedido.py; el LLM solo redacta); entiende pedidos por persona ("algo de Nolan"). 11. Modo público para Cloudflare Tunnel: login obligatorio, límite de acciones por minuto por sesión, el LLM atiende de a una solicitud (si está ocupado, plantilla), nada de administración expuesto, y figura con QR a la URL pública (variable URL_PUBLICA) para el póster. 12. Cada página carga en menos de 2 s con datos precalculados y en caché. 13. Limpieza: quitar de llm.py el código sin uso (_validar, completar_args, como_dict, MAX_RONDAS_HERRAMIENTAS). 14. Pruebas automáticas de cada punto.
+-++5. Convertir la app Streamlit en una app tipo Letterboxd con recomendaciones, sin romper lo verificado. El chat queda como pestaña. Arquitectura Lambda: batch con Spark sobre el histórico, velocidad con Kafka + Structured Streaming para eventos de usuarios, y la app solo lee resultados precalculados (no ejecuta Spark al navegar). Todo cálculo sobre los 25M o IMDb se hace con Spark, no pandas. Corridas de 25M como scripts que ejecuto yo; pruebas con la muestra mini. 1. Cuentas locales: registro y login con bcrypt en SQLite; userId nuevo mayor a 162541. 2. Primer ingreso: calificar unas 10 populares o importar CSV de Letterboxd; recomendaciones al instante por fold-in. 3. Inicio con filas de carátulas: "Para ti", "Populares entre espectadores como tú" (agregación Spark por tipo, antes del corte …(pedido resumido)
+-+ 6. Ajuste al plan: 1. Reseñas públicas para todos, máximo 500 caracteres, con un filtro básico de palabras ofensivas. La moderación (ocultar una reseña) se hace con un script local, nunca desde la app.
+-+ 2. Límite de 20 acciones por minuto por sesión.
+-  3. Usar los tipos de espectador existentes (clusters de perfilar_usuarios). Los usuarios nuevos de la app reciben el tipo del centroide más cercano según sus calificaciones del onboarding (mismo escalado del KMeans) y se actualiza cuando califican más.
+-  Ajustes: las reseñas van en un topic propio "resenas" (no se cambia el formato de "ratings"). La app se llama "CineRuta" y usa una paleta propia: oscura, inspirada en Letterboxd pero sin sus colores de marca exactos. El resto del plan está aprobado.
+-  7. Renombrar la app de "CineRuta" a "MoviePredict" en todo el proyecto (título de página, cabecera, pie, README, figuras y pruebas). Sin otros cambios.
+--+8. Corregir 3 problemas, sin otros cambios y sin reentrenar el batch: 1. Reentrenamiento del streaming: streaming._params_base hoy lee metricas.json["params"] (ALS explícito rank 10). Debe usar los parámetros del modelo evaluado: ALS implícito (implicitPrefs=True) con el rank y alpha de metricas.json["hibrido"], regParam 0.1, maxIter 10, seed 42. Que entrenar_batch.py guarde además "params_produccion" en metricas.json, y que _params_base la lea o, si no existe, la arme desde metricas["hibrido"]. Prueba con la muestra mini: los factores reentrenados tienen el rank del híbrido y salen de implicitPrefs. 2. Fila "Para ti" del Inicio, tarjeta "Para ti" y cola de Explorar: usar el mismo orden que el chat (Herramientas.orden_hibrido: z del fold-in + z de log(1+votos), candidatas con 50 o más votos antes del corte y el resto solo como respaldo). La probable es la primera de ese orden; la improbable se elige solo entre candidatas con 50 o más votos. Pruebas con la muestra mini. 3. Logo: app/estilo.py línea 209 escribe a mano Cine<b>Ruta</b>; generarlo desde NOMBRE_APP (Movie<b>Predict</b>). tests/test_nombre_app.py debe revisar también el HTML de la cabecera sin etiquetas.
+-+-8. Corregir 3 problemas, sin otros cambios y sin reentrenar el batch: 1. Reentrenamiento del streaming: streaming._params_base hoy lee metricas.json["params"] (ALS explícito rank 10). Debe usar los parámetros del modelo evaluado: ALS implícito (implicitPrefs=True) con el rank y alpha de metricas.json["hibrido"], regParam 0.1, maxIter 10, seed 42. Que entrenar_batch.py guarde además "params_produccion" en metricas.json, y que _params_base la lea o, si no existe, la arme desde metricas["hibrido"]. Prueba con la muestra mini: los factores reentrenados tienen el rank del híbrido y salen de implicitPrefs. 2. Fila "Para ti" del Inicio, tarjeta "Para ti" y cola de Explorar: usar el mismo orden que el chat (Herramientas.orden_hibrido: z del fold-in + z de log(1+votos), candidatas con 50 o más votos antes del corte y el resto solo como respaldo). La probable es la primera de ese orden; la improbable se elige solo entre candidatas con 50 o más votos. Pruebas con la muestra mini. 3. Logo: app/estilo.py línea 209 escribe a mano Cine<b>Ruta</b>; generarlo desde NOMBRE_APP (Movie<b>Predict</b>). tests/test_nombre_app.py debe revisar también el HTML de la cabecera sin etiquetas.
+-++8. Corregir 3 problemas, sin otros cambios y sin reentrenar el batch: 1. Reentrenamiento del streaming: streaming._params_base hoy lee metricas.json["params"] (ALS explícito rank 10). Debe usar los parámetros del modelo evaluado: ALS implícito (implicitPrefs=True) con el rank y alpha de metricas.json["hibrido"], regParam 0.1, maxIter 10, seed 42. Que entrenar_batch.py guarde además "params_produccion" en metricas.json, y que _params_base la lea o, si no existe, la arme desde metricas["hibrido"]. Prueba con la muestra mini: los factores reentrenados tienen el rank del híbrido y salen de implicitPrefs. 2. Fila "Para ti" del Inicio, tarjeta "Para ti" y cola de Explorar: usar el mismo orden que el chat (Herramientas.orden_hibrido: z del fold-in + z de log(1+votos), candidatas con 50 o más votos a …(pedido resumido)
+-++9. Convertir el chat en una conversación natural con contexto, apoyada siempre en los datos del sistema (ALS, perfil y catálogo), y cambiar el LLM local por APIs gratuitas compatibles con OpenAI para atender a varios usuarios a la vez. Sin reentrenar el batch. A. Proveedores 1. Nuevo proveedor "api", por defecto, con cadena de respaldo: Groq (https://api.groq.com/openai/v1, clave GROQ_API_KEY) -> Gemini (https://generativelanguage.googleapis.com/v1beta/openai/, clave GEMINI_API_KEY, solo si existe) -> modo reglas. Ante un 429, un error de red o más de 15 s se pasa al siguiente sin mostrar errores. Llamadas con requests (ya instalado), sin dependencias nuevas. Ollama queda como opción configurable. 2. Las claves solo se leen de variables de entorno; nunca se escriben en código, artefactos, log …(pedido resumido)
+-++10. Continuar lo pendient
+-++11. Continuar lo pendiente
+-  
+---## Requisitos (estado actual, 57 en total)
+--+## Requisitos (estado actual, 67 en total)
+-+-## Requisitos (estado actual, 67 en total)
+-++## Requisitos (estado actual, 86 en total)
+-  - [verificado] 1. Reparar y pulir el recomendador existente (está en la carpeta: revisa el código y parte de él). No romper las 117 pruebas. Nada dentro de un paquete puede tardar más de 10 minutos: lo que corre sobre los 25M queda como script que ejecuto yo, y las pruebas usan la muestra mini. 1. Demo sin datos del
+-  - [verificado] 2. Modo demo sin datos del futuro: Herramientas (historial, peliculas_calificadas, tags_usuario y popularidad) filtra los ratings y tags con timestamp >= FECHA_CORTE cuando opera en modo demo o con corte configurado. Los eventos de estado.db se incluyen siempre. correr_25m.ps1 llama a perfilar_usuarios
+-  - [verificado] 3. Interpretación del pedido (recomendador/pedido.py): detecta géneros, duración ('corto', 'menos de 90 min') y ánimos u ocasiones ('para llorar', 'para ver en familia', 'algo liviano',
 …(diff recortado)

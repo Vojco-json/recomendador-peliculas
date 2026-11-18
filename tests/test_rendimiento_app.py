@@ -16,7 +16,7 @@ import time
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import ir_a
+from base_mini import html_pagina, ir_a
 
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, eventos
@@ -68,9 +68,11 @@ def test_paginas_en_menos_de_2_s(entorno):
     tiempos = {"Inicio + Buscar + Explorar (recarga)": _medir(at)}
     ir_a(at, "Buscar").text_input(key="buscar_q").input("nolan")
     tiempos["Buscar 'nolan'"] = _medir(at)
-    ver = [b for b in at.button if b.key and b.key.startswith("ver_")]
-    assert ver, "la búsqueda no devolvió resultados"
-    tiempos["Ficha (abrir)"] = _medir(at, ver[0].click)
+    import re
+    ids = re.findall(r'class="cr-caratula" data-movie="(\d+)"', html_pagina(at))
+    assert ids, "la búsqueda no devolvió resultados"
+    at.session_state["ficha_abierta"] = {"movieId": int(ids[0]), "origen": "Buscar"}
+    tiempos["Ficha (abrir)"] = _medir(at)
     tiempos["Ficha (recarga)"] = _medir(at)
     print("\nTiempos por página (s):", {k: round(v, 3) for k, v in tiempos.items()})
     lentas = {k: round(v, 2) for k, v in tiempos.items() if v >= LIMITE_S}

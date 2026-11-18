@@ -167,10 +167,21 @@ def main(argv=None) -> int:
     m.paso(f"6. Buscar «{args.busqueda}»", "interaccion",
            lambda: at2.text_input(key="buscar_q").input(args.busqueda).run())
 
-    ver = [b for b in at2.button if b.key and str(b.key).startswith("ver_")]
+    # Las carátulas de Buscar son clicables dentro de un componente (iframe) que AppTest
+    # no puede pulsar: se simula el clic escribiendo la ficha global, como abrir_ficha.
+    import json
+    import re
+    html_comp = "".join(json.loads(c.proto.json_args).get("html", "")
+                        for c in at2.get("component_instance"))
+    ver = re.findall(r'class="cr-caratula" data-movie="(\d+)"', html_comp)
     if ver:
-        movie_id = int(str(ver[0].key).split("_")[1])
-        m.paso("7. Abrir una ficha", "interaccion", lambda: ver[0].click().run())
+        movie_id = int(ver[0])
+
+        def abrir_ficha():
+            at2.session_state["ficha_abierta"] = {"movieId": movie_id, "origen": "Buscar"}
+            return at2.run()
+
+        m.paso("7. Abrir una ficha", "interaccion", abrir_ficha)
 
         def calificar():
             at2.selectbox(key=f"bus_nota_{movie_id}").set_value(4.0)

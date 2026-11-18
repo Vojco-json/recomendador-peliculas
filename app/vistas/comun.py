@@ -70,6 +70,83 @@ def fila_html(ctx: Contexto, titulo: str, pelis: list[dict], clave: str = "") ->
             f'<div class="cr-carril">{caratulas}</div></section>')
 
 
+# --------------------------------------------------------------------------- #
+# Ficha global y carátulas clicables
+# --------------------------------------------------------------------------- #
+
+CLAVE_FICHA = "ficha_abierta"      # st.session_state: {'movieId', 'origen'} o ausente
+CARPETA_COMPONENTE = Path(__file__).resolve().parent / "componente_caratulas"
+_componente = None                 # se declara una sola vez por proceso (perezoso)
+
+
+def _sesion(sesion=None):
+    """El diccionario de sesión: el que se pasa (pruebas) o st.session_state."""
+    if sesion is not None:
+        return sesion
+    import streamlit as st
+    return st.session_state
+
+
+def abrir_ficha(movieId: int, origen: str, sesion=None) -> dict:
+    """Abre la ficha de una película desde la sección «origen» (Inicio, Buscar, Chat…).
+
+    Solo escribe la clave única «ficha_abierta»: el usuario, la sección, el chat y la
+    cola de Explorar quedan intactos. Devuelve el valor guardado.
+    """
+    valor = {"movieId": int(movieId), "origen": str(origen)}
+    _sesion(sesion)[CLAVE_FICHA] = valor
+    return valor
+
+
+def cerrar_ficha(sesion=None) -> None:
+    """«← Volver»: cierra la ficha y la sección de origen vuelve a mostrarse."""
+    _sesion(sesion).pop(CLAVE_FICHA, None)
+
+
+def ficha_abierta(sesion=None) -> dict | None:
+    """La ficha abierta ({'movieId', 'origen'}) o None."""
+    valor = _sesion(sesion).get(CLAVE_FICHA)
+    return valor if isinstance(valor, dict) and "movieId" in valor else None
+
+
+def procesar_clic(valor, clave: str, origen: str, sesion=None) -> int | None:
+    """Convierte el valor del componente en una ficha abierta (si es un clic nuevo).
+
+    El componente devuelve {'movieId', 'n'} y Streamlit lo repite en cada recarga;
+    «n» (marca del clic) evita reabrir la ficha tras «Volver». Devuelve el movieId
+    abierto o None si no hubo clic nuevo.
+    """
+    if not isinstance(valor, dict) or "movieId" not in valor:
+        return None
+    s = _sesion(sesion)
+    marca = f"_clic_{clave}"
+    if s.get(marca) == valor.get("n"):
+        return None
+    s[marca] = valor.get("n")
+    abrir_ficha(int(valor["movieId"]), origen, s)
+    return int(valor["movieId"])
+
+
+def caratulas_clicables(html_interno: str, clave: str, origen: str) -> None:
+    """Dibuja HTML de carátulas/tarjetas en el que todo elemento con data-movie es clicable.
+
+    Usa un componente propio (app/vistas/componente_caratulas/index.html, sin
+    dependencias): al hacer clic devuelve el movieId sin enlaces ni recarga de página,
+    se abre la ficha global y se vuelve a ejecutar el script con la sesión intacta.
+    """
+    global _componente
+    import streamlit as st
+    import streamlit.components.v1 as components
+
+    import estilo
+    if _componente is None:
+        _componente = components.declare_component("caratulas_moviepredict",
+                                                   path=str(CARPETA_COMPONENTE))
+    valor = _componente(html=html_interno, css=estilo.CSS, key=f"clic_{clave}", default=None)
+    if procesar_clic(valor, clave, origen) is not None:
+        st.rerun()
+
+
 def estrellas(nota: float | None) -> str:
     """5.0 -> '★★★★★', 3.5 -> '★★★½', None -> 'No la vi'."""
     if nota is None:

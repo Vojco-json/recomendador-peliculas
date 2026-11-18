@@ -14,7 +14,7 @@ import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import ir_a
+from base_mini import html_pagina, ir_a
 
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, cuentas, estado, eventos, perfiles
@@ -50,7 +50,8 @@ def entorno(monkeypatch, artefactos, ruta_mini, tmp_path):
 
 
 def _html(at) -> str:
-    return "\n".join(str(m.value) for m in at.markdown)
+    """Markdown + HTML de los componentes de carátulas clicables."""
+    return html_pagina(at)
 
 
 def _boton(at, etiqueta: str):
@@ -230,7 +231,9 @@ def test_paleta_moviepredict_sin_colores_de_letterboxd():
     assert estilo.NOMBRE_APP == "MoviePredict"
     assert estilo.PALETA == {"fondo": "#0e1216", "superficie": "#1f2730", "borde": "#34404c",
                              "texto": "#aab4be", "titulo": "#f3f5f7", "ambar": "#f0b23a",
-                             "turquesa": "#3cb4a8", "coral": "#e5675c"}
+                             "turquesa": "#3cb4a8", "coral": "#e5675c",
+                             # pedido 13: acento cian y secundario azul del logo
+                             "cian": "#07ECF8", "azul": "#0D73C5"}
     for color in estilo.PALETA.values():
         assert color in estilo.CSS
     assert "MoviePredict" in estilo.pie_html()
@@ -261,7 +264,11 @@ next(b for b in at.button if b.label == "Probar con un CSV de ejemplo").click().
 ir_a(at, "Buscar").text_input(key="buscar_q").input("nolan").run()
 ir_a(at, "Chat").chat_input[0].set_value("drama policial con un twist final").run()
 assert not at.exception, at.exception
-assert "cr-fila" in "".join(str(m.value) for m in at.markdown)
+ir_a(at, "Inicio")
+# Las filas van dentro del componente de carátulas clicables (args en json_args).
+pagina = "".join(str(m.value) for m in at.markdown) + "".join(
+    c.proto.json_args for c in at.get("component_instance"))
+assert "cr-fila" in pagina
 cargados = sorted(m for m in sys.modules if m.startswith("pyspark"))
 print("pyspark:", cargados)
 sys.exit(1 if cargados else 0)

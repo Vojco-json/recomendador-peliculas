@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from . import tarjetas
-from .comun import Contexto, esc, fila_html
+from .comun import Contexto, caratulas_clicables, esc, fila_html
 from .ficha import CLAVE_MEMORIA_LLM
 
 
@@ -32,7 +32,9 @@ def mostrar(ctx: Contexto) -> None:
                    "primer paso o en la ficha de cada película para personalizar esto.")
     html_filas = "".join(fila_html(ctx, f["titulo"], f["peliculas"], f["clave"])
                          for f in filas if f["peliculas"])
-    st.markdown(html_filas, unsafe_allow_html=True)
+    if html_filas:
+        # Carátulas clicables: abren la ficha global sin recargar la página.
+        caratulas_clicables(html_filas, "inicio", "Inicio")
     # Tarjeta 'Para ti': una probable y una improbable, explicadas con explicar().
     if ratings:
         t = ctx.cat.tarjeta_para_ti(ctx.user_id)

@@ -44,7 +44,7 @@ from recomendador.catalogo_app import Catalogo  # noqa: E402
 from recomendador.enriquecimiento import ATRIBUCION_TMDB  # noqa: E402
 from recomendador.herramientas import Herramientas  # noqa: E402
 from recomendador.tmdb import TMDb  # noqa: E402
-from vistas import buscar, chat, explorar, inicio, login, onboarding  # noqa: E402
+from vistas import buscar, chat, comun, explorar, ficha, inicio, login, onboarding  # noqa: E402
 from vistas.comun import CLAVE_LIMITADOR, CLAVE_USUARIO, Contexto, esc  # noqa: E402
 
 st.set_page_config(page_title=f"{estilo.NOMBRE_APP} · recomendaciones de películas",
@@ -209,6 +209,15 @@ def barra_lateral(ctx: Contexto) -> None:
 
 SECCIONES = {"Inicio": inicio, "Buscar": buscar, "Explorar": explorar, "Chat": chat}
 CLAVE_SECCION = "seccion"
+# Prefijo de las claves de los widgets de la ficha según la sección de origen.
+PREFIJOS_FICHA = {"Buscar": "bus", "Inicio": "ini", "Chat": "chf", "Explorar": "fexp"}
+# Widgets de las secciones cuyo valor debe sobrevivir mientras la ficha está abierta
+# (Streamlit borra el estado de un widget que no se dibuja en una recarga).
+WIDGETS_PERSISTENTES = ("buscar_q",)
+
+for _clave in WIDGETS_PERSISTENTES:
+    if _clave in st.session_state:
+        st.session_state[_clave] = st.session_state[_clave]
 
 estado.marcar_recarga()       # la firma de eventos de cada usuario se lee una vez por recarga
 estilo.inyectar(st)
@@ -226,8 +235,17 @@ else:
     else:
         # Navegación que ejecuta SOLO la sección elegida (st.tabs ejecutaba las cuatro en
         # cada recarga). La sección, el chat y la cola de Explorar viven en session_state.
+        # Cambiar de sección cierra la ficha abierta (la ficha pertenece a su origen).
         seccion = st.radio("Sección", list(SECCIONES), key=CLAVE_SECCION, horizontal=True,
-                           label_visibility="collapsed")
-        SECCIONES[seccion].mostrar(ctx)
+                           label_visibility="collapsed", on_change=comun.cerrar_ficha)
+        abierta = comun.ficha_abierta()
+        if abierta:
+            # Ficha global: una sola clave de sesión «ficha_abierta» (movieId + origen),
+            # la abra quien la abra (carátulas de Inicio, Buscar, Chat…).
+            st.button("← Volver", key="ficha_volver", on_click=comun.cerrar_ficha)
+            ficha.mostrar(ctx, int(abierta["movieId"]),
+                          prefijo=PREFIJOS_FICHA.get(abierta.get("origen"), "ficha"))
+        else:
+            SECCIONES[seccion].mostrar(ctx)
 
 st.markdown(estilo.pie_html(ATRIBUCION_TMDB), unsafe_allow_html=True)

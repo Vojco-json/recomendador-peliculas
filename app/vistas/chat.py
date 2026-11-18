@@ -14,8 +14,9 @@ import streamlit as st
 from recomendador import config, conversacion, llm
 from recomendador.herramientas import _afinidad
 
-from .comun import Contexto, esc
+from .comun import Contexto, caratulas_clicables, esc
 
+ORIGEN = "Chat"
 CLAVE_ULTIMO_PROVEEDOR = "chat_ultimo_proveedor"
 AVISO_EXTERNO = ("Los mensajes del chat se procesan con un servicio externo (Groq o "
                  "Gemini). No escribas datos personales.")
@@ -38,25 +39,28 @@ def tarjeta(peli: dict, explicacion: str | None = None) -> str:
     expl = f'<div class="expl">{esc(explicacion)}</div>' if explicacion else ""
     cond = (f'<div class="cond">{esc(peli["condiciones_texto"])}</div>'
             if explicacion and peli.get("condiciones_texto") else "")
-    return (f'<div class="tarjeta">{poster}<div class="rank">#{peli.get("rank", "")}</div>'
+    # data-movie: la tarjeta es clicable (abre la ficha) dentro del componente de carátulas.
+    mid = f' data-movie="{int(peli["movieId"])}"' if peli.get("movieId") is not None else ""
+    return (f'<div class="tarjeta"{mid}>{poster}<div class="rank">#{peli.get("rank", "")}</div>'
             f'<div class="titulo">{esc(peli["titulo"])}</div>'
             f'<div class="meta">{esc(" · ".join(meta))}</div><div>{chips}</div>{cond}{expl}'
             f'<div class="fuente">{esc(peli.get("fuente", ""))}{esc(puntaje)}</div></div>')
 
 
-def rejilla(pelis: list[dict], con_explicacion: bool = False) -> None:
-    st.markdown('<div class="rejilla">' + "".join(
-        tarjeta(p, p.get("explicacion") if con_explicacion else None) for p in pelis)
-        + "</div>", unsafe_allow_html=True)
+def rejilla(pelis: list[dict], con_explicacion: bool = False, clave: str = "chat") -> None:
+    """Tarjetas recomendadas; un clic en cualquiera abre su ficha (sin recargar)."""
+    html_rejilla = '<div class="rejilla">' + "".join(
+        tarjeta(p, p.get("explicacion") if con_explicacion else None) for p in pelis) + "</div>"
+    caratulas_clicables(html_rejilla, clave, ORIGEN)
 
 
-def mostrar_respuesta(r: dict) -> None:
+def mostrar_respuesta(r: dict, clave: str = "chat") -> None:
     """Pinta un mensaje del asistente guardado en el historial."""
     if r.get("aviso"):
         st.warning(r["aviso"], icon="⚠️")
     st.markdown(r["content"])
     if r.get("recomendaciones"):
-        rejilla(r["recomendaciones"], con_explicacion=True)
+        rejilla(r["recomendaciones"], con_explicacion=True, clave=clave)
 
 
 def _claves(user_id: int) -> tuple[str, str]:
@@ -120,10 +124,10 @@ def _conversar(ctx: Contexto, historial: list, estado: dict) -> None:
     caja = st.container()
     pregunta = st.chat_input("¿Qué quieres ver hoy?", key="chat_entrada")
     with caja:
-        for m in historial:
+        for i, m in enumerate(historial):
             with st.chat_message(m["role"]):
                 if m["role"] == "assistant":
-                    mostrar_respuesta(m)
+                    mostrar_respuesta(m, clave=f"chat_{i}")
                 else:
                     st.markdown(m["content"])
         if not pregunta:
@@ -148,5 +152,6 @@ def _conversar(ctx: Contexto, historial: list, estado: dict) -> None:
                     t = conversacion.turno(pregunta, estado, user_id, ctx.herr, ctx.cat)
             guardado = _guardar(ctx, historial, t)
             guardado["aviso"] = r.aviso if r is not None else None
-            mostrar_respuesta(guardado)
+            # Misma clave que tendrá en el historial: el clic se conserva tras recargar.
+            mostrar_respuesta(guardado, clave=f"chat_{len(historial) - 1}")
             st.caption(f"Proveedor: {t.proveedor}")

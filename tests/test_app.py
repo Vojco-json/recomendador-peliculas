@@ -12,7 +12,7 @@ import json
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from base_mini import ir_a
+from base_mini import html_pagina, ir_a
 
 from base_mini import crear_artefactos_moviepredict
 from recomendador import config, llm
@@ -55,8 +55,8 @@ def _app_usuario_1() -> AppTest:
 
 
 def _textos(at) -> str:
-    return "\n".join(str(m.value) for m in at.markdown) + "\n".join(
-        str(w.value) for w in at.warning)
+    # Markdown + HTML de los componentes de carátulas clicables + avisos.
+    return html_pagina(at) + "\n".join(str(w.value) for w in at.warning)
 
 
 # --------------------------------------------------------------------------- #

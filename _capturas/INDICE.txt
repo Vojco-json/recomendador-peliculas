@@ -1,3 +1,3 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Login: la cabecera debe decir MoviePredict (Movie normal y Predict en negrita) | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
-- verif_2: Cabecera a 700 px | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
+- verif_1: Pantalla de login: cabecera con el logo PNG (fondo transparente) y botones con el acento cian | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
+- verif_2: Login en móvil: el logo se escala sin desbordar | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
