@@ -39,6 +39,43 @@ def entorno(monkeypatch, artefactos, ruta_mini, tmp_path):
     monkeypatch.setattr(cuentas, "ruta_defecto", lambda: tmp_path / "cuentas.db")
 
 
+@pytest.fixture
+def runtime_compartido(monkeypatch):
+    """Hace que AppTest se pueda usar desde varios hilos a la vez.
+
+    AppTest no es seguro entre hilos: cada ``run()`` instala un Runtime simulado en
+    la variable global ``Runtime._instance`` y al terminar la deja en ``None``. Con 20
+    hilos, un script que aún corre pierde su runtime, falla al cerrar y nunca avisa
+    que terminó (el hilo queda esperando hasta el tiempo límite). Aquí se instala UN
+    runtime simulado compartido (como el servidor real, que tiene uno solo), se
+    desvía la asignación por recarga a una clase inofensiva y se fija la opción
+    global ``global.appTest`` una vez para toda la prueba.
+    """
+    from contextlib import nullcontext
+    from unittest.mock import MagicMock
+
+    import streamlit.testing.v1.app_test as app_test_mod
+    from streamlit.runtime import Runtime
+    from streamlit.runtime.caching.storage.dummy_cache_storage import (
+        MemoryCacheStorageManager,
+    )
+    from streamlit.runtime.media_file_manager import MediaFileManager
+    from streamlit.runtime.memory_media_file_storage import MemoryMediaFileStorage
+    from streamlit.testing.v1.util import patch_config_options
+
+    class _RuntimePorRecarga:                   # recibe lo que AppTest asigna en cada run
+        _instance = None
+
+    compartido = MagicMock(spec=Runtime)
+    compartido.media_file_mgr = MediaFileManager(MemoryMediaFileStorage("/mock/media"))
+    compartido.cache_storage_manager = MemoryCacheStorageManager()
+    monkeypatch.setattr(Runtime, "_instance", compartido)
+    monkeypatch.setattr(app_test_mod, "Runtime", _RuntimePorRecarga)
+    monkeypatch.setattr(app_test_mod, "patch_config_options", lambda *_a, **_k: nullcontext())
+    with patch_config_options({"global.appTest": True}):
+        yield
+
+
 def _sesion(i: int) -> AppTest:
     at = AppTest.from_file(str(APP), default_timeout=120)
     at.run()
@@ -60,8 +97,10 @@ def _recargar(at: AppTest) -> float:
     return dt
 
 
-def test_20_sesiones_a_la_vez(entorno):
+def test_20_sesiones_a_la_vez(entorno, runtime_compartido):
+    t0 = time.perf_counter()
     sesiones = [_sesion(i) for i in range(SESIONES)]
+    print(f"\npreparación de {SESIONES} sesiones: {time.perf_counter() - t0:.1f} s")
     with ThreadPoolExecutor(max_workers=SESIONES) as ex:
         tiempos = list(ex.map(_recargar, sesiones))
     print(f"\n{SESIONES} sesiones a la vez: máx {max(tiempos):.2f} s, "

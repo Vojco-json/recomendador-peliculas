@@ -84,21 +84,39 @@ def mostrar(ctx: Contexto) -> None:
     if str(config.LLM_PROVIDER).lower() == "api":
         st.caption("🔒 " + AVISO_EXTERNO)
 
-    # Chips de condiciones activas (× quita y recalcula) y «Nueva conversación».
+    # Los chips van arriba de la conversación, pero se dibujan AL FINAL de la recarga
+    # (en este contenedor reservado), después de procesar el mensaje nuevo: así reflejan
+    # de inmediato las condiciones que ese mensaje acaba de cambiar.
+    zona_chips = st.container()
+    _conversar(ctx, historial, estado)
+    with zona_chips:
+        _chips(ctx, historial, estado)
+
+
+def _chips(ctx: Contexto, historial: list, estado: dict) -> None:
+    """Chips de condiciones activas (× quita y recalcula), «Nueva conversación» y «Entendí»."""
+    clave_chat, clave_estado = _claves(ctx.user_id)
     chips = conversacion.etiquetas(estado)
     columnas = st.columns(len(chips) + 1) if chips else [st.container()]
     for col, (clave, visible) in zip(columnas, chips):
         if col.button(f"{visible}  ×", key=f"chip_{clave}", help="Quitar esta condición"):
             if ctx.limitador.permitir("chat"):
                 conversacion.quitar_condicion(estado, clave)
-                _guardar(ctx, historial, conversacion.recalcular(estado, user_id, ctx.herr))
+                _guardar(ctx, historial, conversacion.recalcular(estado, ctx.user_id, ctx.herr))
+                # La conversación ya se dibujó: se repinta con la respuesta recalculada.
+                st.rerun()
             else:
                 st.warning(ctx.limitador.aviso(), icon="⏳")
     if columnas[-1].button("Nueva conversación", key="chat_nueva"):
-        st.session_state[clave_chat] = historial = []
-        st.session_state[clave_estado] = estado = conversacion.estado_nuevo()
+        st.session_state[clave_chat] = []
+        st.session_state[clave_estado] = conversacion.estado_nuevo()
+        st.rerun()                              # repinta sin chips ni historial
     st.caption(conversacion.entendi_estado(estado))
 
+
+def _conversar(ctx: Contexto, historial: list, estado: dict) -> None:
+    """Historial, entrada del chat y respuesta al mensaje nuevo (si lo hay)."""
+    user_id = ctx.user_id
     caja = st.container()
     pregunta = st.chat_input("¿Qué quieres ver hoy?", key="chat_entrada")
     with caja:
