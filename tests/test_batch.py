@@ -103,6 +103,15 @@ def test_metricas_en_rango_y_sin_nan(corrida):
     assert "nan" not in tabla.lower()
 
 
+def test_metricas_guardan_params_produccion(corrida):
+    """metricas.json incluye los parámetros del modelo en producción (implícito del híbrido)."""
+    _, salida = corrida
+    g = json.loads((salida / "metricas.json").read_text(encoding="utf-8"))
+    assert g["params_produccion"] == {
+        "rank": g["hibrido"]["rank"], "alpha": g["hibrido"]["alpha"],
+        "implicitPrefs": True, "regParam": 0.1, "maxIter": 10, "seed": 42}
+
+
 def test_metricas_ranking_con_usuarios_evaluables(corrida, ratings):
     """En ml-mini hay exactamente 2 usuarios (12 y 15) con un rating >= 4 posterior al
     corte (LEEME), así que con el umbral oficial se evalúan 2 usuarios en todos los

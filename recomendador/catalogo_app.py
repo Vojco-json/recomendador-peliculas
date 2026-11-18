@@ -364,17 +364,31 @@ class Catalogo:
                                      datos=self.datos)
 
     # ---- filas de inicio ---------------------------------------------- #
-    def _para_ti(self, ratings: dict, n: int, excluir: set) -> list[tuple[int, float]]:
-        """Top-n por fold-in ALS sobre las películas del catálogo (sin vistas)."""
+    def _con_votos(self, m: int) -> bool:
+        """True si la película tiene >= min_votos antes del corte (candidata del batch)."""
+        return self._h._votos().get(int(m), 0) >= self._h.min_votos
+
+    def orden_para_ti(self, ratings: dict, excluir: set | None = None) -> list[tuple[int, float]]:
+        """Orden del chat (Herramientas.orden_hibrido: z del fold-in + z de log(1+votos)).
+
+        Solo películas del catálogo y no vistas. Primero las candidatas con >= min_votos
+        antes del corte, en el orden híbrido; las de menos votos van al final como respaldo.
+        """
         fac = self._factores()
         if fac is None or not ratings:
             return []
         ids, matriz, _, _ = fac
         fichas = self._peliculas()["fichas"]
-        recs = foldin.recomendar_foldin((ids, matriz), list(ratings.items()),
-                                        n=n + len(excluir) + 10, excluir=excluir,
-                                        reg=self._h._reg())
-        return [(m, s) for m, s in recs if m in fichas][:n]
+        excluir = set(ratings) | set(excluir or ())
+        orden = self._h.orden_hibrido({int(m): {"rating": float(r)} for m, r in ratings.items()},
+                                      ids, matriz)
+        orden = [(m, s) for m, s in orden if m in fichas and m not in excluir]
+        return ([x for x in orden if self._con_votos(x[0])]
+                + [x for x in orden if not self._con_votos(x[0])])
+
+    def _para_ti(self, ratings: dict, n: int, excluir: set) -> list[tuple[int, float]]:
+        """Top-n de la fila 'Para ti': el mismo orden híbrido del chat (sin vistas)."""
+        return self.orden_para_ti(ratings, excluir)[:n]
 
     def filas_inicio(self, userId: int | None, n: int = N_FILA) -> list[dict]:
         """Filas de carátulas de la página de inicio.
@@ -550,29 +564,34 @@ class Catalogo:
     def tarjeta_para_ti(self, userId: int, candidatas: int = 50) -> dict:
         """Tarjeta 'Para ti': una película probable y una improbable, ambas explicadas.
 
-        - Probable: la de mayor afinidad del fold-in entre las no vistas.
-        - Improbable: se toma el grupo de las ``candidatas`` de MENOR afinidad que
-          quedan bajo la mediana del usuario (el mismo umbral que usa explicar(),
-          así su veredicto es siempre «Puede que no») y, dentro del grupo, la más
-          votada, para que sea una película reconocible y no una rareza.
+        - Probable: la primera del orden híbrido del chat (orden_para_ti), que ya pone
+          primero las candidatas con >= min_votos antes del corte.
+        - Improbable: solo entre las candidatas con >= min_votos (si ninguna película
+          del catálogo llega al mínimo, como en la muestra mini, entre todas). Se toma
+          el grupo de las ``candidatas`` de MENOR afinidad fold-in bajo la mediana del
+          usuario (el mismo umbral que usa explicar(), así su veredicto es siempre
+          «Puede que no») y, dentro del grupo, la más votada.
         """
         ratings = self.ratings_usuario(userId)
         fac = self._factores()
         fichas = self._peliculas()["fichas"]
         probable = improbable = None
-        if fac is not None and ratings:
+        orden = self.orden_para_ti(ratings) if ratings else []
+        if orden:
+            probable = orden[0][0]
             ids, matriz, _, _ = fac
             u = foldin.vector_usuario(ids, matriz, list(ratings.items()), self._h._reg())
             if u is not None:
                 scores = matriz @ u
                 cand = [(float(s), int(m)) for m, s in zip(ids, scores)
                         if int(m) in fichas and int(m) not in ratings]
+                hay_con_votos = any(self._con_votos(m) for m in fichas)
                 if cand:
-                    cand.sort(key=lambda x: (-x[0], x[1]))
-                    probable = cand[0][1]
                     # Mismo umbral que explicar(): mediana de la afinidad con lo no visto.
                     umbral = float(np.median([s for s, _ in cand]))
-                    bajo = sorted((x for x in cand[1:] if x[0] < umbral),
+                    pool = [x for x in cand if x[1] != probable
+                            and (self._con_votos(x[1]) or not hay_con_votos)]
+                    bajo = sorted((x for x in pool if x[0] < umbral),
                                   key=lambda x: (x[0], x[1]))[:max(1, int(candidatas))]
                     if bajo:
                         improbable = max(bajo, key=lambda x: (fichas[x[1]]["votos"],

@@ -102,13 +102,22 @@ class Contexto:
 
 
 def _params_base(artefactos: Path) -> dict:
-    """Parámetros de ALS del entrenamiento base (metricas.json) o los por defecto."""
+    """Parámetros de ALS del modelo evaluado, para reentrenar igual que en producción.
+
+    Orden: metricas["params_produccion"] (lo escribe entrenar_batch.py); si no existe
+    (artefactos antiguos), se arma desde metricas["hibrido"] (ALS implícito con su rank
+    y alpha). Sin metricas.json o sin híbrido quedan los parámetros por defecto.
+    """
     ruta = Path(artefactos) / "metricas.json"
     if ruta.exists():
         try:
-            return {**batch_als.PARAMS_DEFECTO,
-                    **json.loads(ruta.read_text(encoding="utf-8")).get("params", {})}
-        except (ValueError, OSError):
+            metricas = json.loads(ruta.read_text(encoding="utf-8"))
+            if metricas.get("params_produccion"):
+                return {**batch_als.PARAMS_DEFECTO, **metricas["params_produccion"]}
+            hib = metricas.get("hibrido") or {}
+            if "rank" in hib and "alpha" in hib:
+                return batch_als.params_produccion(hib)
+        except (ValueError, OSError, TypeError):
             pass
     return dict(batch_als.PARAMS_DEFECTO)
 

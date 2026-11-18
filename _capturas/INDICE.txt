@@ -1,3 +1,3 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Login con el nombre MoviePredict (vista previa estática) | pagina artefactos/vista_previa/moviepredict_login.html | ancho 1280 px
-- verif_2: Inicio con la cabecera y el pie MoviePredict | pagina artefactos/vista_previa/moviepredict_inicio.html | ancho 1280 px
+- verif_1: Login: la cabecera debe decir MoviePredict (Movie normal y Predict en negrita) | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
+- verif_2: Cabecera a 700 px | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo

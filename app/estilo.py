@@ -204,9 +204,21 @@ def inyectar(st) -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
+def _logo_html(nombre: str) -> str:
+    """Parte el nombre en su segunda mayúscula: 'MoviePredict' -> 'Movie<b>Predict</b>'."""
+    corte = next((i for i, c in enumerate(nombre) if i > 0 and c.isupper()), None)
+    if corte is None:
+        return f"<b>{nombre}</b>"
+    return f"{nombre[:corte]}<b>{nombre[corte:]}</b>"
+
+
 def cabecera_html() -> str:
-    """Logotipo y lema (la cabecera de todas las pantallas)."""
-    return (f'<div class="cr-marca"><span class="cr-logo">Cine<b>Ruta</b></span>'
+    """Logotipo y lema (la cabecera de todas las pantallas).
+
+    El logo se arma desde NOMBRE_APP: la primera palabra en peso normal y el resto
+    en negrita ("Movie<b>Predict</b>"), así un cambio de nombre no deja restos.
+    """
+    return (f'<div class="cr-marca"><span class="cr-logo">{_logo_html(NOMBRE_APP)}</span>'
             f'<span class="cr-lema">{LEMA}</span></div>')
 
 
