@@ -171,10 +171,19 @@ TOPIC_PARTICIONES: int = _entero("TOPIC_PARTICIONES", 6)
 # LLM (Ollama local por defecto; razonamiento desactivado por defecto)
 # --------------------------------------------------------------------------- #
 
-LLM_PROVIDER: str = _texto("LLM_PROVIDER", "ollama").lower()
-LLM_MODEL: str = _texto("LLM_MODEL", "qwen3.5:9b")
+# 'api' (por defecto): Groq -> Gemini -> reglas. 'ollama' sigue disponible; 'reglas' sin red.
+LLM_PROVIDER: str = _texto("LLM_PROVIDER", "api").lower()
+LLM_MODEL: str = _texto("LLM_MODEL", "qwen3.5:9b")          # modelo de Ollama
 OLLAMA_HOST: str = _texto("OLLAMA_HOST", "http://localhost:11434")
 LLM_THINK: bool = _booleano("LLM_THINK", False)
+# Proveedor 'api' (las claves GROQ_API_KEY / GEMINI_API_KEY se leen SOLO del entorno,
+# en el momento de llamar; nunca se guardan aquí ni en artefactos ni en logs).
+LLM_MODELO_CHAT: str = _texto("LLM_MODELO_CHAT", "openai/gpt-oss-120b")
+LLM_MODELO_TARJETAS: str = _texto("LLM_MODELO_TARJETAS", "llama-3.1-8b-instant")
+LLM_MODELO_GEMINI: str = _texto("LLM_MODELO_GEMINI", "gemini-2.0-flash")
+LLM_CONCURRENCIA: int = max(1, int(_texto("LLM_CONCURRENCIA", "5") or 5))
+LLM_MAX_POR_MINUTO: int = max(1, int(_texto("LLM_MAX_POR_MINUTO", "30") or 30))
+LLM_MAX_POR_DIA: int = max(1, int(_texto("LLM_MAX_POR_DIA", "1000") or 1000))
 
 # --------------------------------------------------------------------------- #
 # Enriquecimiento (opcional)

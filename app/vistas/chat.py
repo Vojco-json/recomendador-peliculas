@@ -1,17 +1,24 @@
-"""Pestaña Chat: el mismo chat LLM con herramientas, ahora dentro de MoviePredict.
+"""Pestaña Chat: conversación natural con contexto, apoyada en los datos del sistema.
 
-La lógica no cambia (llm.responder). Lo nuevo: cada mensaje es una acción del
-Limitador; el mensaje 21 dentro del minuto se rechaza con aviso y no se guarda.
+La lógica vive en recomendador/conversacion.py. Aquí solo se pinta:
+- el historial y el estado viven SOLO en st.session_state (RAM): se pierden al
+  recargar, al cerrar sesión o con «Nueva conversación»;
+- chips con las condiciones activas (cada una con × para quitarla y recalcular);
+- cada mensaje es una acción del Limitador (la 21 del minuto se rechaza sin guardarse).
 """
 
 from __future__ import annotations
 
 import streamlit as st
 
-from recomendador import llm
+from recomendador import config, conversacion, llm
 from recomendador.herramientas import _afinidad
 
 from .comun import Contexto, esc
+
+CLAVE_ULTIMO_PROVEEDOR = "chat_ultimo_proveedor"
+AVISO_EXTERNO = ("Los mensajes del chat se procesan con un servicio externo (Groq o "
+                 "Gemini). No escribas datos personales.")
 
 
 def tarjeta(peli: dict, explicacion: str | None = None) -> str:
@@ -29,7 +36,6 @@ def tarjeta(peli: dict, explicacion: str | None = None) -> str:
     afinidad = peli.get("afinidad") or _afinidad(peli.get("score"))
     puntaje = f" · {afinidad}" if afinidad else ""
     expl = f'<div class="expl">{esc(explicacion)}</div>' if explicacion else ""
-    # Qué condiciones del pedido cumple, cuáles no y cuáles no se pudieron evaluar.
     cond = (f'<div class="cond">{esc(peli["condiciones_texto"])}</div>'
             if explicacion and peli.get("condiciones_texto") else "")
     return (f'<div class="tarjeta">{poster}<div class="rank">#{peli.get("rank", "")}</div>'
@@ -53,14 +59,46 @@ def mostrar_respuesta(r: dict) -> None:
         rejilla(r["recomendaciones"], con_explicacion=True)
 
 
+def _claves(user_id: int) -> tuple[str, str]:
+    return f"chat_{user_id}", f"chat_estado_{user_id}"
+
+
+def _guardar(ctx: Contexto, historial: list, t: conversacion.Turno) -> dict:
+    for rec in t.recomendaciones:
+        if not rec.get("poster_url"):
+            rec["poster_url"] = ctx.tmdb.poster_src(rec)
+    guardado = {"role": "assistant", "content": t.texto, "recomendaciones": t.recomendaciones,
+                "proveedor": t.proveedor}
+    historial.append(guardado)
+    st.session_state[CLAVE_ULTIMO_PROVEEDOR] = t.proveedor
+    return guardado
+
+
 def mostrar(ctx: Contexto) -> None:
     user_id = ctx.user_id
-    st.caption("Pide algo como «algo corto y liviano para hoy» o «drama policial con un "
-               "twist final». Solo se recomiendan películas que entregan las herramientas, "
-               "explicadas con tus datos.")
-
-    clave_chat = f"chat_{user_id}"
+    clave_chat, clave_estado = _claves(user_id)
     historial = st.session_state.setdefault(clave_chat, [])
+    estado = st.session_state.setdefault(clave_estado, conversacion.estado_nuevo())
+    st.caption("Conversa como con una persona: «drama policial con giro final», luego "
+               "«pero que sea corta», «otra», «¿quién dirige la segunda?» o «ya la vi».")
+    if str(config.LLM_PROVIDER).lower() == "api":
+        st.caption("🔒 " + AVISO_EXTERNO)
+
+    # Chips de condiciones activas (× quita y recalcula) y «Nueva conversación».
+    chips = conversacion.etiquetas(estado)
+    columnas = st.columns(len(chips) + 1) if chips else [st.container()]
+    for col, (clave, visible) in zip(columnas, chips):
+        if col.button(f"{visible}  ×", key=f"chip_{clave}", help="Quitar esta condición"):
+            if ctx.limitador.permitir("chat"):
+                conversacion.quitar_condicion(estado, clave)
+                _guardar(ctx, historial, conversacion.recalcular(estado, user_id, ctx.herr))
+            else:
+                st.warning(ctx.limitador.aviso(), icon="⏳")
+    if columnas[-1].button("Nueva conversación", key="chat_nueva"):
+        st.session_state[clave_chat] = historial = []
+        st.session_state[clave_estado] = estado = conversacion.estado_nuevo()
+    st.caption(conversacion.entendi_estado(estado))
+
     caja = st.container()
     pregunta = st.chat_input("¿Qué quieres ver hoy?", key="chat_entrada")
     with caja:
@@ -81,13 +119,16 @@ def mostrar(ctx: Contexto) -> None:
             st.markdown(pregunta)
         with st.chat_message("assistant"):
             with st.spinner("Consultando tus datos…"):
-                r = llm.responder(pregunta, user_id, ctx.herr, historial=historial[:-1])
-            for rec in r.recomendaciones:
-                if not rec.get("poster_url"):
-                    rec["poster_url"] = ctx.tmdb.poster_src(rec)
-            guardado = {"role": "assistant", "content": r.texto, "aviso": r.aviso,
-                        "recomendaciones": r.recomendaciones, "proveedor": r.proveedor}
+                if str(config.LLM_PROVIDER).lower() == "ollama":
+                    # Opción configurable: Ollama local, un turno por mensaje con su aviso.
+                    r = llm.responder(pregunta, user_id, ctx.herr, historial=historial[:-1])
+                    t = conversacion.Turno(texto=r.texto, intencion="nuevo_pedido",
+                                           recomendaciones=r.recomendaciones,
+                                           proveedor=r.proveedor)
+                else:
+                    r = None
+                    t = conversacion.turno(pregunta, estado, user_id, ctx.herr, ctx.cat)
+            guardado = _guardar(ctx, historial, t)
+            guardado["aviso"] = r.aviso if r is not None else None
             mostrar_respuesta(guardado)
-            st.caption(f"Proveedor: {r.proveedor} · herramientas: "
-                       f"{', '.join(dict.fromkeys(r.herramientas_usadas)) or 'ninguna'}")
-        historial.append(guardado)
+            st.caption(f"Proveedor: {t.proveedor}")

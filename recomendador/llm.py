@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass, field
 
-from . import config, perfiles
+from . import config, perfiles, proveedores
 from .herramientas import (DURACION_CORTA_MIN, _afinidad, ESQUEMAS, GENEROS_LIVIANOS, Herramientas,
                            N_DEFECTO)
 from .pedido import interpretar_pedido
@@ -36,8 +36,9 @@ LIMITE_RESPUESTA_S = 20       # tope total: si Ollama tarda más, plantilla de r
 ENTENDI_NO_PEDIDO = "Entendí: no es un pedido de películas."
 # Modo público: el LLM atiende de a UNA solicitud. Si está ocupado, la siguiente recibe
 # al instante la plantilla de reglas con este aviso (no espera en cola).
-SEMAFORO_LLM = threading.BoundedSemaphore(1)
-AVISO_OCUPADO = "El asistente está atendiendo otra consulta: te respondo con la plantilla"
+# Ahora el semáforo admite LLM_CONCURRENCIA solicitudes a la vez (antes, una sola).
+SEMAFORO_LLM = proveedores.SEMAFORO_LLM
+AVISO_OCUPADO = "El asistente está atendiendo otras consultas: te respondo con la plantilla"
 
 SISTEMA = """Eres el redactor de un recomendador de películas para el usuario {userId}.
 Tu ÚNICO trabajo es escribir el texto de la respuesta. Reglas obligatorias:
@@ -371,7 +372,37 @@ def _extraer_json(texto: str) -> dict | None:
     return None
 
 
+class _SinSemaforo:
+    """El llamador ya tomó SEMAFORO_LLM: no se vuelve a tomar dentro de la API."""
+    def acquire(self, blocking=True):
+        return True
+
+    def release(self):
+        pass
+
+
+class ClienteAPI:
+    """Adaptador con la interfaz de ollama.Client.chat sobre proveedores.completar.
+
+    Si ninguna API responde (sin claves, sin cupo, 429, red o > 15 s) lanza
+    RuntimeError y el llamador usa la plantilla del modo reglas sin mostrar errores.
+    """
+
+    def __init__(self, modelo: str | None = None, uso: str = "chat", post=None):
+        self.modelo = modelo or config.LLM_MODELO_CHAT
+        self.uso, self.post, self.ultimo = uso, post, "reglas"
+
+    def chat(self, model=None, messages=None, **_):
+        texto, self.ultimo = proveedores.completar(messages or [], self.modelo, uso=self.uso,
+                                                   post=self.post, semaforo=_SinSemaforo())
+        if texto is None:
+            raise RuntimeError("sin respuesta de las APIs")
+        return {"message": {"content": texto}}
+
+
 def crear_cliente():
+    if config.LLM_PROVIDER == "api":
+        return ClienteAPI()
     import ollama
 
     return ollama.Client(host=config.OLLAMA_HOST, timeout=TIMEOUT_OLLAMA_S)
@@ -467,18 +498,23 @@ def responder(mensaje: str, userId: int, herramientas: Herramientas,
     proveedor = (proveedor or config.LLM_PROVIDER).lower()
     if proveedor == "reglas":
         return responder_reglas(mensaje, userId, herramientas)
-    # Modo público: una sola solicitud al LLM a la vez; sin esperar si está ocupado.
-    publico = bool(getattr(config, "MODO_PUBLICO", False))
-    if publico and not SEMAFORO_LLM.acquire(blocking=False):
+    if proveedor == "api" and cliente is None and not proveedores.hay_api():
+        return responder_reglas(mensaje, userId, herramientas)    # sin claves: reglas
+    # Hasta LLM_CONCURRENCIA solicitudes a la vez; sin esperar si está lleno.
+    if not SEMAFORO_LLM.acquire(blocking=False):
         return responder_reglas(mensaje, userId, herramientas, aviso=AVISO_OCUPADO)
     try:
+        if proveedor == "api" and cliente is None:
+            cliente = ClienteAPI()
         respuesta = responder_ollama(mensaje, userId, herramientas, historial, cliente)
-    except Exception as exc:  # conexión rechazada, modelo no descargado, timeout...
-        log.warning("Ollama falló (%s: %s): modo reglas", type(exc).__name__, exc)
-        return responder_reglas(mensaje, userId, herramientas, aviso=AVISO_REGLAS)
+        if isinstance(cliente, ClienteAPI):
+            respuesta.proveedor = respuesta.proveedor.replace("ollama", cliente.ultimo)
+    except Exception as exc:  # conexión rechazada, 429, timeout...: plantilla sin errores
+        log.warning("LLM falló (%s): modo reglas", type(exc).__name__)
+        aviso = AVISO_REGLAS if proveedor == "ollama" else None
+        return responder_reglas(mensaje, userId, herramientas, aviso=aviso)
     finally:
-        if publico:
-            SEMAFORO_LLM.release()
+        SEMAFORO_LLM.release()
     # La red de seguridad (pedido sin recomendaciones válidas) vive en responder_ollama.
     return respuesta
 
@@ -513,6 +549,8 @@ def estado_ollama(cliente=None, timeout_s: float = 2.0) -> dict:
 def descripcion_config() -> dict:
     """Configuración visible en la barra lateral."""
     return {"LLM_PROVIDER": config.LLM_PROVIDER, "LLM_MODEL": config.LLM_MODEL,
+            "LLM_MODELO_CHAT": config.LLM_MODELO_CHAT,
+            "LLM_MODELO_TARJETAS": config.LLM_MODELO_TARJETAS,
             "OLLAMA_HOST": config.OLLAMA_HOST, "think": config.LLM_THINK}
 
 

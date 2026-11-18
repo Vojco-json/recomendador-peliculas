@@ -13,7 +13,7 @@ import logging
 import re
 from datetime import datetime
 
-from recomendador import config, llm
+from recomendador import config, llm, proveedores
 from recomendador.catalogo_app import PROBABLE
 
 from .comun import esc
@@ -49,49 +49,105 @@ def _redaccion_valida(texto: str, e: dict) -> bool:
     return all(c.strip() in permitidos for c in citados)
 
 
-def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, str]:
-    """Texto de la explicación y su origen ('llm' o 'plantilla').
+def _datos(e: dict) -> dict:
+    """Lo que recibe el modelo: sin notas numéricas."""
+    datos = {k: e.get(k) for k in ("titulo", "veredicto", "parecida_alta", "parecida_baja",
+                                   "tags_a_favor", "tags_en_contra", "persona_comun")}
+    for k in ("parecida_alta", "parecida_baja"):
+        if datos[k]:
+            datos[k] = {"titulo": datos[k]["titulo"]}
+    if datos["persona_comun"]:
+        datos["persona_comun"] = {c: datos["persona_comun"][c]
+                                  for c in ("nombre", "rol", "le_gusto", "peliculas")}
+    return datos
 
-    ``memoria`` (p. ej. un dict en st.session_state) evita volver a llamar al LLM por
-    la misma película y veredicto. Nunca lanza excepciones.
+
+def _clave(e: dict) -> str:
+    """Clave de la caché compartida por proceso: película + veredicto + texto."""
+    return f"{e['movieId']}|{e['veredicto']}|{e['texto']}"
+
+
+def redactar(e: dict, memoria: dict | None = None, cliente=None) -> tuple[str, str]:
+    """Texto de la explicación y su origen ('llm' o 'plantilla'). Nunca lanza excepciones.
+
+    Con el proveedor 'api' usa LLM_MODELO_TARJETAS y la caché COMPARTIDA por proceso
+    (proveedores.CACHE_TARJETAS): dos sesiones que ven la misma tarjeta hacen una sola
+    llamada. ``memoria`` se acepta por compatibilidad y ya no se usa.
     """
     plantilla = e["texto"]
-    if str(config.LLM_PROVIDER).lower() == "reglas":
+    proveedor = str(config.LLM_PROVIDER).lower()
+    if proveedor == "reglas":
         return plantilla, "plantilla"
-    clave = f"{e['movieId']}|{e['veredicto']}|{plantilla}"
-    if memoria is not None and clave in memoria:
-        return memoria[clave]
+    clave = _clave(e)
+    guardado = proveedores.cache_get(clave)
+    if guardado is not None:
+        return guardado
     salida = (plantilla, "plantilla")
-    # Modo público: el LLM atiende de a una solicitud; si está ocupado, plantilla ya.
-    publico = bool(getattr(config, "MODO_PUBLICO", False))
-    if publico and not llm.SEMAFORO_LLM.acquire(blocking=False):
-        return salida
+    mensajes = [{"role": "system", "content": SISTEMA_REDACCION},
+                {"role": "user", "content": json.dumps(_datos(e), ensure_ascii=False)}]
     try:
-        datos = {k: e.get(k) for k in ("titulo", "veredicto", "parecida_alta", "parecida_baja",
-                                       "tags_a_favor", "tags_en_contra", "persona_comun")}
-        for k in ("parecida_alta", "parecida_baja"):        # sin la nota numérica
-            if datos[k]:
-                datos[k] = {"titulo": datos[k]["titulo"]}
-        if datos["persona_comun"]:
-            datos["persona_comun"] = {c: datos["persona_comun"][c]
-                                      for c in ("nombre", "rol", "le_gusto", "peliculas")}
-        resp = llm._llamar_con_limite(
-            cliente or llm.crear_cliente(), LIMITE_REDACCION_S, model=config.LLM_MODEL,
-            messages=[{"role": "system", "content": SISTEMA_REDACCION},
-                      {"role": "user", "content": json.dumps(datos, ensure_ascii=False)}],
-            think=config.LLM_THINK)
-        texto = llm._limpiar_thinking(llm._campo(llm._campo(resp, "message", {}),
-                                                 "content", "") or "").strip()
+        if proveedor == "api" and cliente is None:
+            # Sin cupo suficiente (queda < 30 % del minuto) devuelve None: plantilla.
+            texto, _ = proveedores.completar(mensajes, config.LLM_MODELO_TARJETAS,
+                                             uso="tarjeta")
+        else:
+            if not llm.SEMAFORO_LLM.acquire(blocking=False):
+                return salida
+            try:
+                resp = llm._llamar_con_limite(
+                    cliente or llm.crear_cliente(), LIMITE_REDACCION_S,
+                    model=config.LLM_MODEL, messages=mensajes, think=config.LLM_THINK)
+            finally:
+                llm.SEMAFORO_LLM.release()
+            texto = llm._campo(llm._campo(resp, "message", {}), "content", "")
+        texto = llm._limpiar_thinking(texto or "").strip()
         if _redaccion_valida(texto, e):
             salida = (texto, "llm")
-    except Exception as exc:  # Ollama caído, lento o sin el modelo: plantilla
-        log.info("Redacción con LLM no disponible (%s); uso la plantilla.", exc)
-    finally:
-        if publico:
-            llm.SEMAFORO_LLM.release()
-    if memoria is not None:
-        memoria[clave] = salida
+    except Exception as exc:  # proveedor caído, lento o sin el modelo: plantilla
+        log.info("Redacción con LLM no disponible (%s); uso la plantilla.", type(exc).__name__)
+    proveedores.cache_set(clave, salida)
     return salida
+
+
+def redactar_par(tarjeta: dict, post=None) -> dict:
+    """Inicio: redacta la probable y la improbable en UNA sola llamada al LLM.
+
+    Devuelve {'probable': texto, 'improbable': texto}; lo que falte o no pase la
+    validación queda con la plantilla. Usa la misma caché compartida por proceso.
+    """
+    claves = [k for k in ("probable", "improbable") if tarjeta.get(k)]
+    textos = {k: tarjeta[k]["texto"] for k in claves}
+    if str(config.LLM_PROVIDER).lower() != "api" or not claves:
+        if str(config.LLM_PROVIDER).lower() == "ollama":
+            return {k: redactar(tarjeta[k])[0] for k in claves}
+        return textos
+    pendientes = []
+    for k in claves:
+        guardado = proveedores.cache_get(_clave(tarjeta[k]))
+        if guardado is not None:
+            textos[k] = guardado[0]
+        else:
+            pendientes.append(k)
+    if not pendientes:
+        return textos
+    pedido = {k: _datos(tarjeta[k]) for k in pendientes}
+    mensajes = [{"role": "system", "content": SISTEMA_REDACCION + " Recibes varias películas "
+                 "por clave; responde SOLO un JSON con las mismas claves y el texto de cada una."},
+                {"role": "user", "content": json.dumps(pedido, ensure_ascii=False)}]
+    texto, _ = proveedores.completar(mensajes, config.LLM_MODELO_TARJETAS, uso="tarjeta",
+                                     post=post, json_estricto=True)
+    try:
+        dato = json.loads(texto) if texto else {}
+    except ValueError:
+        dato = {}
+    for k in pendientes:
+        t = llm._limpiar_thinking(str(dato.get(k) or "")).strip() if isinstance(dato, dict) else ""
+        salida = (t, "llm") if _redaccion_valida(t, tarjeta[k]) else (tarjeta[k]["texto"],
+                                                                     "plantilla")
+        if texto:                       # solo se guarda si hubo respuesta
+            proveedores.cache_set(_clave(tarjeta[k]), salida)
+        textos[k] = salida[0]
+    return textos
 
 
 # --------------------------------------------------------------------------- #

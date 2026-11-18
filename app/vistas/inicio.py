@@ -36,7 +36,5 @@ def mostrar(ctx: Contexto) -> None:
     # Tarjeta 'Para ti': una probable y una improbable, explicadas con explicar().
     if ratings:
         t = ctx.cat.tarjeta_para_ti(ctx.user_id)
-        memoria = st.session_state.setdefault(CLAVE_MEMORIA_LLM, {})
-        textos = {k: tarjetas.redactar(t[k], memoria)[0]
-                  for k in ("probable", "improbable") if t.get(k)}
+        textos = tarjetas.redactar_par(t)      # una sola llamada para las dos
         st.markdown(tarjetas.para_ti_html(t, textos), unsafe_allow_html=True)

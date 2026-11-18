@@ -33,7 +33,7 @@ for ruta in (str(RAIZ), str(CARPETA_APP)):
         sys.path.insert(0, ruta)
 
 import estilo  # noqa: E402
-from recomendador import config, cuentas, demo, llm  # noqa: E402
+from recomendador import config, cuentas, demo, llm, proveedores  # noqa: E402
 from recomendador.catalogo_app import Catalogo  # noqa: E402
 from recomendador.enriquecimiento import ATRIBUCION_TMDB  # noqa: E402
 from recomendador.herramientas import Herramientas  # noqa: E402
@@ -138,6 +138,15 @@ def barra_lateral(ctx: Contexto) -> None:
         # Estado de Ollama visible desde el inicio (no solo al enviar un mensaje).
         if cfg["LLM_PROVIDER"].lower() == "reglas":
             st.caption("Chat en modo reglas (configurado con LLM_PROVIDER=reglas).")
+        elif cfg["LLM_PROVIDER"].lower() == "api":
+            # Qué proveedor respondió el último mensaje y cupo restante (sin claves).
+            e = proveedores.estado()
+            st.caption(f"Modelos: chat `{cfg['LLM_MODELO_CHAT']}` · tarjetas "
+                       f"`{cfg['LLM_MODELO_TARJETAS']}`  \nCadena: {' → '.join(e['cadena'])}")
+            ultimo = st.session_state.get(chat.CLAVE_ULTIMO_PROVEEDOR, "—")
+            st.markdown(f"**Último proveedor:** {esc(ultimo)}  \n**Cupo:** "
+                        f"{e['cupo_minuto']}/{e['max_minuto']} por minuto · "
+                        f"{e['cupo_dia']}/{e['max_dia']} hoy")
         else:
             estado = estado_ollama(cfg["OLLAMA_HOST"], cfg["LLM_MODEL"])
             if estado["ok"]:

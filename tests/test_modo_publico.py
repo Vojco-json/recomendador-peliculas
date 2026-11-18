@@ -130,14 +130,18 @@ class ClienteRapido:
 def test_semaforo_tomado_responde_plantilla_sin_esperar(publico, ruta_mini, tmp_path):
     h = Herramientas(ruta_mini, tmp_path, tmp_path / "estado.db")
     ClienteLento.llamadas = 0
-    assert llm.SEMAFORO_LLM.acquire(blocking=False)      # otra sesión ocupa el LLM
+    tomados = 0                                           # otras sesiones llenan el cupo
+    while llm.SEMAFORO_LLM.acquire(blocking=False):
+        tomados += 1
+    assert tomados == config.LLM_CONCURRENCIA
     try:
         t0 = time.perf_counter()
         r = llm.responder("algo corto y liviano", 999_999, h, proveedor="ollama",
                           cliente=ClienteLento())
         dt = time.perf_counter() - t0
     finally:
-        llm.SEMAFORO_LLM.release()
+        for _ in range(tomados):
+            llm.SEMAFORO_LLM.release()
     assert dt < 2, f"esperó {dt:.1f} s"
     assert ClienteLento.llamadas == 0
     assert r.proveedor == "reglas" and r.aviso == llm.AVISO_OCUPADO
