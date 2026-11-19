@@ -8,9 +8,8 @@ con datos obtenidos por herramientas.
 
 Índice: [Instalación](#instalación) · [check_entorno.py](#check_entornopy) ·
 [Corrida completa de 25M paso a paso](#corrida-completa-de-25m-paso-a-paso) ·
-[Guía de la demo en vivo (5 minutos)](#guía-de-la-demo-en-vivo-5-minutos) ·
 [App Streamlit con chat](#app-streamlit-con-chat) · [Pruebas](#pruebas) ·
-[Licencias](#licencias) · [Solución de problemas en Windows](#solución-de-problemas-en-windows)
+[Solución de problemas en Windows](#solución-de-problemas-en-windows)
 
 Todos los comandos se ejecutan **desde la carpeta del proyecto** en PowerShell.
 
@@ -142,42 +141,6 @@ que no aparecen antes del corte. Ningún modelo de factores puede recomendarles 
 quedan fuera de Precision@10/NDCG@10 (se reporta el porcentaje como `cold_start_pct`). En la
 demo, esos usuarios se atienden con la popularidad, el fold-in del streaming o Letterboxd.
 
-## Guía de la demo en vivo (5 minutos)
-
-**Antes de la expo (con internet, el día anterior):** pasos 1–9 terminados,
-`check_entorno.py` sin faltantes, `ollama pull qwen3.5:9b` hecho y las figuras impresas.
-El conector Kafka ya queda en `.ivy2`, así que el día de la expo no hace falta internet.
-
-**Al llegar (3 consolas, en este orden):**
-
-```powershell
-$env:MODO = "demo"
-# 1) Streaming del modo demo, reentrena ALS cada 5 minutos sobre el subconjunto
-.venv\Scripts\python scripts/streaming.py --modo demo --reentrenar-cada-min 5
-# 2) App
-.venv\Scripts\python -m streamlit run app/app.py
-# 3) Productor (lanzarlo recién en el minuto 1:30 del guion)
-.venv\Scripts\python scripts/productor_kafka.py --desde 2019-01-01 --velocidad 20
-```
-
-**Guion:**
-
-| Minuto | Qué mostrar | Qué decir |
-|---|---|---|
-| 0:00–0:45 | Figura de arquitectura del póster | MovieLens 25M → Kafka → Spark (batch ALS + Structured Streaming) → SQLite → Streamlit + LLM local |
-| 0:45–1:30 | App: escribir un `userId`; barra lateral con su tipo de espectador y géneros | Perfil de gustos y KMeans; tarjetas = recomendaciones ALS |
-| 1:30–2:30 | Lanzar el productor; mirar «Actualizado hace X s» y las tarjetas | Calificaciones en vivo: fold-in instantáneo y reentrenamiento periódico por lotes |
-| 2:30–3:45 | Chat: «algo corto y liviano para hoy» | El LLM solo usa herramientas: no inventa películas ni datos y explica cada recomendación |
-| 3:45–4:30 | Figuras de métricas y speedup | ALS vs popularidad con partición temporal; speedup de 1 a 6 núcleos frente al ideal |
-| 4:30–5:00 | Preguntas, o un usuario nuevo con `importar_letterboxd.py` | Enriquecimiento legal: IMDb no comercial, TMDb con clave, sin scraping |
-
-**Planes B:**
-- Ollama no responde → la app avisa «Ollama no responde: usando modo reglas» y sigue;
-  también se puede forzar con `$env:LLM_PROVIDER = "reglas"`.
-- Kafka no responde → `scripts/streaming.py --fuente archivo --ruta <carpeta>` con
-  archivos JSON (una línea por evento).
-- El reentrenamiento tarda → bajar `DEMO_DESDE` a una fecha más reciente
-  (p. ej. 2018-01-01) y volver a correr `preparar_demo.py`.
 
 ## MoviePredict: la app para la expo
 
@@ -323,35 +286,3 @@ saltan con aviso si Kafka no responde.
 `scripts/estres_pruebas.py` repite suites varias veces para detectar pruebas
 inestables (ej.: `.venv\Scripts\python scripts/estres_pruebas.py tests/test_batch.py --veces 3`).
 
-## Licencias
-
-- **MovieLens 25M** (GroupLens, Universidad de Minnesota): uso para investigación y
-  educación; no se redistribuye (cada uno lo descarga con `descargar_movielens.py`) y
-  se debe citar: F. Maxwell Harper y Joseph A. Konstan. 2015. *The MovieLens Datasets:
-  History and Context*. ACM TiiS 5, 4. Uso comercial requiere permiso de GroupLens.
-- **IMDb non-commercial datasets** (datasets.imdbws.com): licencia de uso no comercial
-  (solo personal), según los términos de IMDb. No se publican los archivos descargados.
-- **TMDb**: pósters y sinopsis vía su API con clave propia (`TMDB_API_KEY`). Hay que
-  mostrar la atribución «This product uses the TMDB API but is not endorsed or certified
-  by TMDB» y respetar sus términos de uso de la API.
-- **Letterboxd**: solo se importa el CSV que el propio usuario exporta de su cuenta.
-  **Nada de scraping** en ninguna fuente.
-- Software: Apache Spark y Apache Kafka (Apache 2.0), Streamlit (Apache 2.0), Ollama (MIT);
-  el modelo Qwen tiene su propia licencia.
-
-## Solución de problemas en Windows
-
-| Síntoma | Causa probable | Solución |
-|---|---|---|
-| `No se puede cargar ... setup_entorno.ps1 porque la ejecución de scripts está deshabilitada` | Política de ejecución | `powershell -ExecutionPolicy Bypass -File .\setup_entorno.ps1` o usar `py -3.12 setup_entorno.py` |
-| `py -3.12` dice que no encuentra Python | Falta Python 3.12 o el lanzador `py` | Instalar Python 3.12 desde python.org marcando «py launcher» |
-| `HADOOP_HOME and hadoop.home.dir are unset` o `UnsatisfiedLinkError ... NativeIO$Windows` | Falta winutils o `hadoop.dll` | Descargar winutils para Hadoop 3.3, dejar `winutils.exe` y `hadoop.dll` en `C:\hadoop\bin`, definir `HADOOP_HOME=C:\hadoop` y reabrir la consola; confirmar con `check_entorno.py` |
-| `Python worker failed to connect back` | Spark usa otro Python | El proyecto fija `PYSPARK_PYTHON` al del `.venv`; lanzar siempre con `.venv\Scripts\python` |
-| `JAVA_HOME is not set` o error de versión de Java | Java distinto de 17 | Instalar Java 17 y apuntar `JAVA_HOME` a esa carpeta |
-| `java.lang.OutOfMemoryError` | 6 GB no alcanzan con 6 núcleos | Bajar `$env:NUCLEOS = "4"`, o usar `--fraccion` en `entrenar_batch.py` / `escalabilidad.py` |
-| `Failed to find data source: kafka` | Falta el conector en `.ivy2` | `check_entorno.py --descargar-conector` (con internet, una vez) |
-| El productor o el streaming no conectan a `localhost:9092` | Kafka apagado o mal anunciado | Levantar el contenedor de Kafka y revisar que anuncie `localhost:9092`; `check_entorno.py` lo prueba |
-| La app dice «Sin actualizaciones en vivo» | El streaming no está corriendo o usa otro `estado.db` | Lanzar `scripts/streaming.py` con el mismo `MODO` que la app |
-| El streaming no ve ratings nuevos tras reiniciar | El checkpoint ya avanzó | Es lo esperado (no duplica lotes); para reprocesar, borrar `<artefactos>\checkpoints\ratings` y usar `--starting-offsets earliest` |
-| Errores por rutas largas al instalar | Límite de 260 caracteres | Habilitar rutas largas en Windows o mover el proyecto a una ruta más corta |
-| Puerto 8501 ocupado | Otra app Streamlit abierta | `streamlit run app/app.py --server.port 8502` |
