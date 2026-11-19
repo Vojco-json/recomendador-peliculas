@@ -77,6 +77,16 @@ def _css() -> str:
 .stTabs [aria-selected="true"] {{ color:var(--cr-titulo); }}
 .stTabs [data-baseweb="tab-highlight"] {{ background:var(--cr-cian); }}
 
+/* ---- navegación principal (st.radio con key «seccion») como pestañas de texto ---- */
+.st-key-seccion [role="radiogroup"] {{ gap:2rem; flex-wrap:wrap; padding:.2rem 0 .6rem;
+  border-bottom:1px solid var(--cr-borde); }}
+.st-key-seccion [role="radiogroup"] > label {{ margin:0; padding:0; cursor:pointer; }}
+.st-key-seccion [role="radiogroup"] > label > div:first-child {{ display:none; }}
+.st-key-seccion [role="radiogroup"] > label p {{ text-transform:uppercase; letter-spacing:.09em;
+  font-weight:700; font-size:.95rem; color:#8a9bb0; transition:color .15s; }}
+.st-key-seccion [role="radiogroup"] > label:hover p {{ color:var(--cr-titulo); }}
+.st-key-seccion [role="radiogroup"] > label:has(input:checked) p {{ color:#ffffff; }}
+
 /* ---- marca (logo PNG con fondo transparente) ---- */
 .cr-marca {{ display:flex; align-items:center; gap:.9rem; flex-wrap:wrap;
   margin:0 0 .8rem; }}
@@ -255,8 +265,8 @@ def cabecera_html() -> str:
     else:
         logo = (f'<img src="{src}" alt="{NOMBRE_APP}">'
                 f'<span class="cr-oculto" aria-hidden="true">{texto}</span>')
-    return (f'<div class="cr-marca"><span class="cr-logo">{logo}</span>'
-            f'<span class="cr-lema">{LEMA}</span></div>')
+    # Sin lema en texto: la imagen del logo ya trae el eslogan.
+    return f'<div class="cr-marca"><span class="cr-logo">{logo}</span></div>'
 
 
 def pie_html(atribucion: str = "") -> str:
