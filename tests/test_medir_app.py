@@ -39,7 +39,8 @@ def test_medir_app_con_muestra_mini(monkeypatch, artefactos, ruta_mini, tmp_path
     assert "Medición «prueba»" in texto
     for paso in ("1. Primera carga en frío", "3. Primera carga tras calentamiento",
                  "5. Cambiar a Buscar", "7. Abrir una ficha", "8. Calificar",
-                 "12. Mensaje de chat (modo reglas)", "13. Volver a Inicio"):
+                 "12. Mensaje de chat (modo reglas)", "13. Volver a Inicio",
+                 "12b. Chat «una policial de los 90»"):
         assert paso in texto, paso
     assert "Interacciones con caché caliente" in texto
     assert "Detalle por función (cProfile" in texto and "cumulative" in texto

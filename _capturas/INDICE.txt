@@ -1,3 +1,5 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Pantalla de login: cabecera con el logo PNG (fondo transparente) y botones con el acento cian | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
-- verif_2: Login en móvil: el logo se escala sin desbordar | pagina http://localhost:8501 | NOTA: pagina fuera del proyecto o inexistente: no se capturo
+- verif_1: Ficha con la sección Similares: carátulas, veredicto y razón (HTML real de la app generado por AppTest) | pagina vista_previa/ficha_similares.html | ancho 1280 px | acciones: scroll .cr-similares
+- verif_2: Reseña con las estrellas de la calificación del autor | pagina vista_previa/ficha_resena.html | ancho 1280 px | acciones: scroll .cr-resena
+- verif_3: Chat «una comedia de los 90»: línea Entendí con la época | pagina vista_previa/chat_tema_epoca.html | ancho 1280 px
+- verif_4: Similares en ancho móvil | pagina vista_previa/ficha_similares.html | ancho 420 px | acciones: scroll .cr-similares

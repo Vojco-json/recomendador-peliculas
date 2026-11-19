@@ -96,8 +96,15 @@ def test_condiciones_es_y_tags_filtrados():
     assert temas.tags_del_tema("giro final", mini) == ["twist ending"]
     assert "sad" not in temas.tags_del_tema("para llorar", mini)
     assert set(r["tags_genome"]) <= mini
-    assert r["condiciones"] == ["género: drama", "de 100 min o menos",
-                                "para emocionarse (drama triste)", "con giro final"]
+    # Los ánimos ahora son temas (PEDIDO_FINAL §2): ambos aparecen, en orden.
+    assert r["condiciones"] == ["tema: para llorar", "tema: giro final",
+                                "de 100 min o menos"]
+    # Orden determinista: géneros primero, luego temas, luego época/duración.
+    r = interpretar_pedido("drama triste con giro final de los 90, corto",
+                           tags_validos=mini)
+    assert r["condiciones"] == ["género: drama", "tema: para llorar",
+                                "tema: giro final", "época: años 90",
+                                "de 100 min o menos"]
     r = interpretar_pedido("algo para llorar", datos=config.MUESTRA_MINI)
     assert r["tags_genome"] == []                 # descartados sin error
 

@@ -58,7 +58,9 @@ def test_c1_pedido_ajuste_mas_descartar(reglas, herr, uid):
     _titulos_ok(t, e, herr, uid)
     t = conversacion.turno("pero que sea corta", e, uid, herr)
     assert t.intencion == "ajuste" and e["max_duracion_min"]
-    assert {"Crime", "Drama"} <= set(e["generos"])                    # mantiene el resto
+    # mantiene el resto: «policial» es tema propio (PEDIDO_FINAL §3), no Crime
+    assert "Drama" in e["generos"]
+    assert e["temas"] == ["policial", "giro final"]
     antes = _ids(e)
     t = conversacion.turno("dame otras", e, uid, herr)
     assert t.intencion == "mas"
@@ -183,6 +185,28 @@ def test_c8_llm_flujo_completo(api, herr, uid):
     # El modelo recibió como máximo los últimos 8 mensajes.
     ultimo = json.loads(post.mensajes_recibidos[-2][1]["content"])
     assert len(ultimo["ultimos_mensajes"]) <= 8
+
+
+def test_c8b_llm_temas_epoca_y_tag_suelto(api, herr, uid):
+    """PEDIDO_FINAL §5: el JSON del LLM usa temas y época con vocabulario cerrado;
+    un tag suelto de un tema («twist ending») se convierte en el tema."""
+    post = LLMFalso([
+        {"intencion": "nuevo_pedido", "generos": ["Drama"],
+         "temas": ["policial", "tema inventado"], "tags": ["twist ending"],
+         "epoca": {"desde": 1990, "hasta": 1999, "texto": "años 90"}},
+        {"intencion": "ajuste", "epoca": {"desde": "nada"}, "temas": ["cop"]},
+    ], redaccion="{primera}")
+    e = conversacion.estado_nuevo()
+    t = conversacion.turno("un drama policial de los 90 con twist", e, uid, herr, post=post)
+    assert t.proveedor == "groq"
+    assert e["temas"] == ["policial", "giro final"]                # tag suelto -> tema
+    assert "twist ending" not in e["tags"] and "tema inventado" not in e["temas"]
+    assert e["epoca"]["desde"] == 1990 and e["epoca"]["hasta"] == 1999
+    entendi = next(l for l in t.texto.splitlines() if "Entendí:" in l)
+    assert "policial" in entendi and "giro final" in entendi and "años 90" in entendi
+    # Ajuste con época inválida y sinónimo de tema: no duplica ni borra lo anterior.
+    conversacion.turno("pero que sea de policías", e, uid, herr, post=post)
+    assert e["temas"] == ["policial", "giro final"] and e["epoca"]["texto"] == "años 90"
 
 
 def test_c9_llm_inventa_titulo_usa_plantilla(api, herr, uid):

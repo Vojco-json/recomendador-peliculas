@@ -182,6 +182,9 @@ def main(argv=None) -> int:
             return at2.run()
 
         m.paso("7. Abrir una ficha", "interaccion", abrir_ficha)
+        # PEDIDO_FINAL §9: la ficha trae la sección Similares (vecinos + explicar());
+        # se mide de nuevo con la caché caliente (userId, movieId, versión de eventos).
+        m.paso("7b. Abrir ficha con similares (caché caliente)", "interaccion", abrir_ficha)
 
         def calificar():
             at2.selectbox(key=f"bus_nota_{movie_id}").set_value(4.0)
@@ -197,6 +200,9 @@ def main(argv=None) -> int:
     m.paso("11. Cambiar a Chat", "interaccion", lambda: _ir_a(at2, "Chat").run())
     m.paso("12. Mensaje de chat (modo reglas)", "interaccion",
            lambda: at2.chat_input[0].set_value(args.mensaje).run())
+    # PEDIDO_FINAL §9: pedido con tema + época, en modo reglas.
+    m.paso("12b. Chat «una policial de los 90» (modo reglas)", "interaccion",
+           lambda: at2.chat_input[0].set_value("una policial de los 90").run())
     m.paso("13. Volver a Inicio", "interaccion", lambda: _ir_a(at2, "Inicio").run())
 
     texto = m.informe(args.etiqueta, entorno)

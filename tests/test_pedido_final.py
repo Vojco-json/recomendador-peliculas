@@ -69,7 +69,11 @@ def test_puede_que_no_nunca_cita_calificada_alto():
 def test_anios_enteros_y_resena_con_estrellas():
     assert _entero(1990.0) == 1990 and str(_entero(1990.0)) == "1990"
     assert _entero(None) is None
-    from app.vistas.tarjetas import resenas_html
+    # Igual que el resto de las pruebas: app/ en sys.path e import «vistas.*» (con
+    # «app.vistas» se duplicaban los módulos y chocaba con el módulo app.py).
+    import sys
+    sys.path.insert(0, str(config.RAIZ / "app"))
+    from vistas.tarjetas import resenas_html
     html = resenas_html([{"autor": "ana", "texto": "buena", "timestamp": 0, "rating": 4.5}])
     assert "★★★★½" in html
     assert "★" not in resenas_html([{"autor": "b", "texto": "x", "timestamp": 0,
