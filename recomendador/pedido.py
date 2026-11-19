@@ -31,6 +31,8 @@ from difflib import SequenceMatcher
 from functools import lru_cache
 from pathlib import Path
 
+from .temas import TEMAS, detectar_epoca
+
 DURACION_CORTA_MIN = 100   # 'corto'; igual que herramientas.DURACION_CORTA_MIN
 N_DEFECTO = 5              # igual que herramientas.N_DEFECTO
 UMBRAL_TIPEO = 0.82        # 'short'/'sport' (0.80) no coincide; 'terorr'/'terror' (0.83) sí
@@ -48,8 +50,8 @@ GENEROS: dict[str, list[str]] = {
     "Children": ["infantil", "infantiles", "ninos", "para ninos", "kids", "children"],
     "Comedy": ["comedia", "comedias", "comedy", "comedies", "chistosa", "graciosa"],
     # ('comica' se omite: con tipeo se confundiría con 'comida')
-    "Crime": ["crimen", "policial", "policiales", "crime", "mafia", "gangster",
-              "gangsters"],
+    # «policial», «mafia» y «gangster» son temas (ver temas.py), no el género Crime.
+    "Crime": ["crimen", "crime", "criminal", "criminales"],
     "Documentary": ["documental", "documentales", "documentary"],
     "Drama": ["drama", "dramas", "dramatica"],
     "Fantasy": ["fantasia", "fantasy"],
@@ -74,7 +76,8 @@ GENEROS_ES = {
     "Family": "familiar",
 }
 
-# Ánimos y ocasiones -> géneros, tags del genome y texto de la condición.
+# Ánimos y ocasiones (referencia histórica: ahora se interpretan como temas, ver
+# temas.py, donde cada uno es UNA condición con sus tags y su género señal).
 ANIMOS: dict[str, dict] = {
     "llorar": {
         "claves": ["llorar", "para llorar", "lagrimas", "triste", "tristes",
@@ -235,7 +238,11 @@ def _vocabulario_pedido() -> frozenset[str]:
     for animo in ANIMOS.values():
         for c in animo["claves"]:
             palabras.update(c.split())
-    palabras.update({"amor", "accion", "verdad", "noche", "hoy", "familia", "amigos",
+    for tema in TEMAS.values():
+        for c in tema["claves"]:
+            palabras.update(c.split())
+    palabras.update({"clasica", "antigua", "reciente", "moderna", "anos", "decada",
+                     "amor", "accion", "verdad", "noche", "hoy", "familia", "amigos",
                      "pareja", "minutos", "horas", "final", "giro", "estilo", "algo",
                      "peliculas", "pelicula", "pelis", "peli", "movie", "movies",
                      "film", "films", "duracion", "menos", "mas", "maximo"})
@@ -397,14 +404,19 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None, personas=None)
     generos: list[str] = []
     tags: list[str] = []
     animos: list[str] = []
-    for nombre, animo in ANIMOS.items():
-        if any(contiene(palabras, c) for c in animo["claves"]):
-            animos.append(nombre)
-            _agregar(generos, animo["generos"])
-            _agregar(tags, animo["tags"])
+    temas_pedidos: list[str] = []
+    # Temas (incluyen los ánimos de antes): UNA condición cada uno.
+    for nombre, tema in TEMAS.items():
+        if any(contiene(palabras, c) for c in tema["claves"]):
+            temas_pedidos.append(nombre)
+            if tema.get("animo"):
+                animos.append(tema["animo"])
     for genero, claves in GENEROS.items():
         if any(contiene(palabras, c) for c in claves):
             _agregar(generos, [genero])
+    # «para ver en familia» ya es tema: el género Family/Children no se repite.
+    if "para ver en familia" in temas_pedidos:
+        generos = [g for g in generos if g not in ("Children",)]
 
     if tags_validos is None:
         tags_validos = cargar_tags_genome(datos)
@@ -412,20 +424,24 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None, personas=None)
     tags_ok = [x for x in tags if x in validos]
     descartados = [x for x in tags if x not in validos]
 
+    epoca = detectar_epoca(t)
     max_dur = _duracion(t)
     m = _RE_N.search(t)
     n = max(1, min(int(m.group(1)), 10)) if m else N_DEFECTO
 
-    pide = bool(generos or tags or max_dur or titulo or gente or _RE_PIDE.search(t))
+    pide = bool(generos or tags or temas_pedidos or epoca or max_dur or titulo or gente
+                or _RE_PIDE.search(t))
 
     condiciones: list[str] = []
     if generos:
         nombres = [GENEROS_ES.get(g, g) for g in generos]
         condiciones.append(("género: " if len(nombres) == 1 else "géneros: ")
                            + ", ".join(nombres))
+    condiciones += [f"tema: {x}" for x in temas_pedidos]
+    if epoca:
+        condiciones.append(f"época: {epoca['texto']}")
     if max_dur:
         condiciones.append(f"de {max_dur} min o menos")
-    condiciones += [ANIMOS[a]["texto"] for a in animos]
     if titulo:
         condiciones.append(f"parecida a «{titulo}»")
     condiciones += [f"persona: {p['texto']}" for p in gente]
@@ -437,6 +453,8 @@ def interpretar_pedido(texto: str, tags_validos=None, datos=None, personas=None)
         "tags_descartados": descartados,
         "max_duracion_min": max_dur,
         "animos": animos,
+        "temas": temas_pedidos,
+        "epoca": epoca,
         "titulo_mencionado": titulo,
         "pide_recomendacion": pide,
         "n": n,

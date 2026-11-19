@@ -97,8 +97,7 @@ def interpretar(mensaje: str) -> dict:
     # Delega en pedido.py (ES/EN, errores de tipeo, ánimos) y conserva la forma de salida.
     p = interpretar_pedido(mensaje)
     generos = list(p["generos"])
-    if "liviano" in p["animos"]:      # 'liviano' en el chat sigue siendo GENEROS_LIVIANOS
-        generos += [g for g in GENEROS_LIVIANOS if g not in generos]
+    # 'liviano' ahora es un tema (temas.py) con Comedy/Animation/Children como señal.
     return {"max_duracion_min": p["max_duracion_min"], "generos": generos,
             "n": p["n"] if p["n"] else N_DEFECTO}
 
@@ -126,14 +125,14 @@ def analizar(mensaje: str, herramientas: Herramientas) -> dict:
     filtros = interpretar(mensaje)
     # Si se nombró a una persona, los géneros salen del texto sin su nombre.
     if p["personas"]:
-        filtros["generos"] = [g for g in filtros["generos"] if g in p["generos"]
-                              or g in GENEROS_LIVIANOS and "liviano" in p["animos"]]
+        filtros["generos"] = [g for g in filtros["generos"] if g in p["generos"]]
     a = {"generos": filtros["generos"], "tags": list(p["tags_genome"]),
          "max_duracion_min": filtros["max_duracion_min"], "n": filtros["n"],
          "pide": bool(p["pide_recomendacion"]
                       or _RE_PIDE_EXTRA.search(_normalizar(mensaje))),
          "condiciones": list(p["condiciones"]), "frase_titulo": "", "referencia": None,
-         "personas": list(p["personas"])}
+         "personas": list(p["personas"]), "temas": list(p.get("temas") or []),
+         "epoca": p.get("epoca")}
     titulo = p.get("titulo_mencionado")
     if titulo:
         r = herramientas.buscar_pelicula(titulo)
@@ -150,6 +149,9 @@ def analizar(mensaje: str, herramientas: Herramientas) -> dict:
             px = interpretar_pedido(titulo, datos=herramientas.datos)
             a["generos"] += [g for g in px["generos"] if g not in a["generos"]]
             a["tags"] += [t for t in px["tags_genome"] if t not in a["tags"]]
+            a["temas"] += [t for t in px.get("temas") or [] if t not in a["temas"]]
+            if not a.get("epoca") and px.get("epoca"):
+                a["epoca"] = px["epoca"]
             if not a["max_duracion_min"] and px["max_duracion_min"]:
                 a["max_duracion_min"] = px["max_duracion_min"]
     return a
@@ -160,7 +162,8 @@ def recomendar_detectado(userId: int, herramientas: Herramientas, a: dict) -> di
     res = herramientas.recomendar(userId, n=a["n"] + (1 if a["referencia"] else 0),
                                   max_duracion_min=a["max_duracion_min"],
                                   generos=a["generos"], tags=a["tags"], excluir_vistas=True,
-                                  personas=a.get("personas"))
+                                  personas=a.get("personas"), temas=a.get("temas"),
+                                  epoca=a.get("epoca"))
     recs = [r for r in res.get("recomendaciones", []) if r["movieId"] != a["referencia"]]
     for i, r in enumerate(recs[:a["n"]], start=1):
         r["rank"] = i
@@ -269,6 +272,9 @@ def entendi(a: dict) -> str:
     generos = [perfiles.GENEROS_ES.get(g, g) for g in a["generos"] if g != "Family"]
     if generos:
         partes.append(("género " if len(generos) == 1 else "géneros ") + _lista_es(generos))
+    partes += list(a.get("temas") or [])           # temas con su nombre en español
+    if a.get("epoca"):
+        partes.append(f"época: {a['epoca']['texto']}")
     if a["tags"]:
         partes.append("tags " + ", ".join(f"«{t}»" for t in a["tags"]))
     if a["max_duracion_min"]:
@@ -285,7 +291,8 @@ def filtros_finales(a: dict) -> dict:
     """Filtros que recibe ``recomendar``: salen SOLO de la interpretación del pedido."""
     return {"generos": list(a["generos"]), "tags": list(a["tags"]),
             "max_duracion_min": a["max_duracion_min"], "n": a["n"],
-            "personas": [p["nombre"] for p in a.get("personas") or []]}
+            "personas": [p["nombre"] for p in a.get("personas") or []],
+            "temas": list(a.get("temas") or []), "epoca": a.get("epoca")}
 
 
 def _recomendaciones_del_pedido(a: dict, userId: int, herramientas: Herramientas):

@@ -1,52 +1,59 @@
 Pruebas automaticas ejecutadas por Delegado (evidencia objetiva):
 - PASA: [aceptación] Corte en todos los modos, eventos en vivo, demo.json relativo y valores por defecto de los scripts — codigo 0: ..................                                                       [100%]
 18 passed in 1.20s
-- PASA: [aceptación] Interpretación ES/EN, errores de tipeo, ánimos y ocasiones — codigo 0: ........................................                                 [100%]
-40 passed in 5.89s
+- FALLA: [aceptación] Interpretación ES/EN, errores de tipeo, ánimos y ocasiones — codigo 1:     
+E         At index 0 diff: 'tema: para llorar' != 'g�nero: drama'
+E         Right contains one more item: 'con giro final'
+E         Use -v to get more diff
+
+tests\test_pedido.py:99: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_pedido.py::test_condiciones_es_y_tags_filtrados - Assertion...
+1 failed, 39 passed in 6.10s
 - PASA: [aceptación] Búsqueda de títulos con y sin TMDb (cliente falso, caché) — codigo 0: .....................                                                    [100%]
-21 passed in 0.66s
+21 passed in 0.68s
 - PASA: [aceptación] Niveles de coincidencia, ALS dentro del nivel, sin condiciones = orden híbrido, lista nunca vacía — codigo 0: .....                                                                    [100%]
-5 passed in 30.13s
+5 passed in 28.92s
 - PASA: [aceptación] buscar_pelicula como herramienta y caso inexistente — codigo 0: ..........                                                               [100%]
-10 passed in 1.06s
+10 passed in 1.09s
 - PASA: [aceptación] Batería de 30 pedidos en modo reglas y con LLM simulado — codigo 0: ........................................................................ [ 55%]
 .........................................................                [100%]
-129 passed in 8.06s
+129 passed in 7.91s
 - PASA: [aceptación] Red de seguridad y mensaje de título inexistente — codigo 0: ........                                                                 [100%]
-8 passed in 6.42s
+8 passed in 6.33s
 - PASA: [aceptación] La figura no tiene etiquetas superpuestas — codigo 0: test_mini_barras_horizontales_ordenadas_y_sin_superposicion
   C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-4 passed, 14 warnings in 2.41s
+4 passed, 14 warnings in 2.69s
 - PASA: [aceptación] Precálculos Spark sobre la muestra mini (corte, LSH, personas, populares por tipo) — codigo 0: s\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
     if is_categorical_dtype(series.dtype):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-12 passed, 36 warnings in 71.24s (0:01:11)
+12 passed, 36 warnings in 67.61s (0:01:07)
 - PASA: [aceptación] Regresión del chat tras la limpieza de llm.py — codigo 0: ........................................................................ [ 53%]
 ...............................................................          [100%]
-135 passed in 8.51s
+135 passed in 8.31s
 - PASA: [aceptación] Cuentas bcrypt, userIds > 162541 y límite de 20 por minuto — codigo 0: ......                                                                   [100%]
-6 passed in 0.13s
+6 passed in 0.12s
 - PASA: [aceptación] Ratings y reseñas por Kafka en topics separados, respaldo directo, filtro de reseñas y moderación local — codigo 0: ...........................                                              [100%]
-27 passed in 38.66s
+27 passed in 37.55s
 - PASA: [aceptación] Tipo de espectador del centroide más cercano para usuarios nuevos, con el mismo escalado — codigo 0: ......                                                                   [100%]
-6 passed in 23.60s
+6 passed in 25.27s
 - PASA: [aceptación] Buscador, ficha, filas de inicio por tipo y explicación con la muestra mini — codigo 0: ers\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-14 passed, 12 warnings in 36.73s
+14 passed, 12 warnings in 36.57s
 - PASA: [aceptación] TMDb con caché y respaldo sin clave — codigo 0: ......                                                                   [100%]
 6 passed in 0.63s
 - PASA: [aceptación] Flujo login → onboarding → Inicio con tres filas, tipo de espectador, límite y paleta CineRuta — codigo 0: .........                                                                [100%]
-9 passed in 42.99s
+9 passed in 43.75s
 - PASA: [aceptación] Regresión del chat dentro de la app — codigo 0: ..........                                                               [100%]
-10 passed in 51.62s
+10 passed in 52.53s
 - PASA: [aceptación] Buscar, ficha sin clave TMDb, calificar y reseñar con filtro y respaldo, explorar — codigo 0: .........                                                                [100%]
-9 passed in 43.74s
+9 passed in 43.78s
 - PASA: [aceptación] Chat entiende pedidos por persona — codigo 0: ...........                                                              [100%]
 11 passed in 6.97s
 - PASA: [aceptación] Modo público: login, límite 20/min, LLM de a uno, sin administración, QR — codigo 0: he()
@@ -56,30 +63,28 @@ tests/test_modo_publico.py::test_qr_con_url_publica
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-9 passed, 14 warnings in 7.29s
+9 passed, 14 warnings in 7.26s
 - PASA: [aceptación] Cada página en menos de 2 s con datos precalculados — codigo 0: ..                                                                       [100%]
-2 passed in 39.65s
-- PASA: Modo público con 'Bienvenido a MoviePredict' — codigo 0: he()
-
-tests/test_modo_publico.py::test_qr_con_url_publica
-  C:\Users\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\matplotlib\_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
-    ParserElement.enablePackrat()
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-9 passed, 14 warnings in 7.30s
-- PASA: Nombre de la app: cabecera sin etiquetas y sin el nombre anterior — codigo 0: ...                                                                      [100%]
-3 passed in 3.53s
+2 passed in 40.19s
 - PASA: Parámetros del reentrenamiento (implícito, rank del híbrido) y orden híbrido en Para ti, tarjeta y Explorar — codigo 0: .....                                                                    [100%]
-5 passed in 43.15s
-- PASA: metricas.json guarda params_produccion — codigo 0: rs\vicen\Documents\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+5 passed in 41.63s
+- PASA: metricas.json guarda params_produccion — codigo 0: ocuments\bot\proyectos\recomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\utils.py:64: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-13 passed, 102 warnings in 59.01s
+13 passed, 102 warnings in 66.12s (0:01:06)
 - PASA: Proveedor api sin red: respaldo ante 429 y timeout, claves, cupo, semáforo y caché compartida — codigo 0: .........                                                                [100%]
-9 passed in 0.63s
-- PASA: Conversaciones de varios turnos (reglas y LLM simulado) con el estado esperado por turno — codigo 0: ...........                                                              [100%]
-11 passed in 1.63s
+9 passed in 0.64s
+- FALLA: Conversaciones de varios turnos (reglas y LLM simulado) con el estado esperado por turno — codigo 1:     # mantiene el resto
+E       AssertionError: assert {'Crime', 'Drama'} <= {'Drama'}
+E         
+E         Extra items in the left set:
+E         'Crime'
+
+tests\test_conversacion.py:61: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_conversacion.py::test_c1_pedido_ajuste_mas_descartar - Asse...
+1 failed, 10 passed in 1.82s
 - PASA: App y modo público (incluye la ruta Ollama con aviso y el semáforo de 5) — codigo 0: ()
 
 tests/test_modo_publico.py::test_qr_con_url_publica
@@ -87,14 +92,15 @@ tests/test_modo_publico.py::test_qr_con_url_publica
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-19 passed, 14 warnings in 55.76s
+19 passed, 14 warnings in 56.37s
 - PASA: Carga: 20 sesiones de AppTest a la vez, cada recarga bajo 2 s — codigo 0: .                                                                        [100%]
-1 passed in 50.43s
-- PASA: Suite completa (regresión) — codigo 0: ecomendador-peliculas-v2\.venv\Lib\site-packages\pyspark\sql\pandas\serializers.py:224: DeprecationWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, pd.CategoricalDtype) instead
-    if is_categorical_dtype(series.dtype):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-527 passed, 366 warnings in 373.11s (0:06:13)
+1 passed in 46.18s
+- FALLA: Suite completa (regresión) — codigo 1: ===================
+FAILED tests/test_conversacion.py::test_c1_pedido_ajuste_mas_descartar - Asse...
+FAILED tests/test_pedido.py::test_condiciones_es_y_tags_filtrados - Assertion...
+FAILED tests/test_pedido_final.py::test_anios_enteros_y_resena_con_estrellas
+FAILED tests/test_rendimiento_app.py::test_paginas_en_menos_de_2_s - KeyError...
+4 failed, 530 passed, 366 warnings in 395.43s (0:06:35)
 - PASA: Carga: 20 sesiones de AppTest a la vez, cada recarga bajo 2 s — codigo 0: onEngine.java:374)
 	at py4j.Gateway.invoke(Gateway.java:282)
 	at py4j.commands.AbstractCommand.invokeMethod(AbstractCommand.java:132)
@@ -103,40 +109,45 @@ tests/test_modo_publico.py::test_qr_con_url_publica
 	at py4j.ClientServerConnection.run(ClientServerConnection.java:106)
 	at java.base/java.lang.Thread.run(Thread.java:840)
 - PASA: Pantalla del chat en la app real: chips con × que quitan y recalculan, Nueva conversación, aviso de servicio externo y barra lateral con proveedor y cupo — codigo 0: .                                                                        [100%]
-1 passed in 37.73s
-- PASA: Suite completa (regresión) con resumen de fallas — codigo 0: .................................... [ 54%]
-........................................................................ [ 68%]
-........................................................................ [ 81%]
-........................................................................ [ 95%]
-.......................                                                  [100%]
-527 passed in 374.01s (0:06:14)
+1 passed in 36.93s
+- FALLA: Suite completa (regresión) con resumen de fallas — codigo 1:  info ===========================
+FAILED tests/test_conversacion.py::test_c1_pedido_ajuste_mas_descartar - Asse...
+FAILED tests/test_pedido.py::test_condiciones_es_y_tags_filtrados - Assertion...
+FAILED tests/test_pedido_final.py::test_anios_enteros_y_resena_con_estrellas
+FAILED tests/test_rendimiento_app.py::test_paginas_en_menos_de_2_s - KeyError...
+4 failed, 530 passed in 386.32s (0:06:26)
 - PASA: Caché TMDb (SQLite y JSON), títulos, enriquecimiento y orden «Para ti» siguen pasando — codigo 0: .................................................                        [100%]
-49 passed in 48.63s
+49 passed in 49.73s
 - PASA: La app con navegación de una sola sección: usuario 1 en Inicio y chat en modo reglas — codigo 0: ...................                                                      [100%]
-19 passed in 55.01s
-- PASA: Suite completa en verde (521 pruebas) — codigo 0: .................................... [ 54%]
-........................................................................ [ 68%]
-........................................................................ [ 81%]
-........................................................................ [ 95%]
-.......................                                                  [100%]
-527 passed in 373.59s (0:06:13)
+19 passed in 54.40s
+- FALLA: Suite completa en verde (521 pruebas) — codigo 1:  info ===========================
+FAILED tests/test_conversacion.py::test_c1_pedido_ajuste_mas_descartar - Asse...
+FAILED tests/test_pedido.py::test_condiciones_es_y_tags_filtrados - Assertion...
+FAILED tests/test_pedido_final.py::test_anios_enteros_y_resena_con_estrellas
+FAILED tests/test_rendimiento_app.py::test_paginas_en_menos_de_2_s - KeyError...
+4 failed, 530 passed in 394.26s (0:06:34)
 - PASA: Las 3 pruebas que fallaban con la navegación por secciones — codigo 0: ...                                                                      [100%]
-3 passed in 66.77s (0:01:06)
+3 passed in 70.91s (0:01:10)
 - PASA: genome.npy: construcción, valores y uso desde herramientas y perfiles (req. 91) — codigo 0: ...                                                                      [100%]
-3 passed in 0.96s
+3 passed in 0.87s
 - PASA: precalentar_tmdb con cliente simulado: 8 hilos, 429, respaldo en inglés, 20 o más votos, parquet antes que la red (req. 89) — codigo 0: ...                                                                      [100%]
-3 passed in 1.13s
+3 passed in 1.09s
 - PASA: medir_app.py corre de punta a punta con la muestra mini y escribe la tabla y el cProfile (req. 96) — codigo 0: .                                                                        [100%]
-1 passed in 39.41s
+1 passed in 41.41s
 - PASA: TMDb y ficha sin clave, con carátulas generadas aunque la caché compartida tenga fichas — codigo 0: ...............                                                          [100%]
-15 passed in 42.21s
+15 passed in 42.92s
 - PASA: Logo con alt, colores del logo, ficha global, clic sin reapertura, sin href, y navegación Inicio/Buscar/Chat con «← Volver» (AppTest, muestra mini) — codigo 0: ......                                                                   [100%]
-6 passed in 36.32s
+6 passed in 38.87s
 - PASA: El nombre MoviePredict sigue en la cabecera y el pie, sin el nombre anterior — codigo 0: ...                                                                      [100%]
-3 passed in 3.43s
+3 passed in 3.76s
 - PASA: Buscar y ficha adaptados a la ficha global (buscar nolan, abrir, calificar, reseñar, Volver) — codigo 0: .........                                                                [100%]
-9 passed in 39.81s
+9 passed in 43.44s
 - PASA: Paleta MoviePredict y filas del Inicio dentro del componente clicable — codigo 0: ...................                                                      [100%]
-19 passed in 68.98s (0:01:08)
+19 passed in 81.30s (0:01:21)
 - PASA: Rendimiento de páginas y medición con el paso «Abrir una ficha» — codigo 0: ...                                                                      [100%]
-3 passed in 55.67s
+3 passed in 59.15s
+- PASA: Pruebas del pedido final: temas, época, explicaciones, años y reseñas — codigo 0: .......                                                                  [100%]
+7 passed in 6.46s
+- PASA: Pruebas del intérprete del pedido y del redactor LLM adaptadas a temas — codigo 0: ........................................................................ [ 51%]
+.....................................................................    [100%]
+141 passed in 17.94s

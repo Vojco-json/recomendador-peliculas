@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config, perfiles, proveedores
+from . import temas as temas_mod
 from .herramientas import N_DEFECTO, Herramientas, _afinidad
 from .llm import (AYUDA, _con_condiciones, _extraer_json, _lista_es, _normalizar,
                   datos_de_respaldo, entendi)
@@ -42,14 +43,17 @@ ORDINALES = {"primera": 1, "primero": 1, "1": 1, "segunda": 2, "segundo": 2, "2"
 SISTEMA_INTERPRETAR = """Interpretas mensajes de un chat de recomendación de películas.
 Devuelve SOLO un JSON con esta forma exacta:
 {"intencion": "nuevo_pedido|ajuste|mas|descartar|pregunta_pelicula|pregunta_perfil|charla",
- "generos": [], "tags": [], "personas": [], "max_duracion_min": null,
+ "generos": [], "tags": [], "temas": [], "epoca": null, "personas": [], "max_duracion_min": null,
  "quitar": [], "pelicula": null}
 - nuevo_pedido: pide otra cosa (reemplaza las condiciones). ajuste: agrega o cambia una
   condición y mantiene el resto. mas: quiere más opciones con lo mismo. descartar: ya la
   vio o no le interesa una película mostrada. pregunta_pelicula: pregunta por una película.
   pregunta_perfil: pregunta por sus gustos. charla: cualquier otra cosa.
 - generos: en inglés de MovieLens (Drama, Crime, Comedy, Sci-Fi...). tags: en inglés,
-  de genome (twist ending, dark, feel-good...). personas: nombres de directores o actores.
+  de genome (dark, violent...). personas: nombres de directores o actores.
+- temas: SOLO de esta lista: """ + ", ".join(temas_mod.TEMAS) + """.
+  epoca: {"desde": año|null, "hasta": año|null, "texto": "años 90"} o null
+  (clásica = hasta 1979; reciente = desde 2010).
 - quitar: condiciones que pide sacar. pelicula: número de la película mostrada (1, 2...)
   o su título. No inventes nada fuera del mensaje."""
 
@@ -73,7 +77,8 @@ class Turno:
 
 def estado_nuevo() -> dict:
     """Estado de la conversación (se guarda en st.session_state, nunca en disco)."""
-    return {"generos": [], "tags": [], "max_duracion_min": None, "personas": [],
+    return {"generos": [], "tags": [], "temas": [], "epoca": None,
+            "max_duracion_min": None, "personas": [],
             "referencia": None, "mostradas": [], "descartadas": [], "mensajes": []}
 
 
@@ -134,6 +139,14 @@ def validar(propuesta: dict, estado: dict, herr: Herramientas) -> dict:
 
     generos = [g for g in lista(propuesta.get("generos")) if g in GENEROS_VALIDOS]
     tags_ok = [t.lower() for t in lista(propuesta.get("tags")) if t.lower() in tags]
+    # Temas: vocabulario cerrado de temas.py; un tag suelto de un tema se convierte en él.
+    temas_ok: list[str] = []
+    for x in lista(propuesta.get("temas")) + tags_ok:
+        nombre = temas_mod.nombre_tema(x) if x not in tags_ok else temas_mod.tema_de_tag(x)
+        if nombre and nombre not in temas_ok:
+            temas_ok.append(nombre)
+    tags_ok = [t for t in tags_ok if temas_mod.tema_de_tag(t) is None]
+    epoca = temas_mod.validar_epoca(propuesta.get("epoca"))
     personas = [p for p in (_persona_valida(n, herr) for n in lista(propuesta.get("personas")))
                 if p]
     dur = propuesta.get("max_duracion_min")
@@ -141,7 +154,7 @@ def validar(propuesta: dict, estado: dict, herr: Herramientas) -> dict:
     quitar = lista(propuesta.get("quitar"))
     pelicula = _pelicula_ref(propuesta.get("pelicula"), estado, herr)
     return {"intencion": intencion, "generos": generos, "tags": tags_ok,
-            "personas": personas, "max_duracion_min": dur, "quitar": quitar,
+            "temas": temas_ok, "epoca": epoca, "personas": personas, "max_duracion_min": dur, "quitar": quitar,
             "pelicula": pelicula}
 
 
@@ -177,10 +190,12 @@ def interpretar_reglas(mensaje: str, estado: dict, herr: Herramientas) -> dict:
                 ref = peli["movieId"]
                 break
     condiciones = {"generos": list(p["generos"]), "tags": list(p["tags_genome"]),
+                   "temas": list(p.get("temas") or []), "epoca": p.get("epoca"),
                    "personas": list(p["personas"]),
                    "max_duracion_min": p["max_duracion_min"], "quitar": [], "pelicula": ref}
     hay_algo = bool(condiciones["generos"] or condiciones["tags"] or condiciones["personas"]
-                    or condiciones["max_duracion_min"])
+                    or condiciones["max_duracion_min"] or condiciones["temas"]
+                    or condiciones["epoca"])
     if _RE_DESCARTAR.search(texto) and estado["mostradas"]:
         if ref is None:                       # 'ya la vi' sin decir cuál: la primera
             condiciones["pelicula"] = estado["mostradas"][0]["movieId"]
@@ -220,6 +235,9 @@ def etiquetas(estado: dict) -> list[tuple[str, str]]:
     """Chips de las condiciones activas: (clave interna, texto visible)."""
     chips = [(f"genero:{g}", perfiles.GENEROS_ES.get(g, g)) for g in estado["generos"]
              if g != "Family"]
+    chips += [(f"tema:{t}", t) for t in estado.get("temas") or []]
+    if estado.get("epoca"):
+        chips.append(("epoca", f"época: {estado['epoca']['texto']}"))
     chips += [(f"tag:{t}", t) for t in estado["tags"]]
     if estado["max_duracion_min"]:
         chips.append(("duracion", f"≤ {estado['max_duracion_min']} min"))
@@ -234,6 +252,10 @@ def quitar_condicion(estado: dict, clave: str) -> None:
         estado["generos"] = [g for g in estado["generos"] if g != valor]
     elif tipo == "tag":
         estado["tags"] = [t for t in estado["tags"] if t != valor]
+    elif tipo == "tema":
+        estado["temas"] = [t for t in estado.get("temas") or [] if t != valor]
+    elif tipo == "epoca":
+        estado["epoca"] = None
     elif tipo == "duracion":
         estado["max_duracion_min"] = None
     elif tipo == "persona":
@@ -254,12 +276,16 @@ def aplicar(c: dict, estado: dict) -> None:
     if i == "nuevo_pedido":
         estado.update(generos=list(c.get("generos") or []), tags=list(c.get("tags") or []),
                       personas=list(c.get("personas") or []),
+                      temas=list(c.get("temas") or []), epoca=c.get("epoca"),
                       max_duracion_min=c.get("max_duracion_min"),
                       referencia=c.get("referencia"))
     elif i == "ajuste":
         _quitar_por_texto(estado, c.get("quitar") or [])
-        for k in ("generos", "tags"):
+        for k in ("generos", "tags", "temas"):
+            estado.setdefault(k, [])
             estado[k] += [x for x in c.get(k) or [] if x not in estado[k]]
+        if c.get("epoca"):
+            estado["epoca"] = c["epoca"]
         nombres = {_nombre_persona(p) for p in estado["personas"]}
         estado["personas"] += [p for p in c.get("personas") or []
                                if _nombre_persona(p) not in nombres]
@@ -275,6 +301,7 @@ def aplicar(c: dict, estado: dict) -> None:
 def _como_pedido(estado: dict) -> dict:
     """Forma que esperan llm.entendi y Herramientas.recomendar."""
     return {"generos": estado["generos"], "tags": estado["tags"],
+            "temas": estado.get("temas") or [], "epoca": estado.get("epoca"),
             "max_duracion_min": estado["max_duracion_min"], "personas": estado["personas"],
             "referencia": estado.get("referencia"), "n": N_DEFECTO}
 
@@ -290,7 +317,8 @@ def recomendar(estado: dict, userId: int, herr: Herramientas, n: int = N_DEFECTO
         excluir.add(estado["referencia"])
     res = herr.recomendar(userId, n=n + len(excluir), generos=estado["generos"],
                           tags=estado["tags"], max_duracion_min=estado["max_duracion_min"],
-                          personas=estado["personas"] or None, excluir_vistas=True)
+                          personas=estado["personas"] or None, excluir_vistas=True,
+                          temas=estado.get("temas"), epoca=estado.get("epoca"))
     perfil = herr.perfil_gustos(userId)
     calificadas = herr.peliculas_calificadas(userId, n=200).get("peliculas", [])
     refs: set = set()
@@ -437,10 +465,12 @@ def turno(mensaje: str, estado: dict, userId: int, herr: Herramientas, cat=None,
         proveedor = prov
         if cambios["intencion"] == "nuevo_pedido" and not (
                 cambios["generos"] or cambios["tags"] or cambios["personas"]
+                or cambios.get("temas") or cambios.get("epoca")
                 or cambios["max_duracion_min"]):
             # El modelo no tradujo condiciones: se completan con pedido.py.
             r = interpretar_reglas(mensaje, estado, herr)
-            for k in ("generos", "tags", "personas", "max_duracion_min", "referencia"):
+            for k in ("generos", "tags", "temas", "epoca", "personas", "max_duracion_min",
+                      "referencia"):
                 cambios[k] = r.get(k) or cambios.get(k)
     else:
         cambios = interpretar_reglas(mensaje, estado, herr)

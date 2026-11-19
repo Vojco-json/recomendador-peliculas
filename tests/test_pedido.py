@@ -2,6 +2,8 @@
 
 import pytest
 
+from recomendador import temas
+
 from recomendador import config, herramientas, llm
 from recomendador.pedido import cargar_tags_genome, interpretar_pedido
 
@@ -13,25 +15,27 @@ def p(texto, tags=TAGS):
     return interpretar_pedido(texto, tags_validos=tags)
 
 
-# C1: ánimos y ocasiones -> géneros y tags
-@pytest.mark.parametrize("texto, generos, tags", [
-    ("algo para llorar", {"Drama"}, {"sad", "tearjerker"}),
-    ("una película para ver en familia", {"Children", "Animation"}, {"family"}),
-    ("algo liviano", {"Comedy"}, set()),
-    ("algo que me haga pensar", set(), {"thought-provoking"}),
-    ("una con giro final", set(), {"twist ending"}),
+# C1: ánimos y ocasiones -> UN tema cada uno (PEDIDO_FINAL.md §2)
+@pytest.mark.parametrize("texto, tema", [
+    ("algo para llorar", "para llorar"),
+    ("una película para ver en familia", "para ver en familia"),
+    ("algo liviano", "algo liviano"),
+    ("algo que me haga pensar", "que haga pensar"),
+    ("una con giro final", "giro final"),
+    ("something scary", "que dé miedo"),
+    ("a feel good movie", "algo liviano"),
+    ("family movie tonight", "para ver en familia"),
 ])
-def test_animos(texto, generos, tags):
+def test_animos(texto, tema):
     r = p(texto)
-    assert generos <= set(r["generos"])
-    assert tags <= set(r["tags_genome"])
+    assert r["temas"] == [tema]
+    assert r["tags_genome"] == []          # los tags del ánimo no son condiciones sueltas
     assert r["pide_recomendacion"]
 
 
 # C2: inglés y errores de tipeo
 @pytest.mark.parametrize("texto, genero", [
-    ("a comedy please", "Comedy"), ("something scary", "Horror"),
-    ("a feel good movie", "Comedy"), ("family movie tonight", "Children"),
+    ("a comedy please", "Comedy"),
     ("una comdia", "Comedy"), ("algo de terorr", "Horror"), ("algo de teror", "Horror"),
     ("ciensia ficcion", "Sci-Fi"), ("Ciencia Ficción", "Sci-Fi"),
     ("una de ACCIÓN", "Action"), ("suspenso", "Thriller"),
@@ -88,8 +92,9 @@ def test_condiciones_es_y_tags_filtrados():
     mini = cargar_tags_genome(config.MUESTRA_MINI)
     assert "twist ending" in mini and "sad" not in mini
     r = interpretar_pedido("algo triste con giro final, corto", tags_validos=mini)
-    assert r["tags_genome"] == ["twist ending"]
-    assert "sad" in r["tags_descartados"]
+    assert r["temas"] == ["para llorar", "giro final"]
+    assert temas.tags_del_tema("giro final", mini) == ["twist ending"]
+    assert "sad" not in temas.tags_del_tema("para llorar", mini)
     assert set(r["tags_genome"]) <= mini
     assert r["condiciones"] == ["género: drama", "de 100 min o menos",
                                 "para emocionarse (drama triste)", "con giro final"]
@@ -109,6 +114,5 @@ def test_llm_interpretar_forma():
     f = llm.interpretar("Algo CORTO y liviano")
     assert set(f) == {"max_duracion_min", "generos", "n"}
     assert f["max_duracion_min"] == 100
-    assert {"Comedy", "Animation", "Family"} <= set(f["generos"])
     assert "Horror" in llm.interpretar("algo de terorr")["generos"]
     assert "Sci-Fi" in llm.interpretar("a sci-fi movie")["generos"]

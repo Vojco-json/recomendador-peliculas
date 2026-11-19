@@ -27,7 +27,7 @@ def test_tag_sin_datos_no_evaluable_y_duracion_neutral():
 def test_algo_como_descripcion_no_es_titulo():
     p = pedido.interpretar_pedido("algo como de drama policial con un twist épico")
     assert not p.get("titulo_mencionado")
-    assert {"Drama", "Crime"} <= set(p["generos"])
+    assert "Drama" in p["generos"] and "policial" in p["temas"]
 
 
 def test_afinidad_textual():

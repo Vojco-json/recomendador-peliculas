@@ -34,6 +34,8 @@ import numpy as np
 
 from . import config, estado, foldin, perfiles, titulos
 from . import genome as genome_npy
+from . import pedido as pedido_mod
+from . import temas as temas_mod
 from .datos import fecha_a_epoch
 from .enriquecimiento import (NOMBRE_ENRIQUECIDAS, ClienteTMDb, separar_titulo_anio,
                               titulo_legible)
@@ -113,6 +115,12 @@ def _catalogo(ruta_movies: str, ruta_enriquecidas: str, _m1: float, _m2: float) 
                 v = fila.get(clave)
                 if v is not None and not pd.isna(v):
                     ficha[clave] = v.item() if hasattr(v, "item") else v
+    for ficha in fichas.values():          # año siempre entero (1990, nunca 1990.0)
+        if ficha.get("anio") is not None:
+            try:
+                ficha["anio"] = int(ficha["anio"])
+            except (TypeError, ValueError):
+                ficha["anio"] = None
     return fichas
 
 
@@ -465,7 +473,8 @@ class Herramientas:
         }
 
     def recomendar(self, userId, n: int = N_DEFECTO, max_duracion_min=None, generos=None,
-                   tags=None, excluir_vistas: bool = True, personas=None) -> dict:
+                   tags=None, excluir_vistas: bool = True, personas=None, temas=None,
+                   epoca=None) -> dict:
         """Top-n para el usuario, ordenado por niveles de coincidencia con el pedido.
 
         Orden híbrido de candidatos: primero el top-N vigente en estado.db (en vivo) y
@@ -480,6 +489,9 @@ class Herramientas:
         - max_duracion_min: 1 condición, duración IMDb <= este valor.
         - personas: directores o actores (nombres o dicts de ``pedido.detectar_personas``);
           1 condición por persona, se cumple si participa en la película.
+        - temas: nombres o claves de temas.py; 1 condición por tema que vale 1 con
+          evidencia fuerte (tag genome >= 0,5), 0,5 con solo el género señal y 0 sin nada.
+        - epoca: {'desde', 'hasta', 'texto'}; 1 condición (sin año, neutral).
         nivel = condiciones pedidas - incumplidas (lo no evaluable, como una duración
         sin dato, no baja el nivel). Se ordena por nivel de mayor a menor y, dentro de
         cada nivel, por el orden híbrido. Sin condiciones el orden es el híbrido exacto.
@@ -526,10 +538,17 @@ class Herramientas:
         if max_dur is not None and not any(f.get("duracion_min") for f in catalogo.values()):
             avisos.append("No hay duraciones IMDb (corre scripts/descargar_imdb.py): "
                           "no se puede filtrar por duración")
-        genome = self._genome(tags) if tags else {}
+        lista_temas = _lista_temas(temas)
+        epoca = temas_mod.validar_epoca(epoca)
+        validos_genome = pedido_mod.cargar_tags_genome(self.datos)
+        tags_temas = [t for x in lista_temas
+                      for t in temas_mod.tags_del_tema(x, validos_genome or None)]
+        todos = sorted(set(tags) | set(tags_temas))
+        genome = self._genome(todos) if todos else {}
         grupos = _grupos_generos(generos)
         gente = self._personas_pedidas(personas)
-        n_cond = len(grupos) + len(tags) + int(max_dur is not None) + len(gente)
+        n_cond = (len(grupos) + len(tags) + int(max_dur is not None) + len(gente)
+                  + len(lista_temas) + int(epoca is not None))
 
         # Recorre los candidatos en el orden híbrido y evalúa cada condición. El orden
         # de llegada ES la afinidad. Respaldo para que la lista nunca quede vacía: las
@@ -549,10 +568,26 @@ class Herramientas:
             ev = _evaluar(catalogo[mid], grupos, tags, genome, max_dur)
             for p in gente:   # la persona es una condición más del orden por niveles
                 (ev["cumple"] if mid in p["ids"] else ev["no_cumple"]).append(p["texto"])
+            parcial = 0.0     # temas con solo evidencia débil (valen 0,5)
+            for x in lista_temas:
+                valor, texto = temas_mod.evaluar_tema(x, catalogo[mid], genome,
+                                                      validos_genome or None)
+                if valor >= 1:
+                    ev["cumple"].append(texto)
+                elif valor > 0:
+                    ev["cumple"].append(texto)
+                    parcial += 1 - valor
+                else:
+                    ev["no_cumple"].append(texto)
+            if epoca is not None:
+                ok = temas_mod.cumple_epoca(epoca, catalogo[mid].get("anio"))
+                texto = f"época: {epoca['texto']}"
+                (ev["no_evaluables"] if ok is None else
+                 ev["cumple"] if ok else ev["no_cumple"]).append(texto)
             # Nivel = condiciones pedidas - incumplidas - tags sin datos genome (cuentan
             # como no cumplidos). Solo la duración sin dato IMDb queda neutral.
             nivel = n_cond - len(ev["no_cumple"]) - sum(
-                c.startswith("tag") for c in ev["no_evaluables"])
+                c.startswith("tag") for c in ev["no_evaluables"]) - parcial
             evaluadas.append((nivel, mid, score, fuente, ev))
             # Con n películas en el nivel máximo (o sin condiciones, con n películas) no
             # hace falta seguir: nada posterior puede adelantarlas.
@@ -569,7 +604,8 @@ class Herramientas:
             recs.append({**self.ficha(mid), "rank": len(recs) + 1,
                          "score": None if score is None else round(float(score), 4),
                          "afinidad": _afinidad(score), "votos": int(votos.get(mid, 0)),
-                         "fuente": fuente, "nivel": nivel, "condiciones_pedidas": n_cond,
+                         "fuente": fuente, "nivel": nivel if nivel % 1 else int(nivel),
+                         "condiciones_pedidas": n_cond,
                          "coincidencia": 1.0 if not n_cond else round(nivel / n_cond, 3),
                          **ev})
         if n_cond and recs and recs[0]["nivel"] < n_cond:
@@ -584,6 +620,7 @@ class Herramientas:
         return {"userId": uid, "existe": bool(ratings),
                 "filtros": {"n": n, "max_duracion_min": max_dur, "generos": generos,
                             "tags": tags, "personas": [p["nombre"] for p in gente],
+                            "temas": lista_temas, "epoca": epoca,
                             "excluir_vistas": bool(excluir_vistas)},
                 "recomendaciones": recs, "avisos": avisos}
 
@@ -775,6 +812,20 @@ def _lista_tags(tags) -> list[str]:
         t = str(t).strip().lower()
         if t and t not in salida:
             salida.append(t)
+    return salida
+
+
+def _lista_temas(temas) -> list[str]:
+    """Nombres canónicos de temas (acepta nombres, claves ES/EN o 'a|b')."""
+    if not temas:
+        return []
+    if isinstance(temas, str):
+        temas = temas.replace(",", "|").split("|")
+    salida = []
+    for x in temas:
+        nombre = temas_mod.nombre_tema(x)
+        if nombre and nombre not in salida:
+            salida.append(nombre)
     return salida
 
 

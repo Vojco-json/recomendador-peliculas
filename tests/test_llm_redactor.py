@@ -58,8 +58,9 @@ def test_filtros_finales_no_los_cambia_el_llm(herr, monkeypatch):
     assert cliente.tools is None                       # el modelo no recibe herramientas
     assert len(llamadas) == 1                          # solo el código llama a recomendar
     for f in (llamadas[0], r.filtros, cliente.datos["filtros"]):
-        assert set(f["generos"]) == {"Crime", "Drama"}
-        assert "twist ending" in f["tags"]
+        # PEDIDO_FINAL.md §3: «drama policial» = género Drama + tema policial.
+        assert set(f["generos"]) == {"Drama"}
+        assert f["temas"] == ["policial", "giro final"]
         assert not f["max_duracion_min"]
     assert r.recomendaciones and r.descartadas == ["Inventada"]
     assert "Inventada" not in r.texto + json.dumps(r.recomendaciones, default=str)
@@ -81,8 +82,8 @@ def test_linea_entendi_en_cada_respuesta(herr, proveedor):
         assert "Entendí: " in r.texto, mensaje
     r = llm.responder(PEDIDO, 1, herr, proveedor=proveedor, cliente=LLMTramposo())
     linea = r.texto.split("Entendí: ", 1)[1]
-    assert "crimen" in linea.lower() and "drama" in linea.lower()
-    assert "twist ending" in linea and "min" not in linea
+    assert "policial" in linea.lower() and "drama" in linea.lower()
+    assert "giro final" in linea and "min" not in linea
 
 
 def test_ollama_lento_usa_plantilla_de_reglas(herr, monkeypatch):

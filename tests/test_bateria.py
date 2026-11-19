@@ -154,4 +154,4 @@ def test_llm_bueno_recibe_filtros_completados(herr):
 
     r = llm.responder_ollama("algo corto y liviano para hoy", USUARIO, herr, cliente=Espia())
     assert r.proveedor == "ollama" and r.recomendaciones
-    assert vistos[0]["max_duracion_min"] == 100 and "Comedy" in vistos[0]["generos"]
+    assert vistos[0]["max_duracion_min"] == 100 and "algo liviano" in vistos[0]["temas"]

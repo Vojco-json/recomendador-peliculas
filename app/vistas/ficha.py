@@ -13,7 +13,8 @@ from recomendador.enriquecimiento import ATRIBUCION_TMDB
 from recomendador.moderacion import MAX_CARACTERES
 
 from . import tarjetas
-from .comun import Contexto, esc, estrellas, publicar_calificacion, publicar_resena
+from .comun import (Contexto, caratula_html, caratulas_clicables, esc, estrellas,
+                    publicar_calificacion, publicar_resena)
 
 NOTAS = [x / 2 for x in range(1, 11)]        # 0.5 … 5.0
 CLAVE_MEMORIA_LLM = "redacciones_llm"        # st.session_state: redacciones ya pedidas
@@ -131,6 +132,34 @@ def resenar(ctx: Contexto, movieId: int, prefijo: str) -> None:
         st.rerun()
 
 
+def similares_html(ctx: Contexto, pelis: list[dict]) -> str:
+    """Rejilla de similares: carátula clicable, título, año y veredicto con una razón."""
+    items = []
+    for p in pelis:
+        e = p.get("explicacion") or {}
+        clase = "si" if e.get("probable") else "no"
+        razon = (f'<div class="cr-sim-razon {clase}"><b>{esc(e["veredicto"])}</b> '
+                 f'{esc(e["texto"][len(e["veredicto"]) + 1:].strip())}</div>' if e else "")
+        items.append(f'<div class="cr-sim">{caratula_html(ctx, p)}{razon}</div>')
+    # Estilos propios: la rejilla vive dentro del componente de carátulas clicables.
+    estilo = ("<style>.cr-similares{display:grid;gap:14px;"
+              "grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}"
+              ".cr-sim-razon{font-size:.78rem;line-height:1.3;margin-top:6px;color:#c9d1d9}"
+              ".cr-sim-razon b{display:block}.cr-sim-razon.si b{color:#07ECF8}"
+              ".cr-sim-razon.no b{color:#F5B301}</style>")
+    return f'{estilo}<div class="cr-similares">{"".join(items)}</div>'
+
+
+def similares(ctx: Contexto, movieId: int, prefijo: str) -> None:
+    """Sección «Similares» (hasta 6 vecinos no calificados); sin vecinos no aparece."""
+    pelis = ctx.cat.similares(ctx.user_id, movieId)
+    if not pelis:
+        return
+    st.markdown('<h3 class="cr-sub">Similares</h3>', unsafe_allow_html=True)
+    caratulas_clicables(similares_html(ctx, pelis), clave=f"{prefijo}_sim_{movieId}",
+                        origen=prefijo)
+
+
 def resenas(ctx: Contexto, movieId: int) -> None:
     lista = ctx.cat.resenas(movieId)
     st.markdown(f'<h3 class="cr-sub">Reseñas ({len(lista)})</h3>'
@@ -153,6 +182,7 @@ def mostrar(ctx: Contexto, movieId: int, prefijo: str = "ficha",
         calificar(ctx, movieId, prefijo)
     with c2:
         resenar(ctx, movieId, prefijo)
+    similares(ctx, movieId, prefijo)
     resenas(ctx, movieId)
     st.markdown(f'<div class="cr-atrib">Póster, sinopsis y tráiler: TMDb. '
                 f'{esc(ATRIBUCION_TMDB)}</div>', unsafe_allow_html=True)

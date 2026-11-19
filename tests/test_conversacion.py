@@ -52,7 +52,8 @@ def _ids(estado):
 def test_c1_pedido_ajuste_mas_descartar(reglas, herr, uid):
     e = conversacion.estado_nuevo()
     t = conversacion.turno("drama policial con un giro final", e, uid, herr)
-    assert t.intencion == "nuevo_pedido" and {"Crime", "Drama"} <= set(e["generos"])
+    assert t.intencion == "nuevo_pedido" and "Drama" in e["generos"]
+    assert e["temas"] == ["policial", "giro final"]
     assert t.recomendaciones and "Entendí:" in t.texto
     _titulos_ok(t, e, herr, uid)
     t = conversacion.turno("pero que sea corta", e, uid, herr)

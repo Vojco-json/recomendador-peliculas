@@ -52,6 +52,10 @@ IMPROBABLE = "Puede que no"
 # Utilidades
 # --------------------------------------------------------------------------- #
 
+SIM_MINIMA = 0.3            # coseno ALS mínimo para decir «se parece a X»
+N_REVISAR_IMPROBABLE = 15   # candidatas improbables que se revisan buscando una razón
+
+
 def normalizar(texto) -> str:
     """Minúsculas, sin tildes y con la puntuación como espacios («NOLÁN» -> «nolan»)."""
     t = unicodedata.normalize("NFKD", str(texto or ""))
@@ -91,6 +95,15 @@ def _num(valor):
     return valor.item() if hasattr(valor, "item") else valor
 
 
+def _entero(valor) -> int | None:
+    """Año como entero de Python (1990, nunca 1990.0); None si no hay dato."""
+    v = _num(valor)
+    try:
+        return None if v is None else int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 # --------------------------------------------------------------------------- #
 # Cargas cacheadas (clave: ruta + fecha de modificación)
 # --------------------------------------------------------------------------- #
@@ -105,7 +118,7 @@ def _cargar_peliculas(ruta: str, _m: float) -> dict:
     for f in df.to_dict("records"):
         mid = int(f["movieId"])
         fichas[mid] = {
-            "movieId": mid, "titulo": str(f["titulo"]), "anio": _num(f.get("anio")),
+            "movieId": mid, "titulo": str(f["titulo"]), "anio": _entero(f.get("anio")),
             "generos": _lista(f.get("generos")), "duracion_min": _num(f.get("duracion_min")),
             "imdb_rating": _num(f.get("imdb_rating")), "imdb_votos": _num(f.get("imdb_votos")),
             "tmdbId": _num(f.get("tmdbId")), "tconst": f.get("tconst"),
@@ -335,9 +348,51 @@ class Catalogo:
             filas = estado.resenas_pelicula(con, int(movieId), limite)
         finally:
             con.close()
+        notas = self._notas_autores(movieId, {r["userId"] for r in filas})
         for r in filas:
             r["autor"] = self._autor(r["userId"])
+            r["rating"] = notas.get(int(r["userId"]))   # última calificación (o None)
         return filas
+
+    def _notas_autores(self, movieId: int, autores: set) -> dict[int, float]:
+        """Última calificación de cada autor a la película, desde estado.db."""
+        if not autores or not self.estado_db.exists():
+            return {}
+        con = estado.lector(self.estado_db)
+        try:
+            marcas = ",".join("?" * len(autores))
+            filas = con.execute(
+                f"SELECT userId, rating, timestamp FROM eventos WHERE movieId = ? "
+                f"AND userId IN ({marcas}) ORDER BY timestamp",
+                (int(movieId), *[int(u) for u in autores])).fetchall()
+        except Exception as exc:  # una base sin la tabla no rompe la ficha
+            log.warning("No se pudieron leer las notas de los autores: %s", exc)
+            return {}
+        finally:
+            con.close()
+        return {int(u): float(r) for u, r, _ in filas}   # la última pisa a las anteriores
+
+    def similares(self, userId: int | None, movieId: int, n: int = 6) -> list[dict]:
+        """Hasta n vecinos (vecinos.parquet) no calificados, con su explicación (sin LLM).
+        En caché por (userId, movieId, versión de sus eventos)."""
+        return self._por_usuario("similares", userId,
+                                 lambda: self._similares_sin_cache(userId, movieId, n),
+                                 int(movieId), n)
+
+    def _similares_sin_cache(self, userId, movieId: int, n: int) -> list[dict]:
+        vistas = set(self.ratings_usuario(userId)) if userId is not None else set()
+        salida = []
+        for m in self._vecinos().get(int(movieId), []):
+            if m in vistas or m == int(movieId):
+                continue
+            corta = self.ficha_corta(m)
+            if corta is None:
+                continue
+            e = self.explicar(userId, m) if userId is not None else None
+            salida.append({**corta, "explicacion": e})
+            if len(salida) >= n:
+                break
+        return salida
 
     def _autor(self, userId: int) -> str:
         """Nombre de la cuenta (si hay cuentas.db) o «Usuario N»."""
@@ -472,6 +527,13 @@ class Catalogo:
 
     # ---- explicación «Para ti» ---------------------------------------- #
     def explicar(self, userId: int, movieId: int) -> dict | None:
+        """Explicación en caché por (userId, movieId, versión de sus eventos)."""
+        if movieId is None:
+            return None
+        return self._por_usuario("explicar", userId,
+                                 lambda: self._explicar_sin_cache(userId, movieId), int(movieId))
+
+    def _explicar_sin_cache(self, userId: int, movieId: int) -> dict | None:
         """Por qué (no) te podría gustar una película, con títulos y tags concretos.
 
         Usa solo las calificaciones de ``ratings_usuario`` (antes del corte + en vivo).
@@ -506,11 +568,14 @@ class Catalogo:
                     umbral = float(np.median(matriz[filas] @ u)) if filas else media
 
         def mas_parecida(filtro) -> dict | None:
-            cand = [m for m, r in ratings.items() if filtro(r) and m in fichas]
+            # «Se parece» solo con coseno ALS >= SIM_MINIMA (PEDIDO_FINAL.md §7).
+            cand = [m for m, r in ratings.items() if filtro(r) and m in fichas
+                    and sims.get(m, -2.0) >= SIM_MINIMA]
             if not cand:
                 return None
             m = max(cand, key=lambda x: (sims.get(x, -2.0), ratings[x], -x))
-            return {"movieId": m, "titulo": fichas[m]["titulo"], "rating": ratings[m]}
+            return {"movieId": m, "titulo": fichas[m]["titulo"], "rating": ratings[m],
+                    "similitud": round(sims[m], 3)}
 
         alta = mas_parecida(lambda r: r >= max(NOTA_ALTA, media))
         baja = mas_parecida(lambda r: r <= min(NOTA_BAJA, media))
@@ -536,14 +601,76 @@ class Catalogo:
             probable = balance >= 0
         veredicto = PROBABLE if probable else IMPROBABLE
         es = lambda t: perfiles.TAGS_ES.get(t, t)  # noqa: E731
+        # Géneros del usuario: notas por género (para la razón de género y el respaldo).
+        por_genero: dict[str, list[float]] = {}
+        for m, r in ratings.items():
+            for g in fichas.get(m, {}).get("generos", []):
+                por_genero.setdefault(g, []).append(r)
+        total = max(1, len(ratings))
+        genero_favor = genero_contra = None
+        for g in destino.get("generos", []):
+            notas = por_genero.get(g, [])
+            prom = float(np.mean(notas)) if notas else None
+            if genero_favor is None and len(notas) >= 3 and prom > media:
+                genero_favor = perfiles.GENEROS_ES.get(g, g)
+            if genero_contra is None and ratings and (
+                    len(notas) / total < 0.05 or (len(notas) >= 3 and prom < media)):
+                genero_contra = perfiles.GENEROS_ES.get(g, g)
+        favoritos = [perfiles.GENEROS_ES.get(g, g) for g, _ in sorted(
+            ((g, n) for g, n in por_genero.items() if len(n) >= 3),
+            key=lambda x: -float(np.mean(x[1])))[:2]]
+        # Solo las razones alineadas con el veredicto: las demás no se entregan (ni a la
+        # tarjeta ni al LLM), así la explicación nunca se contradice.
+        if probable:
+            baja, contra, genero_contra = None, [], None
+            if persona and not persona["le_gusto"]:
+                persona = None
+        else:
+            alta, favor, genero_favor = None, [], None
+            if persona and persona["le_gusto"]:
+                persona = None
         salida = {
             "movieId": int(movieId), "titulo": destino["titulo"], "veredicto": veredicto,
             "probable": probable, "parecida_alta": alta, "parecida_baja": baja,
             "tags_a_favor": [es(t) for t in favor], "tags_en_contra": [es(t) for t in contra],
-            "persona_comun": persona,
+            "persona_comun": persona, "genero_a_favor": genero_favor,
+            "genero_en_contra": genero_contra, "generos_favoritos": favoritos,
         }
+        salida["razones"] = self._razones(salida)
+        salida["razon_concreta"] = bool(salida["razones"])
         salida["texto"] = self._texto_explicacion(salida)
         return salida
+
+    @staticmethod
+    def _razones(e: dict) -> list[str]:
+        """Hasta 2 razones alineadas con el veredicto, en el orden de PEDIDO_FINAL.md §7."""
+        r: list[str] = []
+        p = e["persona_comun"]
+        frase_p = ""
+        if p:
+            rol = "Dirige" if p["rol"] == "director" else "Actúa"
+            gusto = "que te gustó" if p["le_gusto"] else "que no te convenció"
+            frase_p = f"{rol} {p['nombre']}, como en «{p['peliculas'][0]}», {gusto}."
+        if e["probable"]:
+            if e["parecida_alta"]:
+                r.append(f"Se parece a «{e['parecida_alta']['titulo']}», que calificaste alto.")
+            if frase_p:
+                r.append(frase_p)
+            if e["tags_a_favor"]:
+                r.append("A favor: " + ", ".join(e["tags_a_favor"]) + ".")
+            if e.get("genero_a_favor"):
+                r.append(f"Sueles calificar bien el género {e['genero_a_favor']}.")
+        else:
+            if e["parecida_baja"]:
+                r.append(f"Se parece a «{e['parecida_baja']['titulo']}», que calificaste bajo.")
+            if frase_p:
+                r.append(frase_p)
+            if e["tags_en_contra"]:
+                r.append("En contra: " + ", ".join(e["tags_en_contra"]) + ".")
+            if e.get("genero_en_contra"):
+                r.append(f"El género {e['genero_en_contra']} no está entre lo que más "
+                         "disfrutas.")
+        return r[:2]
 
     def _persona_comun(self, movieId: int, ratings: dict, media: float) -> dict | None:
         """Director o actor de la película que también está en lo que calificó."""
@@ -572,26 +699,19 @@ class Catalogo:
 
     @staticmethod
     def _texto_explicacion(e: dict) -> str:
-        """Texto breve con títulos y tags concretos (sin números ni estrellas)."""
-        partes = [f"{e['veredicto']}."]
-        alta, baja = e["parecida_alta"], e["parecida_baja"]
-        if alta and baja:
-            partes.append(f"Se parece a «{alta['titulo']}», que calificaste alto, "
-                          f"y también a «{baja['titulo']}», que calificaste bajo.")
-        elif alta:
-            partes.append(f"Se parece a «{alta['titulo']}», que calificaste alto.")
-        elif baja:
-            partes.append(f"Se parece a «{baja['titulo']}», que calificaste bajo.")
-        if e["tags_a_favor"]:
-            partes.append("A favor: " + ", ".join(e["tags_a_favor"]) + ".")
-        if e["tags_en_contra"]:
-            partes.append("En contra: " + ", ".join(e["tags_en_contra"]) + ".")
-        p = e["persona_comun"]
-        if p:
-            rol = "Dirige" if p["rol"] == "director" else "Actúa"
-            gusto = "que te gustó" if p["le_gusto"] else "que no te convenció"
-            partes.append(f"{rol} {p['nombre']}, como en «{p['peliculas'][0]}», {gusto}.")
-        return " ".join(partes)
+        """Veredicto + razones alineadas (máx. 2) o una frase de respaldo verdadera."""
+        razones = e.get("razones")
+        if razones is None:
+            razones = Catalogo._razones(e)
+        if not razones:
+            if e["probable"]:
+                razones = ["Les gusta a espectadores con gustos como los tuyos."]
+            elif e.get("generos_favoritos"):
+                razones = ["Está lejos de lo que sueles calificar alto: tus géneros "
+                           "favoritos son " + " y ".join(e["generos_favoritos"]) + "."]
+            else:
+                razones = ["Está lejos de lo que sueles calificar alto."]
+        return " ".join([f"{e['veredicto']}."] + razones)
 
     def tarjeta_para_ti(self, userId: int, candidatas: int = 50) -> dict:
         """Tarjeta 'Para ti' (en caché por usuario; ver _tarjeta_sin_cache)."""
@@ -630,9 +750,15 @@ class Catalogo:
                             and (self._con_votos(x[1]) or not hay_con_votos)]
                     bajo = sorted((x for x in pool if x[0] < umbral),
                                   key=lambda x: (x[0], x[1]))[:max(1, int(candidatas))]
-                    if bajo:
-                        improbable = max(bajo, key=lambda x: (fichas[x[1]]["votos"],
-                                                              -x[0], -x[1]))[1]
+                    # De mayor a menor votos, la primera con una razón concreta en contra.
+                    bajo.sort(key=lambda x: (-fichas[x[1]]["votos"], x[0], x[1]))
+                    for _, m in bajo[:N_REVISAR_IMPROBABLE]:
+                        e = self.explicar(userId, m)
+                        if e and not e["probable"] and e["razon_concreta"]:
+                            improbable = m
+                            break
+                    if improbable is None and bajo:
+                        improbable = bajo[0][1]
         if probable is None:   # sin calificaciones o sin factores: las más votadas
             orden = [m for m in self._peliculas()["populares"] if m not in ratings]
             probable = orden[0] if orden else None

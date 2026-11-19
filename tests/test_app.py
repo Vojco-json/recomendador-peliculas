@@ -157,7 +157,6 @@ def test_reglas_determinista(entorno):
     assert a == b and a.aviso is None
     f = llm.interpretar("Algo CORTO y liviano")
     assert f["max_duracion_min"] == 100
-    assert {"Comedy", "Animation", "Family"} <= set(f["generos"])
 
 
 # --------------------------------------------------------------------------- #

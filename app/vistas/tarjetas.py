@@ -19,7 +19,7 @@ from datetime import datetime
 from recomendador import config, llm, proveedores
 from recomendador.catalogo_app import PROBABLE
 
-from .comun import esc
+from .comun import esc, estrellas
 
 log = logging.getLogger(__name__)
 
@@ -289,6 +289,9 @@ def resenas_html(resenas: list[dict]) -> str:
     items = []
     for r in resenas:
         fecha = datetime.fromtimestamp(int(r["timestamp"])).strftime("%d-%m-%Y")
+        # Estrellas de la última calificación del autor a esta película, si calificó.
+        nota = (f'<span class="nota" title="Su calificación">{esc(estrellas(r["rating"]))}'
+                '</span>' if r.get("rating") is not None else "")
         items.append(f'<article class="cr-resena"><div class="cab"><b>{esc(r["autor"])}</b>'
-                     f'<span>{fecha}</span></div><p>{esc(r["texto"])}</p></article>')
+                     f'{nota}<span>{fecha}</span></div><p>{esc(r["texto"])}</p></article>')
     return f'<div class="cr-resenas">{"".join(items)}</div>'
