@@ -97,6 +97,9 @@ def opciones_spark(nucleos: int | None = None, kafka: bool = False,
     opciones = {
         "spark.master": f"local[{n}]",
         "spark.driver.memory": memoria,
+        # Evita que el driver se dé por muerto en pasos largos de modo local.
+        "spark.executor.heartbeatInterval": "60s",
+        "spark.network.timeout": "600s",
         "spark.sql.shuffle.partitions": particiones,
         "spark.default.parallelism": particiones,
         "spark.jars.ivy": config.IVY_DIR.as_posix(),

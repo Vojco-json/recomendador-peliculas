@@ -38,3 +38,44 @@ def crear_artefactos_app(spark, ruta_mini, salida) -> Path:
     salida = crear_base_mini(spark, ruta_mini, salida)
     enriquecer_imdb(ruta_mini, config.RAIZ / "muestras" / "imdb-mini", salida)
     return salida
+
+
+def crear_artefactos_moviepredict(spark, ruta_mini, salida) -> Path:
+    """Artefactos de la app MoviePredict: los de crear_artefactos_app + app/*.parquet
+    (precalculo.ejecutar con IMDb mini), como los deja scripts/precalcular_app.py."""
+    from recomendador import precalculo
+
+    salida = crear_artefactos_app(spark, ruta_mini, salida)
+    precalculo.ejecutar(spark, ruta_mini, salida, CORTE,
+                        imdb_dir=config.RAIZ / "muestras" / "imdb-mini", log=lambda *_: None)
+    return salida
+
+
+def html_pagina(at) -> str:
+    """Markdown de la página + HTML de los componentes de carátulas clicables."""
+    import json
+    partes = [str(m.value) for m in at.markdown]
+    for el in at.get("component_instance") or []:
+        try:
+            partes.append(json.loads(el.proto.json_args).get("html", ""))
+        except (AttributeError, ValueError, TypeError):
+            continue
+    return "\n".join(partes)
+
+
+def clic_caratula(at, movieId: int, origen: str):
+    """Simula el clic en una carátula: AppTest no puede pulsar dentro del iframe del
+    componente, así que se escribe lo mismo que hace comun.abrir_ficha y se recarga."""
+    at.session_state["ficha_abierta"] = {"movieId": int(movieId), "origen": origen}
+    return at.run()
+
+
+def ir_a(at, seccion: str):
+    """Elige una sección de la app (solo se ejecuta la sección activa) y recarga."""
+    try:
+        radio = at.radio(key="seccion")
+    except KeyError:                     # login u onboarding: no hay navegación
+        return at
+    if radio.value != seccion:
+        radio.set_value(seccion).run()
+    return at

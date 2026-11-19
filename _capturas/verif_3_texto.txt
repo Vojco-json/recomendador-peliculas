@@ -1,0 +1,47 @@
+Vista previa generada por tests/test_pedido_final_app.py (AppTest, muestra mini): Chat: chips de tema y época
+
+MoviePredict
+Tu ruta por el cine, guiada por tus gustos
+una comedia de los 90 Busqué películas que no has visto. Encontré 5: Entendí: género comedia; época: años 90.
+MoviePredict · recomendaciones con MovieLens 25M, Spark y Kafka
+Este producto usa la API de TMDB, pero no está avalado ni certificado por TMDB.
+MoviePredict
+Tu ruta por el cine, guiada por tus gustos
+**similares** · usuario 162542 **Modo:** completo
+Sin actualizaciones en vivo para este usuario
+**LLM_PROVIDER:** `reglas` **LLM_MODEL:** `qwen3.5:9b` **think:** `false`
+#1
+Toy Story
+1995 · 81 min · IMDb 8.3
+aventuraanimacióncine infantilcomedia
+Cumple: género: comedia; época: años 90.
+Toy Story (1995) · 81 min · aventura, animación, cine infantil, comedia y fantasía · IMDb 8.3. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#2
+Pulp Fiction
+1994 · 154 min · IMDb 8.9
+comediacrimendramasuspenso
+Cumple: género: comedia; época: años 90.
+Pulp Fiction (1994) · 154 min · comedia, crimen, drama y suspenso · IMDb 8.9. Le diste 5★ a Die Hard, que también es crimen y suspenso. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#3
+Groundhog Day
+1993 · 101 min
+comediafantasíaromance
+Cumple: género: comedia; época: años 90.
+Groundhog Day (1993) · 101 min · comedia, fantasía y romance. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#4
+Braveheart
+1995 · 178 min · IMDb 8.3
+accióndramabélico
+Cumple: época: años 90. No cumple: género: comedia.
+Braveheart (1995) · 178 min · acción, drama y bélico · IMDb 8.3. Le diste 5★ a Terminator 2: Judgment Day, que también es acción. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media
+#5
+Jurassic Park
+1993 · 127 min · IMDb 8.2
+acciónaventuraciencia ficciónsuspenso
+Cumple: época: años 90. No cumple: género: comedia.
+Jurassic Park (1993) · 127 min · acción, aventura, ciencia ficción y suspenso · IMDb 8.2. Le diste 5★ a Heat, que también es acción y suspenso. Según tu historial, afinidad media contigo.
+híbrido ALS + popularidad (artefactos) · afinidad media

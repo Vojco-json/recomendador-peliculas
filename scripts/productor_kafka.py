@@ -337,7 +337,9 @@ def construir_parser() -> argparse.ArgumentParser:
     p.add_argument("--acelerar", type=_positivo, default=None, metavar="X",
                    help="respeta el tiempo real entre ratings dividido por X "
                         "(tiene prioridad sobre --velocidad)")
-    p.add_argument("--desde", type=_fecha_valida, help="AAAA-MM-DD inclusivo")
+    # Por defecto se reproduce solo lo posterior al corte: lo anterior ya está en el modelo.
+    p.add_argument("--desde", type=_fecha_valida, default=config.FECHA_CORTE,
+                   help="AAAA-MM-DD inclusivo (por defecto FECHA_CORTE = %(default)s)")
     p.add_argument("--hasta", type=_fecha_valida, help="AAAA-MM-DD inclusivo (todo el día)")
     p.add_argument("--limite", type=_entero_positivo, help="máximo de ratings a enviar")
     p.add_argument("--fuente", choices=("auto", "csv", "parquet"), default="auto",

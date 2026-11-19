@@ -17,6 +17,10 @@ Tablas
 - lotes(consulta, batch_id, procesado_en)
       micro-lotes ya aplicados: si Spark reintenta un lote tras un reinicio, no se aplica
       dos veces (los perfiles son incrementales y se inflarían).
+- resenas(id, uid, userId, movieId, texto, timestamp, oculta, recibido_en)
+      reseñas públicas. ``uid`` lo genera quien publica (eventos.publicar_resena): la
+      misma reseña llegada por Kafka y por el respaldo directo no se duplica. ``id`` es el
+      número corto que usa scripts/moderar_resenas.py; ``oculta=1`` la saca de la vista.
 
 Las marcas de tiempo son segundos epoch (float, UTC).
 """
@@ -25,6 +29,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Iterable
@@ -64,7 +69,18 @@ CREATE TABLE IF NOT EXISTS lotes (
     procesado_en REAL    NOT NULL,
     PRIMARY KEY (consulta, batch_id)
 );
+CREATE TABLE IF NOT EXISTS resenas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid         TEXT    NOT NULL UNIQUE,
+    userId      INTEGER NOT NULL,
+    movieId     INTEGER NOT NULL,
+    texto       TEXT    NOT NULL,
+    timestamp   INTEGER NOT NULL,
+    oculta      INTEGER NOT NULL DEFAULT 0,
+    recibido_en REAL    NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ix_eventos_usuario ON eventos(userId);
+CREATE INDEX IF NOT EXISTS ix_resenas_pelicula ON resenas(movieId);
 """
 
 
@@ -84,6 +100,58 @@ def conectar(ruta) -> sqlite3.Connection:
     con.executescript(ESQUEMA)
     con.commit()
     return con
+
+
+class _ConexionLectura(sqlite3.Connection):
+    """Conexión reutilizable: ``close()`` no la cierra (la comparten las lecturas del hilo)."""
+
+    def close(self) -> None:  # noqa: D401 - se ignora a propósito
+        pass
+
+    def cerrar_de_verdad(self) -> None:
+        super().close()
+
+
+_LECTORES = threading.local()          # {ruta: conexión} por hilo
+_ESQUEMA_LISTO: set[str] = set()       # rutas cuyo esquema ya se verificó en este proceso
+_CERROJO_ESQUEMA = threading.Lock()
+
+
+def lector(ruta) -> sqlite3.Connection:
+    """Conexión de SOLO LECTURA a estado.db, una por hilo y reutilizable.
+
+    - El esquema completo se ejecuta una sola vez por proceso y ruta (no en cada consulta).
+    - ``PRAGMA query_only`` impide escribir por esta conexión.
+    - Llamar a ``close()`` no la cierra: así el código existente (``con.close()`` tras
+      leer) sigue funcionando y la conexión se reutiliza en la siguiente lectura.
+    - En modo autocommit cada SELECT ve lo último confirmado por los escritores (WAL).
+    """
+    clave = str(Path(ruta).resolve())
+    if clave not in _ESQUEMA_LISTO:
+        with _CERROJO_ESQUEMA:
+            if clave not in _ESQUEMA_LISTO:
+                conectar(ruta).close()                  # crea tablas que falten
+                _ESQUEMA_LISTO.add(clave)
+    conexiones = getattr(_LECTORES, "conexiones", None)
+    if conexiones is None:
+        conexiones = _LECTORES.conexiones = {}
+    con = conexiones.get(clave)
+    if con is None:
+        con = sqlite3.connect(clave, timeout=30, factory=_ConexionLectura,
+                              isolation_level=None)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA busy_timeout=30000")
+        con.execute("PRAGMA query_only=1")
+        conexiones[clave] = con
+    return con
+
+
+def olvidar_lectores() -> None:
+    """Cierra las conexiones de lectura del hilo actual (pruebas que borran la base)."""
+    for con in (getattr(_LECTORES, "conexiones", None) or {}).values():
+        con.cerrar_de_verdad()
+    _LECTORES.conexiones = {}
+    _ESQUEMA_LISTO.clear()
 
 
 def modo_journal(con: sqlite3.Connection) -> str:
@@ -142,7 +210,44 @@ def guardar_eventos(con: sqlite3.Connection, eventos: Iterable[dict],
             nuevos.append(e)
     if commit:
         con.commit()
+    if nuevos:
+        _GENERACION[0] += 1             # invalida las firmas memorizadas de esta recarga
     return nuevos
+
+
+# --------------------------------------------------------------------------- #
+# Firma de los eventos de un usuario (clave de las cachés por usuario de la app)
+# --------------------------------------------------------------------------- #
+
+_GENERACION = [0]                      # sube con cada evento escrito por este proceso
+_RECARGA = threading.local()           # token de la recarga de Streamlit en curso
+
+
+def marcar_recarga() -> None:
+    """La app lo llama al empezar cada recarga: dentro de ella la firma de cada usuario
+    se lee de estado.db UNA sola vez (salvo que este proceso escriba un evento)."""
+    _RECARGA.token = object()
+    _RECARGA.firmas = {}
+
+
+def firma_usuario(ruta, userId: int) -> tuple[int, int | None]:
+    """(cantidad de eventos, último timestamp) del usuario en estado.db.
+
+    Fuera de una recarga marcada (pruebas, scripts) siempre consulta la base.
+    """
+    uid = int(userId)
+    firmas = getattr(_RECARGA, "firmas", None)
+    if firmas is not None and uid in firmas and firmas[uid][0] == _GENERACION[0]:
+        return firmas[uid][1]
+    if not Path(ruta).exists():
+        firma = (0, None)
+    else:
+        fila = lector(ruta).execute(
+            "SELECT COUNT(*), MAX(timestamp) FROM eventos WHERE userId=?", (uid,)).fetchone()
+        firma = (int(fila[0]), None if fila[1] is None else int(fila[1]))
+    if firmas is not None:
+        firmas[uid] = (_GENERACION[0], firma)
+    return firma
 
 
 def eventos_usuario(con: sqlite3.Connection, userId: int) -> list[tuple[int, float]]:
@@ -160,7 +265,7 @@ def todos_los_eventos(con: sqlite3.Connection):
 
 
 def contar(con: sqlite3.Connection, tabla: str) -> int:
-    if tabla not in {"eventos", "perfiles", "recomendaciones", "meta", "lotes"}:
+    if tabla not in {"eventos", "perfiles", "recomendaciones", "meta", "lotes", "resenas"}:
         raise ValueError(tabla)
     return int(con.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0])
 
@@ -205,6 +310,64 @@ def leer_recomendaciones(con: sqlite3.Connection, userId: int) -> list[dict]:
     filas = con.execute("SELECT movieId, rank, score, actualizado_en FROM recomendaciones "
                         "WHERE userId=? ORDER BY rank", (int(userId),)).fetchall()
     return [dict(f) for f in filas]
+
+
+# --------------------------------------------------------------------------- #
+# Reseñas
+# --------------------------------------------------------------------------- #
+
+COLUMNAS_RESENA = "id, uid, userId, movieId, texto, timestamp, oculta, recibido_en"
+
+
+def guardar_resenas(con: sqlite3.Connection, resenas: Iterable[dict],
+                    commit: bool = True) -> list[dict]:
+    """Inserta reseñas ignorando las repetidas (mismo ``uid``); devuelve las nuevas."""
+    ahora = time.time()
+    nuevas = []
+    for r in resenas:
+        cur = con.execute(
+            "INSERT OR IGNORE INTO resenas(uid, userId, movieId, texto, timestamp, oculta, "
+            "recibido_en) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            (str(r["uid"]), int(r["userId"]), int(r["movieId"]), str(r["texto"]),
+             int(r["timestamp"]), ahora))
+        if cur.rowcount == 1:
+            nuevas.append(r)
+    if commit:
+        con.commit()
+    return nuevas
+
+
+def resenas_pelicula(con: sqlite3.Connection, movieId: int, limite: int = 50) -> list[dict]:
+    """Reseñas PÚBLICAS de una película (sin las ocultas), de la más nueva a la más vieja."""
+    filas = con.execute(
+        f"SELECT {COLUMNAS_RESENA} FROM resenas WHERE movieId=? AND oculta=0 "
+        "ORDER BY timestamp DESC, id DESC LIMIT ?", (int(movieId), int(limite))).fetchall()
+    return [dict(f) for f in filas]
+
+
+def resenas_usuario(con: sqlite3.Connection, userId: int) -> list[dict]:
+    """Reseñas públicas de un usuario (sin las ocultas), de la más nueva a la más vieja."""
+    filas = con.execute(
+        f"SELECT {COLUMNAS_RESENA} FROM resenas WHERE userId=? AND oculta=0 "
+        "ORDER BY timestamp DESC, id DESC", (int(userId),)).fetchall()
+    return [dict(f) for f in filas]
+
+
+def listar_resenas(con: sqlite3.Connection, limite: int = 100,
+                   incluir_ocultas: bool = True) -> list[dict]:
+    """Todas las reseñas (para el script de moderación), de la más nueva a la más vieja."""
+    filtro = "" if incluir_ocultas else "WHERE oculta=0"
+    filas = con.execute(f"SELECT {COLUMNAS_RESENA} FROM resenas {filtro} "
+                        "ORDER BY id DESC LIMIT ?", (int(limite),)).fetchall()
+    return [dict(f) for f in filas]
+
+
+def marcar_oculta(con: sqlite3.Connection, id_resena: int, oculta: bool = True) -> bool:
+    """Oculta (o vuelve a mostrar) una reseña por su id. False si el id no existe."""
+    with con:
+        cur = con.execute("UPDATE resenas SET oculta=? WHERE id=?",
+                          (1 if oculta else 0, int(id_resena)))
+    return cur.rowcount == 1
 
 
 def ultima_actualizacion(con: sqlite3.Connection, userId: int) -> float | None:

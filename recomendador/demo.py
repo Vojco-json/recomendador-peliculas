@@ -11,6 +11,7 @@ No necesita Spark: lee ratings.csv con pandas por bloques (memoria acotada en 25
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -35,6 +36,39 @@ def _copiar(origen: Path, destino: Path) -> None:
         shutil.copytree(origen, destino)
     else:
         shutil.copy2(origen, destino)
+
+
+def ruta_relativa(ruta) -> str:
+    """Ruta relativa a la raíz del proyecto, con '/' (nunca 'C:' ni barra inicial).
+
+    Si la ruta está en otra unidad (no hay camino relativo posible) se guarda solo
+    su nombre; leer_demo_json la resolverá contra la raíz.
+    """
+    p = Path(ruta).resolve()
+    try:
+        rel = os.path.relpath(p, config.RAIZ.resolve())
+    except ValueError:          # Windows: otra unidad distinta de la del proyecto
+        rel = p.name
+    return Path(rel).as_posix()
+
+
+def resolver_ruta(texto: str) -> Path:
+    """Convierte una ruta de demo.json en absoluta, resolviéndola contra la raíz."""
+    p = Path(texto)
+    return p if p.is_absolute() else (config.RAIZ / p).resolve()
+
+
+def leer_demo_json(carpeta=None) -> dict | None:
+    """Lee demo.json de la carpeta demo y resuelve 'base' y 'datos' (None si no existe)."""
+    archivo = Path(carpeta or config.ARTEFACTOS_DEMO) / "demo.json"
+    try:
+        info = json.loads(archivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    for clave in ("base", "datos"):
+        if info.get(clave):
+            info[clave] = resolver_ruta(info[clave])
+    return info
 
 
 def ratings_subconjunto(datos, desde: str, corte: str):
@@ -102,7 +136,9 @@ def preparar_demo(base=None, datos=None, desde: str | None = None, salida=None,
         if (salida / viejo).exists():
             shutil.rmtree(salida / viejo, ignore_errors=True)
 
-    resumen = {"base": str(base), "datos": str(datos), "desde": desde, "corte": corte,
+    # Rutas relativas a la raíz: demo.json sirve aunque se mueva o clone el proyecto.
+    resumen = {"base": ruta_relativa(base), "datos": ruta_relativa(datos),
+               "desde": desde, "corte": corte,
                "n_base_demo": int(len(sub)), "n_usuarios": int(sub["userId"].nunique()),
                "n_peliculas": int(sub["movieId"].nunique()), "copiados": copiados,
                "segundos": round(time.perf_counter() - inicio, 2)}

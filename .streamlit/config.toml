@@ -1,11 +1,23 @@
-# Tema oscuro con la paleta del póster. Streamlit lee este archivo cuando se
+# Tema oscuro con los colores del logo. Streamlit lee este archivo cuando se
 # ejecuta «streamlit run app/app.py» desde la raíz del proyecto.
+# Acento: cian del logo #07ECF8. Secundario: azul #0D73C5 (esta versión de Streamlit
+# no tiene opción de color secundario en [theme]: se aplica con CSS en app/estilo.py,
+# PALETA["azul"]).
 [theme]
 base = "dark"
-primaryColor = "#E50914"
+primaryColor = "#07ECF8"
 backgroundColor = "#141414"
 secondaryBackgroundColor = "#1E1E1E"
 textColor = "#F2F2F2"
 
 [browser]
 gatherUsageStats = false
+
+# Producción (expo con muchos usuarios): sin vigilar archivos ni recargar al guardar,
+# barra de herramientas mínima y sin estadísticas de uso.
+[server]
+fileWatcherType = "none"
+runOnSave = false
+
+[client]
+toolbarMode = "minimal"

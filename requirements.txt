@@ -14,4 +14,6 @@ scikit-learn==1.5.2
 streamlit==1.40.1
 ollama==0.5.1
 requests==2.32.3
+bcrypt==4.2.1
+segno==1.6.1
 pytest==8.3.4

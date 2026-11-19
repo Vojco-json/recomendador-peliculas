@@ -1,2 +1,5 @@
 Capturas de verificacion (las hizo Delegado con un navegador real, a pedido del constructor):
-- verif_1: Figura de métricas generada con 0 usuarios evaluados: debe verse el recuadro 'Sin usuarios evaluados: no usar en el póster' | pagina artefactos/vista_previa/metricas_aviso.html | ancho 1400 px
+- verif_1: Ficha con la sección Similares: carátulas, veredicto y razón (HTML real de la app generado por AppTest) | pagina vista_previa/ficha_similares.html | ancho 1280 px | acciones: scroll .cr-similares
+- verif_2: Reseña con las estrellas de la calificación del autor | pagina vista_previa/ficha_resena.html | ancho 1280 px | acciones: scroll .cr-resena
+- verif_3: Chat «una comedia de los 90»: línea Entendí con la época | pagina vista_previa/chat_tema_epoca.html | ancho 1280 px
+- verif_4: Similares en ancho móvil | pagina vista_previa/ficha_similares.html | ancho 420 px | acciones: scroll .cr-similares

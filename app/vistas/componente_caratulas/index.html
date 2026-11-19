@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  Componente «carátulas clicables» de MoviePredict (Streamlit components v1, sin librerías).
+
+  Recibe por args: html (las carátulas o tarjetas ya escapadas por Python) y css (el
+  estilo de la app). Cualquier elemento con data-movie="<movieId>" es clicable (ratón,
+  Enter o Espacio) y devuelve a Python {movieId, n}; «n» distingue dos clics seguidos
+  a la misma película. No hay enlaces, href ni query params: nada recarga la página,
+  así la sesión y el login se mantienen.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style id="estilo-base">
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  [data-movie] { cursor: pointer; }
+  [data-movie]:focus-visible { outline: 2px solid #07ECF8; outline-offset: 2px; border-radius: 6px; }
+</style>
+<style id="estilo-app"></style>
+</head>
+<body>
+<div id="raiz" class="stApp"></div>
+<script>
+  "use strict";
+  // ---- protocolo de componentes de Streamlit (mensajes con el padre) ----
+  function enviar(tipo, datos) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: tipo }, datos), "*");
+  }
+  let ultimoAlto = -1;
+  function ajustarAlto() {
+    const alto = Math.ceil(document.getElementById("raiz").getBoundingClientRect().height) + 4;
+    if (alto !== ultimoAlto) {
+      ultimoAlto = alto;
+      enviar("streamlit:setFrameHeight", { height: alto });
+    }
+  }
+
+  let htmlActual = null;
+  function pintar(args) {
+    const css = (args.css || "").replace(/<\/?style>/g, "");
+    if (document.getElementById("estilo-app").textContent !== css) {
+      document.getElementById("estilo-app").textContent = css;
+    }
+    if (args.html !== htmlActual) {          // sin repintar si no cambió (conserva el scroll)
+      htmlActual = args.html;
+      const raiz = document.getElementById("raiz");
+      raiz.innerHTML = args.html || "";
+      raiz.querySelectorAll("[data-movie]").forEach(function (el) {
+        el.setAttribute("tabindex", "0");
+        el.setAttribute("role", "button");
+      });
+      raiz.querySelectorAll("img").forEach(function (img) { img.addEventListener("load", ajustarAlto); });
+    }
+    ajustarAlto();
+  }
+
+  function elegir(evento) {
+    const el = evento.target.closest("[data-movie]");
+    if (!el) return;
+    evento.preventDefault();
+    const movieId = parseInt(el.getAttribute("data-movie"), 10);
+    if (!Number.isNaN(movieId)) {
+      enviar("streamlit:setComponentValue", { value: { movieId: movieId, n: Date.now() }, dataType: "json" });
+    }
+  }
+  document.addEventListener("click", elegir);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") elegir(e);
+  });
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "streamlit:render") pintar(e.data.args || {});
+  });
+  new ResizeObserver(ajustarAlto).observe(document.getElementById("raiz"));
+  enviar("streamlit:componentReady", { apiVersion: 1 });
+</script>
+</body>
+</html>

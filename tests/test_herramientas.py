@@ -10,6 +10,7 @@ from recomendador import estado, perfiles
 from recomendador.herramientas import ESQUEMAS, Herramientas
 from base_mini import crear_artefactos_app
 
+CORTE_TODO = "2100-01-01"   # corte posterior a todos los ratings de la muestra mini
 VISTAS_U1 = {1, 6, 32, 47, 50, 110, 260, 296, 318, 356, 364, 480, 589, 593, 1036, 1721,
              2571, 4306, 6377, 58559}
 
@@ -21,13 +22,17 @@ def artefactos(spark, ruta_mini, tmp_path_factory):
 
 @pytest.fixture
 def herr(artefactos, ruta_mini, tmp_path):
-    return Herramientas(ruta_mini, artefactos, tmp_path / "estado.db")
+    # Paquete 1 (corte en todos los modos): Herramientas ahora corta por defecto en
+    # FECHA_CORTE_MINI (2016-01-01). Estas pruebas verifican el historial completo de la
+    # muestra (20 ratings del usuario 1), así que pasan un corte explícito posterior a
+    # todos los datos. El corte por defecto se prueba en tests/test_corte.py.
+    return Herramientas(ruta_mini, artefactos, tmp_path / "estado.db", corte=CORTE_TODO)
 
 
 def test_esquemas_completos():
     nombres = {e["function"]["name"] for e in ESQUEMAS}
     assert nombres == {"peliculas_calificadas", "tags_usuario", "perfil_gustos",
-                       "recomendar", "info_pelicula"}
+                       "recomendar", "info_pelicula", "buscar_pelicula"}
 
 
 def test_datos_reales_usuario_1(herr):
@@ -49,8 +54,12 @@ def test_datos_reales_usuario_1(herr):
 
     corto = herr.recomendar(1, n=5, max_duracion_min=100,
                             generos=["Comedy", "Animation", "Family"])
-    assert [r["movieId"] for r in corto["recomendaciones"]] == [1307]   # Harry y Sally, 95 min
-    assert corto["recomendaciones"][0]["duracion_min"] == 95
+    # Paquete 3 (niveles): los filtros ya no descartan, ordenan. Harry y Sally (comedia,
+    # 95 min) cumple las dos condiciones y va en el nivel máximo, antes que el resto.
+    primeras = [r for r in corto["recomendaciones"] if r["nivel"] == 2]
+    assert 1307 in [r["movieId"] for r in primeras]
+    assert next(r for r in primeras if r["movieId"] == 1307)["duracion_min"] == 95
+    assert corto["recomendaciones"][0]["nivel"] == 2
 
     info = herr.info_pelicula(1)
     assert info["titulo"] == "Toy Story" and info["duracion_min"] == 81

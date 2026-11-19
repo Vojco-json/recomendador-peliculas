@@ -27,6 +27,15 @@ from .datos import fecha_a_epoch
 
 # Parámetros por defecto de ALS (se pueden cambiar desde el script o el streaming).
 PARAMS_DEFECTO = {"rank": 10, "regParam": 0.1, "maxIter": 10, "seed": 42}
+
+
+def params_produccion(hibrido: dict) -> dict:
+    """Parámetros de ALS del modelo en producción: implícito con el rank y alpha del híbrido.
+
+    regParam, maxIter y seed son fijos (0.1, 10, 42), los mismos con que se evaluó.
+    """
+    return {"rank": int(hibrido["rank"]), "alpha": float(hibrido["alpha"]),
+            "implicitPrefs": True, "regParam": 0.1, "maxIter": 10, "seed": 42}
 K = 10                  # top-K de las métricas de ranking
 N_RECS = 20             # recomendaciones guardadas por usuario
 MIN_VOTOS = 50          # mínimo de votos para entrar en la lista de popularidad
@@ -515,6 +524,9 @@ def ejecutar(spark, ratings, corte: str, salida=None, params: dict | None = None
         "descartados": part["descartados"], "params": p, "k": k,
         "relevante_min": umbral,
     }
+    # Parámetros del modelo que realmente se guarda (el implícito del híbrido): los usa
+    # el reentrenamiento del streaming para no volver al ALS explícito de "params".
+    resultado["params_produccion"] = params_produccion(resultado["hibrido"])
     if guardar and salida is not None:
         salida = Path(salida)
         salida.mkdir(parents=True, exist_ok=True)

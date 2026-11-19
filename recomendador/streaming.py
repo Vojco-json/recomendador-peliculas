@@ -102,13 +102,22 @@ class Contexto:
 
 
 def _params_base(artefactos: Path) -> dict:
-    """Parámetros de ALS del entrenamiento base (metricas.json) o los por defecto."""
+    """Parámetros de ALS del modelo evaluado, para reentrenar igual que en producción.
+
+    Orden: metricas["params_produccion"] (lo escribe entrenar_batch.py); si no existe
+    (artefactos antiguos), se arma desde metricas["hibrido"] (ALS implícito con su rank
+    y alpha). Sin metricas.json o sin híbrido quedan los parámetros por defecto.
+    """
     ruta = Path(artefactos) / "metricas.json"
     if ruta.exists():
         try:
-            return {**batch_als.PARAMS_DEFECTO,
-                    **json.loads(ruta.read_text(encoding="utf-8")).get("params", {})}
-        except (ValueError, OSError):
+            metricas = json.loads(ruta.read_text(encoding="utf-8"))
+            if metricas.get("params_produccion"):
+                return {**batch_als.PARAMS_DEFECTO, **metricas["params_produccion"]}
+            hib = metricas.get("hibrido") or {}
+            if "rank" in hib and "alpha" in hib:
+                return batch_als.params_produccion(hib)
+        except (ValueError, OSError, TypeError):
             pass
     return dict(batch_als.PARAMS_DEFECTO)
 
@@ -354,6 +363,110 @@ def iniciar_streaming(ctx: Contexto, fuente: str = "kafka", topic: str | None = 
                 .foreachBatch(lambda lote, batch_id: procesar_lote(lote, batch_id, ctx))
                 .option("checkpointLocation", checkpoint.as_posix())
                 .queryName(f"recomendador_{nombre}".replace("-", "_")))
+    if available_now:
+        escritor = escritor.trigger(availableNow=True)
+    else:
+        escritor = escritor.trigger(processingTime=f"{float(trigger_s):g} seconds")
+    return escritor.start()
+
+
+# --------------------------------------------------------------------------- #
+# Reseñas: topic 'resenas' -> tabla resenas de estado.db
+# --------------------------------------------------------------------------- #
+
+ESQUEMA_RESENA = "uid STRING, userId INT, movieId INT, texto STRING, timestamp LONG"
+TOPIC_RESENAS = "resenas"
+
+
+class ContextoResenas:
+    """Lo mínimo para guardar reseñas: conexión a estado.db, candado y nombre de consulta.
+
+    La consulta por defecto es 'resenas', distinta de la de ratings: así la tabla
+    ``lotes`` no confunde un batch_id de una consulta con el de la otra.
+    """
+
+    def __init__(self, estado_db, consulta: str = TOPIC_RESENAS, log=print):
+        self.estado_db = Path(estado_db)
+        self.consulta = consulta
+        self.log = log
+        self.con = estado.conectar(self.estado_db)
+        self.lock = threading.Lock()
+
+    def cerrar(self) -> None:
+        self.con.close()
+
+
+def procesar_lote_resenas(df, batch_id: int, ctx: ContextoResenas) -> int:
+    """Guarda las reseñas de un micro-lote (idempotente). Devuelve cuántas nuevas guardó.
+
+    Se vuelve a pasar el filtro de moderación: una reseña publicada en el topic por otro
+    camino que no sea la app tampoco entra si es ofensiva o pasa de 500 caracteres.
+    """
+    from . import moderacion
+
+    filas = (df.select("uid", "userId", "movieId", "texto", "timestamp")
+             .dropna(subset=["uid", "userId", "movieId", "texto", "timestamp"]).collect())
+    resenas, rechazadas = [], 0
+    for f in filas:
+        revision = moderacion.revisar_resena(f["texto"])
+        if not revision.ok:
+            rechazadas += 1
+            continue
+        resenas.append({"uid": str(f["uid"]), "userId": int(f["userId"]),
+                        "movieId": int(f["movieId"]), "texto": revision.texto,
+                        "timestamp": int(f["timestamp"])})
+    with ctx.lock:
+        if estado.lote_procesado(ctx.con, ctx.consulta, batch_id):
+            ctx.log(f"[reseñas {batch_id}] ya aplicado; se omite")
+            return 0
+        try:
+            nuevas = estado.guardar_resenas(ctx.con, resenas, commit=False)
+            ctx.con.execute("INSERT INTO lotes(consulta, batch_id, procesado_en) "
+                            "VALUES (?, ?, ?)", (ctx.consulta, int(batch_id), time.time()))
+            ctx.con.commit()
+        except BaseException:
+            ctx.con.rollback()
+            raise
+    ctx.log(f"[reseñas {batch_id}] {len(filas)} mensajes, {len(nuevas)} nuevas, "
+            f"{rechazadas} rechazadas por el filtro")
+    return len(nuevas)
+
+
+def leer_stream_resenas(spark, fuente: str, topic: str | None = None,
+                        bootstrap: str | None = None, ruta=None,
+                        starting_offsets: str = "latest"):
+    """DataFrame de streaming de reseñas (uid, userId, movieId, texto, timestamp)."""
+    from pyspark.sql import functions as F
+
+    if fuente == "kafka":
+        crudo = (spark.readStream.format("kafka")
+                 .option("kafka.bootstrap.servers", bootstrap or config.KAFKA_BOOTSTRAP)
+                 .option("subscribe", topic or TOPIC_RESENAS)
+                 .option("startingOffsets", starting_offsets)
+                 .option("failOnDataLoss", "false")
+                 .load())
+        return (crudo.select(F.from_json(F.col("value").cast("string"), ESQUEMA_RESENA)
+                             .alias("r")).select("r.*"))
+    if fuente == "archivo":
+        if ruta is None:
+            raise ValueError("La fuente archivo necesita una carpeta")
+        return spark.readStream.schema(ESQUEMA_RESENA).json(str(ruta))
+    raise ValueError(f"fuente {fuente!r} no válida (kafka o archivo)")
+
+
+def iniciar_streaming_resenas(spark, ctx: ContextoResenas, checkpoint, fuente: str = "kafka",
+                              topic: str | None = None, bootstrap: str | None = None,
+                              ruta=None, trigger_s: float = 5, available_now: bool = False,
+                              starting_offsets: str = "latest"):
+    """Arranca la consulta de reseñas (checkpoint propio) y devuelve el StreamingQuery."""
+    checkpoint = Path(checkpoint)
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    df = leer_stream_resenas(spark, fuente, topic, bootstrap, ruta, starting_offsets)
+    nombre = (topic or TOPIC_RESENAS) if fuente == "kafka" else "archivo_resenas"
+    escritor = (df.writeStream
+                .foreachBatch(lambda lote, batch_id: procesar_lote_resenas(lote, batch_id, ctx))
+                .option("checkpointLocation", checkpoint.as_posix())
+                .queryName(f"resenas_{nombre}".replace("-", "_")))
     if available_now:
         escritor = escritor.trigger(availableNow=True)
     else:

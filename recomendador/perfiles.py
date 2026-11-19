@@ -600,6 +600,118 @@ def asignar_tipo(perfil_vector: list[float], artefactos) -> dict:
     return {"cluster": mejor["cluster"], "tipo": mejor["nombre"]}
 
 
+# --------------------------------------------------------------------------- #
+# Tipo de espectador de los usuarios nuevos (sin Spark)
+# --------------------------------------------------------------------------- #
+#
+# Replica en numpy exactamente las features de ``vectores_gusto`` (las que ve el KMeans):
+#   peso_i   = rating_i - media del usuario
+#   g_k      = sum(peso_i * [película i tiene el género k]) / sum(|peso_i|)
+#   t_j      = sum(peso_i * relevancia_j(i)) / sum(|peso_i| * tiene_genome(i))
+#   log_n    = log(1 + n_ratings)
+# y luego ``asignar_tipo`` aplica el mismo escalado (media/std de tipos.json) y busca el
+# centroide más cercano. Una película sin datos de genome aporta 0 a los t_j y no suma
+# en su denominador, igual que en Spark (left join + fillna(0)).
+
+@lru_cache(maxsize=4)
+def _features_cache(ruta_datos: str, tags: tuple[str, ...], _mtime: float):
+    import pandas as pd
+
+    ruta = Path(ruta_datos)
+    movies = pd.read_csv(ruta / "movies.csv", usecols=["movieId", "genres"])
+    feats: dict[int, tuple[frozenset, dict | None]] = {
+        int(m): (frozenset(str(g).split("|")), None)
+        for m, g in zip(movies["movieId"], movies["genres"])}
+    if not tags or not (ruta / "genome-tags.csv").exists() \
+            or not (ruta / "genome-scores.csv").exists():
+        return feats
+    # genome-scores de 25M tiene ~15M filas: se usa la matriz compacta genome.npy
+    # (construida una sola vez con pyarrow) y solo las columnas de los tags usados.
+    from . import genome as genome_npy
+
+    g = genome_npy.cargar(ruta)
+    relevancias = g.por_pelicula([t.lower() for t in tags]) if g is not None else {}
+    for m, rel in relevancias.items():
+        generos = feats.get(m, (frozenset(), None))[0]
+        feats[m] = (generos, rel)
+    return feats
+
+
+def features_tipo(ruta_datos, rasgos: list[str]) -> dict[int, tuple[frozenset, dict | None]]:
+    """{movieId: (géneros, {tag: relevancia} o None si no tiene genome)} con pandas.
+
+    Solo lee los tags que aparecen en ``rasgos`` (tipos.json). Queda en caché.
+    """
+    ruta = Path(ruta_datos)
+    tags = tuple(r[4:] for r in rasgos if r.startswith("tag:"))
+    mtime = (ruta / "movies.csv").stat().st_mtime
+    return _features_cache(str(ruta), tags, mtime)
+
+
+def vector_crudo(ratings, features: dict, rasgos: list[str]) -> np.ndarray:
+    """Vector de features crudas (orden de tipos.json['rasgos']) de un usuario.
+
+    ratings:  [(movieId, rating)] o {movieId: rating}; si una película se repite, vale
+              la última calificación.
+    features: salida de ``features_tipo``.
+    """
+    pares = dict(ratings.items() if isinstance(ratings, dict) else ratings)
+    if not pares:
+        raise ValueError("Se necesita al menos una calificación")
+    pelis = [int(m) for m in pares]
+    valores = np.array([float(pares[m]) for m in pares])
+    pesos = valores - valores.mean()
+    suma_abs = float(np.abs(pesos).sum())
+    vacio = (frozenset(), None)
+    info = [features.get(m, vacio) for m in pelis]
+    suma_abs_genome = float(sum(abs(p) for p, (_, rel) in zip(pesos, info) if rel is not None))
+    salida = []
+    for rasgo in rasgos:
+        if rasgo == RASGO_ACTIVIDAD:
+            salida.append(float(np.log1p(len(pelis))))
+        elif rasgo.startswith("genero:"):
+            g = rasgo[7:]
+            num = sum(p for p, (gen, _) in zip(pesos, info) if g in gen)
+            salida.append(num / suma_abs if suma_abs > 0 else 0.0)
+        elif rasgo.startswith("tag:"):
+            t = rasgo[4:]
+            num = sum(p * rel.get(t, 0.0) for p, (_, rel) in zip(pesos, info)
+                      if rel is not None)
+            salida.append(num / suma_abs_genome if suma_abs_genome > 0 else 0.0)
+        else:
+            raise ValueError(f"rasgo desconocido {rasgo!r}")
+    return np.array(salida, dtype=float)
+
+
+def tipo_usuario(userId: int, artefactos, ratings=None, estado_db=None, datos=None,
+                 features: dict | None = None) -> dict | None:
+    """Tipo de espectador de un usuario según sus calificaciones ACTUALES.
+
+    Si no se pasan ``ratings``, usa los eventos del usuario en estado.db (onboarding y
+    todo lo que calificó después), así que el tipo se recalcula cada vez que califica
+    más. Devuelve {'cluster', 'tipo', 'n_ratings'} o None si aún no calificó nada.
+    """
+    from . import config, estado
+
+    artefactos = Path(artefactos)
+    if ratings is None:
+        con = estado.conectar(estado_db or config.ESTADO_DB)
+        try:
+            ratings = estado.eventos_usuario(con, int(userId))
+        finally:
+            con.close()
+    pares = dict(ratings.items() if isinstance(ratings, dict) else ratings)
+    if not pares:
+        return None
+    ruta_tipos = artefactos / "tipos.json"
+    rasgos = _leer_tipos(str(ruta_tipos), ruta_tipos.stat().st_mtime)["rasgos"]
+    if features is None:
+        features = features_tipo(datos or config.DATOS, rasgos)
+    asignado = asignar_tipo(list(vector_crudo(pares, features, rasgos)), artefactos)
+    return {**asignado, "n_ratings": len(pares)}
+
+
 __all__ = ["GENEROS", "GENEROS_ES", "TAGS_ES", "ejecutar", "perfil_usuario",
            "actualizar_perfil_generos", "generos_por_pelicula", "nombrar_clusters",
-           "tabla_tipos", "asignar_tipo", "perfil_vacio"]
+           "tabla_tipos", "asignar_tipo", "perfil_vacio", "features_tipo", "vector_crudo",
+           "tipo_usuario"]

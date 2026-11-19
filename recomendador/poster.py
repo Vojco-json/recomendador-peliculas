@@ -334,15 +334,45 @@ def matriz_usuarios(tipos: dict, perfiles) -> tuple[np.ndarray, np.ndarray]:
     return x, perfiles["cluster"].to_numpy(dtype=int)
 
 
+def _envolver(nombre: str, ancho: int = 22) -> str:
+    """Parte un nombre largo en líneas de ``ancho`` caracteres como máximo (máx. 3)."""
+    import textwrap
+
+    lineas = textwrap.wrap(str(nombre), width=ancho) or [str(nombre)]
+    if len(lineas) > 3:
+        lineas = lineas[:2] + [" ".join(lineas[2:])[: ancho - 1] + "…"]
+    return "\n".join(lineas)
+
+
 def figura_tipos(tipos: dict, perfiles, carpeta, nombre: str = "tipos_espectador",
                  max_puntos: int = 6000, seed: int = 42) -> list[Path]:
-    """Proyección PCA 2D de los usuarios coloreados por tipo, con nombre y tamaño.
+    """Guarda la figura de tipos de espectador (ver ``dibujar_tipos``)."""
+    import matplotlib
 
-    ``perfiles`` (DataFrame de perfiles.parquet) es opcional: sin él solo se dibujan
-    los centroides. En 25M se muestrea ``max_puntos`` usuarios para que se lea.
+    fig = dibujar_tipos(tipos, perfiles, max_puntos=max_puntos, seed=seed)
+    # El estilo debe estar activo al guardar: fija svg.fonttype = "none" (texto real).
+    with matplotlib.rc_context(estilo()):
+        return guardar(fig, carpeta, nombre)
+
+
+def dibujar_tipos(tipos: dict, perfiles, max_puntos: int = 6000, seed: int = 42):
+    """Figura de tipos de espectador: barras horizontales + mapa PCA sin rótulos.
+
+    Panel principal (izquierda): una barra horizontal por tipo, ordenadas de mayor a
+    menor, con el nombre del tipo a la izquierda (etiqueta del eje) y "N usuarios · X %"
+    al final de la barra. El alto de la figura crece con el número de tipos, así las
+    etiquetas nunca se superponen (lo comprueba tests/test_poster_tipos.py).
+
+    Panel secundario (derecha): proyección PCA 2D de los usuarios coloreados con el
+    mismo color de su barra. No lleva texto sobre los puntos: los nombres viven solo
+    en las barras. ``perfiles`` (DataFrame de perfiles.parquet) es opcional: sin él
+    solo se dibujan los centroides. En 25M se muestrean ``max_puntos`` usuarios.
+
+    Devuelve la figura de matplotlib sin guardar (para poder medirla en pruebas).
     """
     import matplotlib
     from matplotlib import colormaps
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
 
     plt = _plt()
     rasgos = tipos["rasgos"]
@@ -364,41 +394,74 @@ def figura_tipos(tipos: dict, perfiles, carpeta, nombre: str = "tipos_espectador
 
     paleta = colormaps["tab10"]
     total = sum(t["tamaño"] for t in lista) or 1
+    # Orden de las barras: de mayor a menor tamaño (la más grande arriba).
+    orden = sorted(range(len(lista)), key=lambda i: (-lista[i]["tamaño"], lista[i]["cluster"]))
+    n_tipos = len(lista)
+    # Alto proporcional al número de tipos: cada barra tiene espacio para un nombre de
+    # hasta 3 líneas a 15 pt sin chocar con la vecina.
+    alto = max(7.5, 2.6 + 1.05 * n_tipos)
+
     with matplotlib.rc_context(estilo()):
-        fig, ax = plt.subplots(figsize=(13, 9))
+        fig, (ax, ax_pca) = plt.subplots(1, 2, figsize=(17, alto),
+                                         gridspec_kw={"width_ratios": [1.45, 1]})
         fig.suptitle("Tipos de espectador (KMeans sobre perfiles de gusto)", x=0.02, ha="left")
+
+        # --- Panel 1: barras horizontales ordenadas --------------------------------
+        ax.set_label("barras_tipos")
+        ys = np.arange(n_tipos)[::-1]          # primera del orden = arriba
+        tam = np.array([lista[i]["tamaño"] for i in orden], dtype=float)
+        colores_b = [paleta(int(lista[i]["cluster"]) % 10) for i in orden]
+        ax.barh(ys, tam, height=0.62, color=colores_b, edgecolor=TEXTO, linewidth=1.2)
+        ax.set_yticks(ys, [_envolver(lista[i]["nombre"]) for i in orden],
+                      fontsize=15, color=TEXTO)
+        ax.tick_params(axis="y", length=0, pad=10)
+        maximo = float(tam.max()) if len(tam) and tam.max() > 0 else 1.0
+        for y, i, v in zip(ys, orden, tam):
+            texto = (f"{_miles(v)} usuarios · "
+                     f"{_decimal(100 * v / total, 0)} %")
+            ax.annotate(texto, (v, y), textcoords="offset points", xytext=(10, 0),
+                        ha="left", va="center", fontsize=15, color=AMBAR,
+                        fontweight="bold", gid="valor_tipo")
+        # Margen a la derecha para que el rótulo de valor quepa dentro del panel.
+        ax.set_xlim(0, maximo * 1.75)
+        ax.set_ylim(-0.6, n_tipos - 0.4)
+        ax.set_xlabel("Usuarios")
+        ax.xaxis.set_major_formatter(FuncFormatter(
+            lambda v, _: _miles(v) if v >= 0 else ""))
+        ax.set_title("Tamaño de cada tipo", loc="left")
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.grid(True, axis="x")
+        ax.set_axisbelow(True)                 # rejilla detrás de las barras
+        ax.spines["left"].set_visible(False)
+
+        # --- Panel 2: mapa PCA sin texto (mismos colores) --------------------------
         if x is not None:
             idx = np.arange(len(x))
             if len(idx) > max_puntos:
                 idx = np.random.default_rng(seed).choice(idx, max_puntos, replace=False)
             p = (x[idx] - mu) @ comp.T
             colores = [paleta(int(c) % 10) for c in cl[idx]]
-            ax.scatter(p[:, 0], p[:, 1], s=26 if len(idx) > 500 else 90, c=colores,
-                       alpha=0.45 if len(idx) > 500 else 0.75, linewidths=0)
-        maximo = max(t["tamaño"] for t in lista) or 1
+            ax_pca.scatter(p[:, 0], p[:, 1], s=22 if len(idx) > 500 else 80, c=colores,
+                           alpha=0.45 if len(idx) > 500 else 0.75, linewidths=0)
         for t, (cx, cy) in zip(lista, proy_c):
-            color = paleta(int(t["cluster"]) % 10)
-            ax.scatter([cx], [cy], s=500 + 2500 * t["tamaño"] / maximo, color=color,
-                       edgecolors=TEXTO, linewidths=2.5, zorder=3)
-            texto = (f"{t['nombre']}\n{_miles(t['tamaño'])} usuarios · "
-                     f"{_decimal(100 * t['tamaño'] / total, 0)} %")
-            ax.annotate(texto, (cx, cy), textcoords="offset points", xytext=(0, 34),
-                        ha="center", va="bottom", fontsize=15, color=TEXTO,
-                        fontweight="bold", zorder=4,
-                        bbox={"boxstyle": "round,pad=0.35", "fc": FONDO, "ec": color,
-                              "lw": 2, "alpha": 0.9})
-        ax.set_xlabel(f"Componente principal 1 ({_decimal(100 * var2[0], 0)} % de la varianza)")
-        ax.set_ylabel(f"Componente principal 2 ({_decimal(100 * var2[1], 0)} %)")
-        ax.grid(True)
-        ax.margins(0.18)
+            ax_pca.scatter([cx], [cy], s=250 + 1200 * t["tamaño"] / maximo,
+                           color=paleta(int(t["cluster"]) % 10),
+                           edgecolors=TEXTO, linewidths=2.2, zorder=3)
+        ax_pca.set_xlabel(f"Componente principal 1 ({_decimal(100 * var2[0], 0)} %)")
+        ax_pca.set_ylabel(f"Componente principal 2 ({_decimal(100 * var2[1], 0)} %)")
+        ax_pca.set_title("Mapa de usuarios (PCA 2D)", loc="left")
+        ax_pca.grid(True)
+        ax_pca.margins(0.12)
+
         nota = (f"{_miles(tipos.get('n_usuarios', total))} usuarios · k = {tipos.get('k', len(lista))}"
                 " · rasgos: pesos por género y tag genome según sus calificaciones, más "
-                "actividad\nTamaño del círculo grande = número de usuarios del tipo"
+                "actividad\nMapa: color = tipo de la barra; círculo con borde = centro del "
+                "tipo (tamaño según usuarios)"
                 + (f" · se muestran {_miles(min(len(x), max_puntos))} usuarios al azar"
                    if x is not None and len(x) > max_puntos else ""))
         fig.text(0.02, -0.02, nota, ha="left", va="top", fontsize=14, color=TEXTO_2)
         fig.tight_layout(rect=(0, 0, 1, 0.95))
-        return guardar(fig, carpeta, nombre)
+        return fig
 
 
 # --------------------------------------------------------------------------- #

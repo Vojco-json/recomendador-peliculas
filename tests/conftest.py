@@ -72,6 +72,29 @@ def _armar_temporizador(segundos: float) -> None:
         faulthandler.dump_traceback_later(segundos, exit=True, file=_archivo_volcado)
 
 
+def pytest_configure(config):
+    """Registra los markers para correr la regresión en tandas cortas.
+
+    - spark: la prueba usa la SparkSession (se marca sola, ver abajo).
+    - lento: además lanza un proceso aparte o entrena modelos (decenas de segundos).
+
+    Tandas sugeridas (cada una bajo 3 minutos):
+        python -m pytest -q -m "not spark"          # todo lo rápido
+        python -m pytest -q -m "spark and not lento"
+        python -m pytest -q -m lento
+    """
+    config.addinivalue_line("markers", "spark: usa la SparkSession compartida (JVM)")
+    config.addinivalue_line("markers", "lento: prueba lenta (subproceso, JVM propia o "
+                                       "entrenamiento); correrla en su propia tanda")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Marca con 'spark' toda prueba que pide la fixture spark (directa o indirectamente)."""
+    for item in items:
+        if "spark" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.spark)
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_protocol(item, nextitem):
     """Arma un temporizador de seguridad alrededor de cada prueba."""
