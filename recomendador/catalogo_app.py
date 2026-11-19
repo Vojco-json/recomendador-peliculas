@@ -52,7 +52,7 @@ IMPROBABLE = "Puede que no"
 # Utilidades
 # --------------------------------------------------------------------------- #
 
-SIM_MINIMA = 0.3            # coseno ALS mínimo para decir «se parece a X»
+SIM_MINIMA = 0.75           # coseno ALS mínimo para decir «se parece a X» (el 31 % de pares al azar supera 0,3; solo el 4,5 % supera 0,75)
 N_REVISAR_IMPROBABLE = 15   # candidatas improbables que se revisan buscando una razón
 
 

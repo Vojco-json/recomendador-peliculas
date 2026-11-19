@@ -4,7 +4,7 @@
   veredicto y razón), la reseña muestra las estrellas de su autor y ninguna sección
   (carátulas, ficha, Explorar, chat) muestra años con «.0».
 - Explicaciones con el catálogo real de la muestra: «Puede que no» nunca cita una
-  película calificada alto, «se parece» solo con coseno ALS >= 0,3 y la improbable de
+  película calificada alto, «se parece» solo con coseno ALS >= 0,75 y la improbable de
   «Para ti» trae al menos una razón concreta en contra.
 """
 
@@ -189,7 +189,7 @@ def test_explicaciones_alineadas_con_el_veredicto(cat):
         for clave in ("parecida_alta", "parecida_baja"):
             if e[clave]:
                 n_parecida += 1
-                assert e[clave]["similitud"] >= catalogo_app.SIM_MINIMA == 0.3
+                assert e[clave]["similitud"] >= catalogo_app.SIM_MINIMA == 0.75
         if not e["probable"]:
             n_no += 1
             assert e["veredicto"] == catalogo_app.IMPROBABLE
